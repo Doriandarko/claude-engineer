@@ -19,10 +19,12 @@ TOOL_COLOR = Fore.YELLOW
 RESULT_COLOR = Fore.GREEN
 
 # Initialize the Anthropic client
-client = Anthropic(api_key="YOUR_API_KEY")
+# Use your own API key in environment variable
+# export ANTHROPIC_API_KEY=your API key
+client = Anthropic()
 
-# Initialize the Tavily client
-tavily = TavilyClient(api_key="YOUR_API_KEY")
+# Initialize the Tavily client from TAVILY_API_KEY environment variable
+tavily = TavilyClient(api_key= os.environ.get("TAVILY_API_KEY"))
 
 # Set up the conversation memory
 conversation_history = []
@@ -132,7 +134,7 @@ def tavily_search(query):
     except Exception as e:
         return f"Error performing search: {str(e)}"
 
-# Define the tools
+# Define the tools 
 tools = [
     {
         "name": "create_folder",
@@ -234,7 +236,7 @@ def execute_tool(tool_name, tool_input):
     elif tool_name == "create_file":
         return create_file(tool_input["path"], tool_input.get("content", ""))
     elif tool_name == "write_to_file":
-        return write_to_file(tool_input["path"], tool_input["content"])
+        return write_to_file(tool_input["path"], tool_input.get("content", ""))
     elif tool_name == "read_file":
         return read_file(tool_input["path"])
     elif tool_name == "list_files":
