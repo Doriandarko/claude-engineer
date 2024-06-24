@@ -25,10 +25,10 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
    ```
 
 3. Set up your API keys:
-   - Add your Anthropic and Tavily API keys:
+   - Add your Anthropic and Tavily API keys at the start of the file:
      ```
-     ANTHROPIC_API_KEY=your_anthropic_api_key_here
-     TAVILY_API_KEY=your_tavily_api_key_here
+     client = Anthropic(api_key="YOUR API KEY")
+     tavily = TavilyClient(api_key="YOUR API KEY")
      ```
 
 ## Usage
