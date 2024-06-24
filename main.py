@@ -8,6 +8,13 @@ from pygments.lexers import get_lexer_by_name
 from pygments.formatters import TerminalFormatter
 from tavily import TavilyClient
 import pygments.util
+from dotenv import load_dotenv
+load_dotenv()
+
+# load api keys from .env file
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+
 
 # Initialize colorama
 init()
@@ -19,10 +26,9 @@ TOOL_COLOR = Fore.YELLOW
 RESULT_COLOR = Fore.GREEN
 
 # Initialize the Anthropic client
-client = Anthropic(api_key="YOUR_API_KEY")
-
+client = Anthropic(api_key=ANTHROPIC_API_KEY)
 # Initialize the Tavily client
-tavily = TavilyClient(api_key="YOUR_API_KEY")
+tavily = TavilyClient(api_key=TAVILY_API_KEY)
 
 # Set up the conversation memory
 conversation_history = []
