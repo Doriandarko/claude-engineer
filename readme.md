@@ -48,6 +48,8 @@ Once started, you can interact with Claude Engineer by typing your queries or co
 
 Type 'exit' to end the conversation and close the application.
 
+Note: Claude will only have access to the files in the root folders of the script or any folder path you provide it.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
