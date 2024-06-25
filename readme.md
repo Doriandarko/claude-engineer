@@ -25,11 +25,17 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
    ```
 
 3. Set up your API keys:
-   - Add your Anthropic and Tavily API keys at the start of the file:
+   - Copy the `.env.example` file to create a new `.env` file:
      ```
-     client = Anthropic(api_key="YOUR API KEY")
-     tavily = TavilyClient(api_key="YOUR API KEY")
+     cp .env.example .env
      ```
+   - Open the `.env` file and replace the placeholder values with your actual API keys:
+     ```
+     ANTHROPIC_API_KEY=your_actual_anthropic_api_key_here
+     TAVILY_API_KEY=your_actual_tavily_api_key_here
+     ```
+   - The script will automatically load these environment variables using python-dotenv
+   - Note: Never commit your actual `.env` file to version control
 
 ## Usage
 
