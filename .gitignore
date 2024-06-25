@@ -1,3 +1,8 @@
-#exclude all files except main.py, readme.md, requirements.txt and the folder .git
-.git
+#Ignore all files
+*
+
+# But not these files...
 !main.py
+!readme.md
+!requirements.txt
+!LICENSE
