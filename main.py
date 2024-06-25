@@ -8,6 +8,9 @@ from pygments.lexers import get_lexer_by_name
 from pygments.formatters import TerminalFormatter
 from tavily import TavilyClient
 import pygments.util
+import base64
+from PIL import Image
+import io
 
 # Initialize colorama
 init()
@@ -24,7 +27,7 @@ RESULT_COLOR = Fore.GREEN
 client = Anthropic()
 
 # Initialize the Tavily client from TAVILY_API_KEY environment variable
-tavily = TavilyClient(api_key= os.environ.get("TAVILY_API_KEY"))
+tavily = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
 
 # Set up the conversation memory
 conversation_history = []
@@ -42,6 +45,9 @@ You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model. 
 7. Listing files in the root directory of the project
 8. Performing web searches to get up-to-date information or additional context
 9. When you use search make sure you use the best query to get the most accurate and up-to-date information
+10. Analyzing images provided by the user
+
+When an image is provided, carefully analyze its contents and incorporate your observations into your responses.
 
 When asked to create a project:
 - Always start by creating a root folder for the project.
@@ -245,13 +251,59 @@ def execute_tool(tool_name, tool_input):
         return tavily_search(tool_input["query"])
     else:
         return f"Unknown tool: {tool_name}"
+# Helper functions (create_folder, create_file, write_to_file, read_file, list_files, tavily_search) remain unchanged
 
-# Function to send a message to Claude and get the response
-def chat_with_claude(user_input):
+# Function to encode image to base64
+def encode_image_to_base64(image_path):
+    try:
+        with Image.open(image_path) as img:
+
+            # Resize image if it's too large
+            max_size = (1024, 1024)
+            img.thumbnail(max_size, Image.DEFAULT_STRATEGY)
+
+            # Convert image to RGB if it's not
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='JPEG')
+            return base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+    except Exception as e:
+        return f"Error encoding image: {str(e)}"
+
+# Modified chat_with_claude function to handle images
+def chat_with_claude(user_input, image_path=None):
     global conversation_history
     
-    # Add user input to conversation history
-    conversation_history.append({"role": "user", "content": user_input})
+    if image_path:
+        # Encode image to base64
+        image_base64 = encode_image_to_base64(image_path)
+
+        #print(f"Image encoded to base64: {image_base64}")
+        #exit()
+        
+        # Prepare the message with image
+        image_message = {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": image_base64
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": f"User input for image: {user_input}"
+                }
+            ]
+        }
+        conversation_history.append(image_message)
+    else:
+        # Add regular user input to conversation history
+        conversation_history.append({"role": "user", "content": user_input})
     
     # Prepare the messages for the API call
     messages = conversation_history.copy()
@@ -322,16 +374,16 @@ def chat_with_claude(user_input):
 
 # Main chat loop
 def main():
-    print_colored("Welcome to the Claude-3.5-Sonnet Engineer Chat!", CLAUDE_COLOR)
+    print_colored("Welcome to the Claude-3.5-Sonnet Engineer Chat with Image Support!", CLAUDE_COLOR)
     print_colored("Type 'exit' to end the conversation.", CLAUDE_COLOR)
-    #(Press enter to continue)
+    print_colored("To include an image, drag and drop it into the terminal and press enter. Provide your prompt on next line.", CLAUDE_COLOR)
     print_colored("Press enter on You: prompt to continue for long requests.", CLAUDE_COLOR)
     
     continue_chat = False
 
     while True:
         if not continue_chat:
-            user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
+            user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}").strip()
         else:
             user_input = "continue"
             continue_chat = False
@@ -340,7 +392,14 @@ def main():
             print_colored("Thank you for chatting. Goodbye!", CLAUDE_COLOR)
             break
         
-        response = chat_with_claude(user_input)
+        image_path = user_input.replace("'", "")
+        
+        # Check if the input is a file path (potentially dragged and dropped)
+        if os.path.isfile(image_path):
+            user_input = input(f"{USER_COLOR}You (prompt for image): {Style.RESET_ALL}")
+            response = chat_with_claude(user_input, image_path)
+        else:
+            response = chat_with_claude(user_input)
         
         response_lower = response.lower()
 
@@ -363,12 +422,9 @@ def main():
                     else:
                         # If there's no code (empty block), just print the part as is
                         print_colored(part, CLAUDE_COLOR)
-        #if response contains "let's create" or "let's start" with regex check
-        elif "let's create" in response_lower or "let's start" in response_lower or "let's continue" in response_lower:
-            continue_chat = True
-
-
         
+        if "let's" in response_lower:
+            continue_chat = True
 
 if __name__ == "__main__":
     main()
