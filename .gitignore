@@ -1,0 +1,3 @@
+#exclude all files except main.py, readme.md, requirements.txt and the folder .git
+.git
+!main.py

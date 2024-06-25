@@ -324,15 +324,26 @@ def chat_with_claude(user_input):
 def main():
     print_colored("Welcome to the Claude-3.5-Sonnet Engineer Chat!", CLAUDE_COLOR)
     print_colored("Type 'exit' to end the conversation.", CLAUDE_COLOR)
+    #(Press enter to continue)
+    print_colored("Press enter on You: prompt to continue for long requests.", CLAUDE_COLOR)
     
+    continue_chat = False
+
     while True:
-        user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
+        if not continue_chat:
+            user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
+        else:
+            user_input = "continue"
+            continue_chat = False
+
         if user_input.lower() == 'exit':
             print_colored("Thank you for chatting. Goodbye!", CLAUDE_COLOR)
             break
         
         response = chat_with_claude(user_input)
         
+        response_lower = response.lower()
+
         # Check if the response contains code and format it
         if "```" in response:
             parts = response.split("```")
@@ -352,6 +363,12 @@ def main():
                     else:
                         # If there's no code (empty block), just print the part as is
                         print_colored(part, CLAUDE_COLOR)
+        #if response contains "let's create" or "let's start" with regex check
+        elif "let's create" in response_lower or "let's start" in response_lower or "let's continue" in response_lower:
+            continue_chat = True
+
+
+        
 
 if __name__ == "__main__":
     main()
