@@ -325,6 +325,9 @@ def main():
     
     while True:
         user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
+
+        if not user_input.strip():
+            continue
         if user_input.lower() == 'exit':
             print_colored("Thank you for chatting. Goodbye!", CLAUDE_COLOR)
             break
