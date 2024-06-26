@@ -273,13 +273,15 @@ def chat_with_claude(user_input, image_path=None):
     global conversation_history
     
     if image_path:
-        # Encode image to base64
+        print_colored(f"Processing image at path: {image_path}", TOOL_COLOR)
         image_base64 = encode_image_to_base64(image_path)
+        
+        if image_base64.startswith("Error"):
+            print_colored(f"Error encoding image: {image_base64}", TOOL_COLOR)
+            return "I'm sorry, there was an error processing the image. Please try again."
 
-        #print(f"Image encoded to base64: {image_base64}")
-        #exit()
+        # print_colored("Debug: Image successfully encoded to base64", TOOL_COLOR)
 
-        # Prepare the message with image
         image_message = {
             "role": "user",
             "content": [
@@ -298,26 +300,28 @@ def chat_with_claude(user_input, image_path=None):
             ]
         }
         conversation_history.append(image_message)
+        print_colored("Image message added to conversation history", TOOL_COLOR)
     else:
-        # Add regular user input to conversation history
         conversation_history.append({"role": "user", "content": user_input})
     
-    # Prepare the messages for the API call
     messages = [msg for msg in conversation_history if msg.get('content')]
+    # print_colored(f"Debug: Sending {len(messages)} messages to Claude API", TOOL_COLOR)
     
-    # Make the initial API call
-    response = client.messages.create(
-        model="claude-3-5-sonnet-20240620",
-        max_tokens=4000,
-        system=system_prompt,
-        messages=messages,
-        tools=tools,
-        tool_choice={"type": "auto"}
-    )
+    try:
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20240620",
+            max_tokens=4000,
+            system=system_prompt,
+            messages=messages,
+            tools=tools,
+            tool_choice={"type": "auto"}
+        )
+    except Exception as e:
+        print_colored(f"Error calling Claude API: {str(e)}", TOOL_COLOR)
+        return "I'm sorry, there was an error communicating with the AI. Please try again."
     
     assistant_response = ""
     
-    # Process the response
     for content_block in response.content:
         if content_block.type == "text":
             assistant_response += content_block.text
@@ -330,12 +334,9 @@ def chat_with_claude(user_input, image_path=None):
             print_colored(f"\nTool Used: {tool_name}", TOOL_COLOR)
             print_colored(f"Tool Input: {tool_input}", TOOL_COLOR)
             
-            # Execute the tool
             result = execute_tool(tool_name, tool_input)
-            
             print_colored(f"Tool Result: {result}", RESULT_COLOR)
             
-            # Add tool use and result to conversation history
             conversation_history.append({"role": "assistant", "content": [content_block]})
             conversation_history.append({
                 "role": "user",
@@ -348,23 +349,24 @@ def chat_with_claude(user_input, image_path=None):
                 ]
             })
             
-            # Make another API call with the updated conversation history
-            tool_response = client.messages.create(
-                model="claude-3-5-sonnet-20240620",
-                max_tokens=4000,
-                system=system_prompt,
-                messages=[msg for msg in conversation_history if msg.get('content')],
-                tools=tools,
-                tool_choice={"type": "auto"}
-            )
-            
-            # Process the tool response
-            for tool_content_block in tool_response.content:
-                if tool_content_block.type == "text":
-                    assistant_response += tool_content_block.text
-                    print_colored(f"\nClaude: {tool_content_block.text}", CLAUDE_COLOR)
+            try:
+                tool_response = client.messages.create(
+                    model="claude-3-5-sonnet-20240620",
+                    max_tokens=4000,
+                    system=system_prompt,
+                    messages=[msg for msg in conversation_history if msg.get('content')],
+                    tools=tools,
+                    tool_choice={"type": "auto"}
+                )
+                
+                for tool_content_block in tool_response.content:
+                    if tool_content_block.type == "text":
+                        assistant_response += tool_content_block.text
+                        print_colored(f"\nClaude: {tool_content_block.text}", CLAUDE_COLOR)
+            except Exception as e:
+                print_colored(f"Error in tool response: {str(e)}", TOOL_COLOR)
+                assistant_response += "\nI encountered an error while processing the tool result. Please try again."
     
-    # Add final assistant response to conversation history
     if assistant_response:
         conversation_history.append({"role": "assistant", "content": assistant_response})
     
@@ -374,42 +376,51 @@ def chat_with_claude(user_input, image_path=None):
 def main():
     print_colored("Welcome to the Claude-3.5-Sonnet Engineer Chat with Image Support!", CLAUDE_COLOR)
     print_colored("Type 'exit' to end the conversation.", CLAUDE_COLOR)
-    print_colored("To include an image, drag and drop it into the terminal and press enter. Provide your prompt on next line.", CLAUDE_COLOR)
+    print_colored("To include an image, type 'image' and press enter. Then drag and drop the image into the terminal.", CLAUDE_COLOR)
     
     while True:
         user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
+        
         if user_input.lower() == 'exit':
             print_colored("Thank you for chatting. Goodbye!", CLAUDE_COLOR)
             break
         
-        image_path = user_input.replace("'", "")
-
-        # Check if the input is a file path (potentially dragged and dropped)
-        if os.path.isfile(image_path):
-            user_input = input(f"{USER_COLOR}You (prompt for image): {Style.RESET_ALL}")
-            response = chat_with_claude(user_input, image_path)
+        if user_input.lower() == 'image':
+            image_path = input(f"{USER_COLOR}Drag and drop your image here: {Style.RESET_ALL}").strip().replace("'", "")
+            
+            if os.path.isfile(image_path):
+                user_input = input(f"{USER_COLOR}You (prompt for image): {Style.RESET_ALL}")
+                response = chat_with_claude(user_input, image_path)
+            else:
+                print_colored("Invalid image path. Please try again.", CLAUDE_COLOR)
+                continue
         else:
             response = chat_with_claude(user_input)
         
-        # Check if the response contains code and format it
-        if "```" in response:
-            parts = response.split("```")
-            for i, part in enumerate(parts):
-                if i % 2 == 0:
-                    print_colored(part, CLAUDE_COLOR)
-                else:
-                    lines = part.split('\n')
-                    language = lines[0].strip() if lines else ""
-                    code = '\n'.join(lines[1:]) if len(lines) > 1 else ""
-                    
-                    if language and code:
-                        print_code(code, language)
-                    elif code:
-                        # If no language is specified but there is code, print it as plain text
-                        print_colored(f"Code:\n{code}", CLAUDE_COLOR)
-                    else:
-                        # If there's no code (empty block), just print the part as is
+        if response.startswith("Error") or response.startswith("I'm sorry"):
+            print_colored(response, TOOL_COLOR)
+        else:
+            # Check if the response contains code and format it
+            if "```" in response:
+                parts = response.split("```")
+                for i, part in enumerate(parts):
+                    if i % 2 == 0:
                         print_colored(part, CLAUDE_COLOR)
+                    else:
+                        lines = part.split('\n')
+                        language = lines[0].strip() if lines else ""
+                        code = '\n'.join(lines[1:]) if len(lines) > 1 else ""
+                        
+                        if language and code:
+                            print_code(code, language)
+                        elif code:
+                            # If no language is specified but there is code, print it as plain text
+                            print_colored(f"Code:\n{code}", CLAUDE_COLOR)
+                        else:
+                            # If there's no code (empty block), just print the part as is
+                            print_colored(part, CLAUDE_COLOR)
+            else:
+                print_colored(response, CLAUDE_COLOR)
 
 if __name__ == "__main__":
     main()
