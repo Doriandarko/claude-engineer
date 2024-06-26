@@ -3,3 +3,4 @@ colorama
 pygments
 tavily-python
 python-dotenv
+pillow

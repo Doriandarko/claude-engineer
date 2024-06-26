@@ -10,6 +10,7 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
 - Syntax highlighting for code snippets
 - Project structure creation and management
 - Code analysis and improvement suggestions
+- Vision capabilities support for via drag and drop of images in the terminal
 
 ## Installation
 

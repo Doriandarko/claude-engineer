@@ -9,6 +9,9 @@ from pygments.formatters import TerminalFormatter
 from tavily import TavilyClient
 import pygments.util
 from dotenv import load_dotenv
+import base64
+from PIL import Image
+import io
 
 # Load environment variables
 load_dotenv()
@@ -44,6 +47,9 @@ You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model. 
 7. Listing files in the root directory of the project
 8. Performing web searches to get up-to-date information or additional context
 9. When you use search make sure you use the best query to get the most accurate and up-to-date information
+10. You NEVER remove existing code if doesnt require to be changed or removed, never use comments  like # ... (keep existing code) ... or # ... (rest of the code) ... etc, you only add new code or remove it.
+11. Analyzing images provided by the user
+When an image is provided, carefully analyze its contents and incorporate your observations into your responses.
 
 When asked to create a project:
 - Always start by creating a root folder for the project.
@@ -238,7 +244,7 @@ def execute_tool(tool_name, tool_input):
     elif tool_name == "create_file":
         return create_file(tool_input["path"], tool_input.get("content", ""))
     elif tool_name == "write_to_file":
-        return write_to_file(tool_input["path"], tool_input["content"])
+        return write_to_file(tool_input["path"], tool_input.get("content", ""))
     elif tool_name == "read_file":
         return read_file(tool_input["path"])
     elif tool_name == "list_files":
@@ -247,16 +253,61 @@ def execute_tool(tool_name, tool_input):
         return tavily_search(tool_input["query"])
     else:
         return f"Unknown tool: {tool_name}"
+    
+# Function to encode image to base64
+def encode_image_to_base64(image_path):
+    try:
+        with Image.open(image_path) as img:
+
+            # Resize image if it's too large
+            max_size = (1024, 1024)
+            img.thumbnail(max_size, Image.DEFAULT_STRATEGY)
+
+            # Convert image to RGB if it's not
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            img_byte_arr = io.BytesIO()
+            img.save(img_byte_arr, format='JPEG')
+            return base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
+    except Exception as e:
+        return f"Error encoding image: {str(e)}"
 
 # Function to send a message to Claude and get the response
-def chat_with_claude(user_input):
+def chat_with_claude(user_input, image_path=None):
     global conversation_history
     
-    # Add user input to conversation history
-    conversation_history.append({"role": "user", "content": user_input})
+    if image_path:
+        # Encode image to base64
+        image_base64 = encode_image_to_base64(image_path)
+
+        #print(f"Image encoded to base64: {image_base64}")
+        #exit()
+
+        # Prepare the message with image
+        image_message = {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": image_base64
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": f"User input for image: {user_input}"
+                }
+            ]
+        }
+        conversation_history.append(image_message)
+    else:
+        # Add regular user input to conversation history
+        conversation_history.append({"role": "user", "content": user_input})
     
     # Prepare the messages for the API call
-    messages = conversation_history.copy()
+    messages = [msg for msg in conversation_history if msg.get('content')]
     
     # Make the initial API call
     response = client.messages.create(
@@ -306,7 +357,7 @@ def chat_with_claude(user_input):
                 model="claude-3-5-sonnet-20240620",
                 max_tokens=4000,
                 system=system_prompt,
-                messages=conversation_history,
+                messages=[msg for msg in conversation_history if msg.get('content')],
                 tools=tools,
                 tool_choice={"type": "auto"}
             )
@@ -318,14 +369,16 @@ def chat_with_claude(user_input):
                     print_colored(f"\nClaude: {tool_content_block.text}", CLAUDE_COLOR)
     
     # Add final assistant response to conversation history
-    conversation_history.append({"role": "assistant", "content": assistant_response})
+    if assistant_response:
+        conversation_history.append({"role": "assistant", "content": assistant_response})
     
     return assistant_response
 
 # Main chat loop
 def main():
-    print_colored("Welcome to the Claude-3.5-Sonnet Engineer Chat!", CLAUDE_COLOR)
+    print_colored("Welcome to the Claude-3.5-Sonnet Engineer Chat with Image Support!", CLAUDE_COLOR)
     print_colored("Type 'exit' to end the conversation.", CLAUDE_COLOR)
+    print_colored("To include an image, drag and drop it into the terminal and press enter. Provide your prompt on next line.", CLAUDE_COLOR)
     
     while True:
         user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
@@ -333,7 +386,14 @@ def main():
             print_colored("Thank you for chatting. Goodbye!", CLAUDE_COLOR)
             break
         
-        response = chat_with_claude(user_input)
+        image_path = user_input.replace("'", "")
+
+        # Check if the input is a file path (potentially dragged and dropped)
+        if os.path.isfile(image_path):
+            user_input = input(f"{USER_COLOR}You (prompt for image): {Style.RESET_ALL}")
+            response = chat_with_claude(user_input, image_path)
+        else:
+            response = chat_with_claude(user_input)
         
         # Check if the response contains code and format it
         if "```" in response:
