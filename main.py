@@ -1,16 +1,16 @@
-from anthropic import Anthropic
-import os
-from datetime import datetime
-import json
-from colorama import init, Fore, Style
-from pygments import highlight
-from pygments.lexers import get_lexer_by_name
-from pygments.formatters import TerminalFormatter
-from tavily import TavilyClient
-import pygments.util
 import base64
-from PIL import Image
 import io
+import os
+import time
+
+import pygments.util
+from anthropic import Anthropic
+from colorama import Fore, Style, init
+from PIL import Image
+from pygments import highlight
+from pygments.formatters import TerminalFormatter
+from pygments.lexers import get_lexer_by_name
+from tavily import TavilyClient
 
 # Initialize colorama
 init()
@@ -73,70 +73,87 @@ Always strive to provide the most accurate, helpful, and detailed responses poss
 Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within \<thinking>\</thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
 """
 
-# Helper function to print colored text
-def print_colored(text, color):
-    print(f"{color}{text}{Style.RESET_ALL}")
 
-# Helper function to format and print code
+def print_colored(text, color):
+    """Helper function to print colored text"""
+    text = f"{color}{text}{Style.RESET_ALL}"
+    typing_effect(text)
+
+
 def print_code(code, language):
+    """Helper function to format and print code"""
     try:
         lexer = get_lexer_by_name(language, stripall=True)
         formatted_code = highlight(code, lexer, TerminalFormatter())
-        print(formatted_code)
+        typing_effect(formatted_code)
     except pygments.util.ClassNotFound:
         # If the language is not recognized, fall back to plain text
         print_colored(f"Code (language: {language}):\n{code}", CLAUDE_COLOR)
 
-# Function to create a folder
+
+def typing_effect(text, speed=0.02):
+    """Simulate a typing effect"""
+    for char in text:
+        print(char, end="", flush=True)
+        time.sleep(speed)
+
+
 def create_folder(path):
+    """Create a new folder at the specified path."""
     try:
         os.makedirs(path, exist_ok=True)
         return f"Folder created: {path}"
     except Exception as e:
         return f"Error creating folder: {str(e)}"
 
-# Function to create a file
+
 def create_file(path, content=""):
+    """Create a new file at the specified path with optional content."""
     try:
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             f.write(content)
         return f"File created: {path}"
     except Exception as e:
         return f"Error creating file: {str(e)}"
 
-# Function to write to a file
+
 def write_to_file(path, content):
+    """Write content to an existing file at the specified path."""
     try:
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             f.write(content)
         return f"Content written to file: {path}"
     except Exception as e:
         return f"Error writing to file: {str(e)}"
 
-# Function to read a file
+
 def read_file(path):
+    """Read the contents of a file at the specified path."""
     try:
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             content = f.read()
         return content
     except Exception as e:
         return f"Error reading file: {str(e)}"
 
-# Function to list files in the root directory
+
 def list_files(path="."):
+    """List all files and directories in the specified path."""
     try:
         files = os.listdir(path)
         return "\n".join(files)
     except Exception as e:
         return f"Error listing files: {str(e)}"
 
-# Function to perform a Tavily search
+
 def tavily_search(query):
+    """Perform a web search using Tavily API to get up-to-date information or additional context."""
     try:
         response = tavily.qna_search(query=query, search_depth="advanced")
         return response
     except Exception as e:
         return f"Error performing search: {str(e)}"
+
 
 # Define the tools
 tools = [
@@ -148,11 +165,11 @@ tools = [
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The path where the folder should be created"
+                    "description": "The path where the folder should be created",
                 }
             },
-            "required": ["path"]
-        }
+            "required": ["path"],
+        },
     },
     {
         "name": "create_file",
@@ -162,15 +179,15 @@ tools = [
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The path where the file should be created"
+                    "description": "The path where the file should be created",
                 },
                 "content": {
                     "type": "string",
-                    "description": "The initial content of the file (optional)"
-                }
+                    "description": "The initial content of the file (optional)",
+                },
             },
-            "required": ["path"]
-        }
+            "required": ["path"],
+        },
     },
     {
         "name": "write_to_file",
@@ -180,15 +197,15 @@ tools = [
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The path of the file to write to"
+                    "description": "The path of the file to write to",
                 },
                 "content": {
                     "type": "string",
-                    "description": "The content to write to the file"
-                }
+                    "description": "The content to write to the file",
+                },
             },
-            "required": ["path", "content"]
-        }
+            "required": ["path", "content"],
+        },
     },
     {
         "name": "read_file",
@@ -198,11 +215,11 @@ tools = [
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The path of the file to read"
+                    "description": "The path of the file to read",
                 }
             },
-            "required": ["path"]
-        }
+            "required": ["path"],
+        },
     },
     {
         "name": "list_files",
@@ -212,10 +229,10 @@ tools = [
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The path of the folder to list (default: current directory)"
+                    "description": "The path of the folder to list (default: current directory)",
                 }
-            }
-        }
+            },
+        },
     },
     {
         "name": "tavily_search",
@@ -223,18 +240,16 @@ tools = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The search query"
-                }
+                "query": {"type": "string", "description": "The search query"}
             },
-            "required": ["query"]
-        }
-    }
+            "required": ["query"],
+        },
+    },
 ]
 
-# Function to execute tools
+
 def execute_tool(tool_name, tool_input):
+    """Execute the specified tool with the given input."""
     if tool_name == "create_folder":
         return create_folder(tool_input["path"])
     elif tool_name == "create_file":
@@ -250,8 +265,8 @@ def execute_tool(tool_name, tool_input):
     else:
         return f"Unknown tool: {tool_name}"
     
-# Function to encode image to base64
 def encode_image_to_base64(image_path):
+    """Encode the image at the specified path to base64."""
     try:
         with Image.open(image_path) as img:
 
@@ -268,8 +283,8 @@ def encode_image_to_base64(image_path):
     except Exception as e:
         return f"Error encoding image: {str(e)}"
 
-# Function to send a message to Claude and get the response
 def chat_with_claude(user_input, image_path=None):
+    """Chat with Claude using the provided user input and optional image."""
     global conversation_history
     
     if image_path:
@@ -312,11 +327,11 @@ def chat_with_claude(user_input, image_path=None):
         system=system_prompt,
         messages=messages,
         tools=tools,
-        tool_choice={"type": "auto"}
+        tool_choice={"type": "auto"},
     )
-    
+
     assistant_response = ""
-    
+
     # Process the response
     for content_block in response.content:
         if content_block.type == "text":
@@ -326,28 +341,32 @@ def chat_with_claude(user_input, image_path=None):
             tool_name = content_block.name
             tool_input = content_block.input
             tool_use_id = content_block.id
-            
+
             print_colored(f"\nTool Used: {tool_name}", TOOL_COLOR)
             print_colored(f"Tool Input: {tool_input}", TOOL_COLOR)
-            
+
             # Execute the tool
             result = execute_tool(tool_name, tool_input)
-            
+
             print_colored(f"Tool Result: {result}", RESULT_COLOR)
-            
+
             # Add tool use and result to conversation history
-            conversation_history.append({"role": "assistant", "content": [content_block]})
-            conversation_history.append({
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
-                        "content": result
-                    }
-                ]
-            })
-            
+            conversation_history.append(
+                {"role": "assistant", "content": [content_block]}
+            )
+            conversation_history.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_use_id,
+                            "content": result,
+                        }
+                    ],
+                }
+            )
+
             # Make another API call with the updated conversation history
             tool_response = client.messages.create(
                 model="claude-3-5-sonnet-20240620",
@@ -355,33 +374,35 @@ def chat_with_claude(user_input, image_path=None):
                 system=system_prompt,
                 messages=[msg for msg in conversation_history if msg.get('content')],
                 tools=tools,
-                tool_choice={"type": "auto"}
+                tool_choice={"type": "auto"},
             )
-            
+
             # Process the tool response
             for tool_content_block in tool_response.content:
                 if tool_content_block.type == "text":
                     assistant_response += tool_content_block.text
                     print_colored(f"\nClaude: {tool_content_block.text}", CLAUDE_COLOR)
-    
+
     # Add final assistant response to conversation history
     if assistant_response:
         conversation_history.append({"role": "assistant", "content": assistant_response})
     
     return assistant_response
 
-# Main chat loop
+
 def main():
+    """Main chat loop with Claude."""
+
     print_colored("Welcome to the Claude-3.5-Sonnet Engineer Chat with Image Support!", CLAUDE_COLOR)
     print_colored("Type 'exit' to end the conversation.", CLAUDE_COLOR)
     print_colored("To include an image, drag and drop it into the terminal and press enter. Provide your prompt on next line.", CLAUDE_COLOR)
     
     while True:
         user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
-
+        # Skip empty inputs
         if not user_input.strip():
             continue
-        if user_input.lower() == 'exit':
+        if user_input.lower() == "exit":
             print_colored("Thank you for chatting. Goodbye!", CLAUDE_COLOR)
             break
         
@@ -401,10 +422,10 @@ def main():
                 if i % 2 == 0:
                     print_colored(part, CLAUDE_COLOR)
                 else:
-                    lines = part.split('\n')
+                    lines = part.split("\n")
                     language = lines[0].strip() if lines else ""
-                    code = '\n'.join(lines[1:]) if len(lines) > 1 else ""
-                    
+                    code = "\n".join(lines[1:]) if len(lines) > 1 else ""
+
                     if language and code:
                         print_code(code, language)
                     elif code:
@@ -413,6 +434,7 @@ def main():
                     else:
                         # If there's no code (empty block), just print the part as is
                         print_colored(part, CLAUDE_COLOR)
+
 
 if __name__ == "__main__":
     main()
