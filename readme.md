@@ -16,7 +16,7 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/claude-engineer.git
+   git clone https://github.com/Doriandarko/claude-engineer.git
    cd claude-engineer
    ```
 
