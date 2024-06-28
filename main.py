@@ -13,6 +13,9 @@ import io
 import re
 from anthropic import Anthropic
 
+# Initialize colorama
+init()
+
 # Color constants
 USER_COLOR = Fore.WHITE
 CLAUDE_COLOR = Fore.BLUE
@@ -24,13 +27,16 @@ CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 5
 
 # Initialize the Anthropic client
-client = Anthropic(api_key="YOUR_API_KEY")
+client = Anthropic(api_key="YOUR API KEY")
 
 # Initialize the Tavily client
-tavily = TavilyClient(api_key="YOUR_API_KEY")
+tavily = TavilyClient(api_key="YOUR API KEY")
 
 # Set up the conversation memory
 conversation_history = []
+
+# automode flag
+automode = False
 
 # System prompt
 system_prompt = """
