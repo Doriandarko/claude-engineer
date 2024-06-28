@@ -24,7 +24,7 @@ RESULT_COLOR = Fore.GREEN
 
 # Add these constants at the top of the file
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
-MAX_CONTINUATION_ITERATIONS = 5
+MAX_CONTINUATION_ITERATIONS = 25
 
 # Initialize the Anthropic client
 client = Anthropic(api_key="YOUR API KEY")
@@ -84,8 +84,7 @@ When in automode:
 1. Set clear, achievable goals for yourself based on the user's request
 2. Work through these goals one by one, using the available tools as needed
 3. REMEMBER!! You can Read files, write code, LIST the files, and even SEARCH and make edits, use these tools as necessary to accomplish each goal
-4. Provide regular updates on your progress
-IMPORTANT
+4. ALWAYS READ A FILE BEFORE EDITING IT IF YOU ARE MISSING CONTENT. Provide regular updates on your progress
 5. IMPORTANT RULe!! When you know your goals are completed, DO NOT CONTINUE IN POINTLESS BACK AND FORTH CONVERSATIONS with yourself, if you think we achieved the results established to the original request say "AUTOMODE_COMPLETE" in your response to exit the loop!
 6. ULTRA IMPORTANT! You have access to this {iteration_info} amount of iterations you have left to complete the request, you can use this information to make decisions and to provide updates on your progress knowing the amount of responses you have left to complete the request.
 Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
@@ -528,7 +527,8 @@ def main():
     print_colored("Welcome to the Claude-3.5-Sonnet Engineer Chat with Image Support!", CLAUDE_COLOR)
     print_colored("Type 'exit' to end the conversation.", CLAUDE_COLOR)
     print_colored("Type 'image' to include an image in your message.", CLAUDE_COLOR)
-    print_colored("Type 'automode' to enter Autonomous mode.", CLAUDE_COLOR)
+    print_colored("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.", CLAUDE_COLOR)
+    print_colored("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.", CLAUDE_COLOR)
     
     while True:
         user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
@@ -547,28 +547,40 @@ def main():
             else:
                 print_colored("Invalid image path. Please try again.", CLAUDE_COLOR)
                 continue
-        elif user_input.lower() == 'automode':
-            automode = True
-            print_colored("Entering automode. Please provide your request.", TOOL_COLOR)
-            user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
-            
-            iteration_count = 0
-            while automode and iteration_count < MAX_CONTINUATION_ITERATIONS:
-                response, exit_continuation = chat_with_claude(user_input, current_iteration=iteration_count+1, max_iterations=MAX_CONTINUATION_ITERATIONS)
-                process_and_display_response(response)
-                
-                if exit_continuation:
-                    print_colored("automode completed.", TOOL_COLOR)
-                    automode = False
+        elif user_input.lower().startswith('automode'):
+            try:
+                parts = user_input.split()
+                if len(parts) > 1 and parts[1].isdigit():
+                    max_iterations = int(parts[1])
                 else:
-                    print_colored(f"Continuation iteration {iteration_count + 1} completed.", TOOL_COLOR)
-                    user_input = "Continue with the next step."
+                    max_iterations = MAX_CONTINUATION_ITERATIONS
                 
-                iteration_count += 1
+                automode = True
+                print_colored(f"Entering automode with {max_iterations} iterations. Press Ctrl+C to exit automode at any time.", TOOL_COLOR)
+                print_colored("Press Ctrl+C at any time to exit the automode loop.", TOOL_COLOR)
+                user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
                 
-                if iteration_count >= MAX_CONTINUATION_ITERATIONS:
-                    print_colored("Max iterations reached. Exiting automode.", TOOL_COLOR)
-                    automode = False
+                iteration_count = 0
+                while automode and iteration_count < max_iterations:
+                    response, exit_continuation = chat_with_claude(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
+                    process_and_display_response(response)
+                    
+                    if exit_continuation or CONTINUATION_EXIT_PHRASE in response:
+                        print_colored("Automode completed.", TOOL_COLOR)
+                        automode = False
+                    else:
+                        print_colored(f"Continuation iteration {iteration_count + 1} completed.", TOOL_COLOR)
+                        print_colored("Press Ctrl+C to exit automode.", TOOL_COLOR)
+                        user_input = "Continue with the next step."
+                    
+                    iteration_count += 1
+                    
+                    if iteration_count >= max_iterations:
+                        print_colored("Max iterations reached. Exiting automode.", TOOL_COLOR)
+                        automode = False
+            except KeyboardInterrupt:
+                print_colored("\nAutomode interrupted by user. Exiting automode.", TOOL_COLOR)
+                automode = False
             
             print_colored("Exited automode. Returning to regular chat.", TOOL_COLOR)
         else:
