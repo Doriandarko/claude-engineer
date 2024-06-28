@@ -12,6 +12,19 @@ from PIL import Image
 import io
 import re
 from anthropic import Anthropic
+from dotenv import load_dotenv
+
+# load .env file to environment
+load_dotenv()
+
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+TAVILY_API_KEY = os.getenv('TAVILY_API_KEY')
+
+# Initialize the Anthropic client
+client = Anthropic(api_key=ANTHROPIC_API_KEY)
+
+# Initialize the Tavily client
+tavily = TavilyClient(api_key=TAVILY_API_KEY)
 
 # Color constants
 USER_COLOR = Fore.WHITE
@@ -23,11 +36,6 @@ RESULT_COLOR = Fore.GREEN
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 5
 
-# Initialize the Anthropic client
-client = Anthropic(api_key="YOUR_API_KEY")
-
-# Initialize the Tavily client
-tavily = TavilyClient(api_key="YOUR_API_KEY")
 
 # Set up the conversation memory
 conversation_history = []
