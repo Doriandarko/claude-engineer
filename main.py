@@ -51,9 +51,10 @@ You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model. 
 7. Listing files in the root directory of the project
 8. Performing web searches to get up-to-date information or additional context
 9. When you use search make sure you use the best query to get the most accurate and up-to-date information
-10. IMPORTANT!! You NEVER remove existing code if doesnt require to be changed or removed, never use comments  like # ... (keep existing code) ... or # ... (rest of the code) ... etc, you only add new code or remove it or EDIT IT.
+10. IMPORTANT!! You NEVER remove existing code if it doesn't require to be changed or removed, never use comments like # ... (keep existing code) ... or # ... (rest of the code) ... etc, you only add new code or remove it or EDIT IT.
 11. Analyzing images provided by the user
-When an image is provided, carefully analyze its contents and incorporate your observations into your responses.
+12. Analyzing and displaying file and directory structures using the tree_directory function
+13. Concatenating and displaying contents of multiple files simultaneously using the cat_multiple_files function, with conservative file size management to maintain conversation history and prevent exceeding token limits
 
 When asked to create a project:
 - Always start by creating a root folder for the project.
@@ -62,17 +63,81 @@ When asked to create a project:
 - Use the provided tools to create folders and files as needed.
 
 When asked to make edits or improvements:
-- Use the read_file tool to examine the contents of existing files.
+- Use the read_file tool to examine the contents of individual existing files, especially for larger files or when focusing on specific sections.
+- Use the cat_multiple_files tool when you need to examine and compare multiple related files simultaneously, such as:
+  * Reviewing a set of related components or modules
+  * Comparing configuration files across different environments
+  * Analyzing implementation files alongside their corresponding test files
+- Remember the file size limits for cat_multiple_files (50 KB per file, 200 KB total) and use read_file for larger files or when you need to focus on specific parts of a file.
 - Analyze the code and suggest improvements or make necessary edits.
 - Use the write_to_file tool to implement changes.
 
 Be sure to consider the type of project (e.g., Python, JavaScript, web application) when determining the appropriate structure and files to include.
 
-You can now read files, list the contents of the root folder where this script is being run, and perform web searches. Use these capabilities when:
-- The user asks for edits or improvements to existing files
-- You need to understand the current state of the project
-- You believe reading a file or listing directory contents will be beneficial to accomplish the user's goal
-- You need up-to-date information or additional context to answer a question accurately
+When analyzing project structures and codebases:
+
+1. Maintain conversation history:
+   - Always prioritize maintaining the context of the conversation over loading large amounts of code.
+   - Be mindful that your responses and the code you analyze contribute to your token usage.
+
+2. Start with a broad overview:
+   - Use tree_directory with a shallow depth (max_depth=2 or 3) to get an overview of top-level directories.
+   - This provides a general sense of the project's structure without getting lost in details.
+
+3. Explore strategically:
+   - If the project structure isn't clear from the initial overview, explore specific directories in more detail.
+   - Use tree_directory on subdirectories or increase the max_depth parameter as needed.
+
+4. Handle large directories efficiently:
+   - Use the exclude_folders parameter to omit directories that often contain numerous files but aren't central to understanding the project structure (e.g., dependency directories, build outputs).
+   - Example: tree_directory(path='.', max_depth=3, exclude_folders=['node_modules', 'build', 'dist'])
+
+5. Use cat_multiple_files conservatively:
+   - The cat_multiple_files function has conservative file size limits:
+     * Default total limit across all files: 200 KB
+     * Default limit for any single file: 50 KB
+   - You can adjust these limits if absolutely necessary, but be very cautious about increasing them.
+   - Example usage: cat_multiple_files(file_paths=['file1.py', 'file2.py'], max_total_size_kb=300, max_single_file_size_kb=75)
+   - The function will skip files that exceed the single file limit and stop adding files if the total limit would be exceeded.
+   - Always check the summary at the end of the output to see how many files were actually displayed.
+   - Prefer cat_multiple_files when you need to analyze or compare multiple related files simultaneously.
+   - Good use cases include:
+     * Comparing multiple configuration files (e.g., for different environments)
+     * Analyzing a set of related components or modules
+     * Reviewing test files alongside their corresponding implementation files
+
+6. Handle large files and codebases efficiently:
+   - For files larger than 50 KB, use the read_file function to examine specific portions of the file.
+   - For large codebases, use tree_directory to get an overview, then strategically select small, critical files for analysis with cat_multiple_files.
+   - If cat_multiple_files skips files due to size limits, examine those files individually using read_file, focusing on the most relevant parts.
+
+7. Balance analysis with token conservation:
+   - Start with analyzing small, critical files that provide the most insight into the project structure or specific issues.
+   - Use read_file for targeted examination of larger files, focusing on specific functions or sections rather than entire files.
+   - Summarize your findings frequently, and only keep the most relevant code snippets in the conversation.
+
+8. Provide context-aware analysis:
+   - When discussing code, always reference the specific files and sections you've examined.
+   - If some files were skipped due to size limits, mention this in your analysis and explain how it might affect your conclusions.
+   - Be transparent about any limitations in your analysis due to file size constraints.
+
+9. Optimize token usage:
+   - After analyzing code, summarize key findings and remove large code blocks from the conversation if they're no longer needed for immediate context.
+   - If the conversation is getting long, consider summarizing earlier parts to free up tokens for new information.
+
+10. Verify and cross-reference:
+    - Always check the directory summary for total counts and truncated directories.
+    - Use list_files on the root or specific directories to see all items if tree_directory output is truncated.
+
+11. Avoid assumptions:
+    - Never assume a directory or file is missing based solely on its absence in a truncated view.
+    - Always verify using multiple tools and approaches before drawing conclusions about the project structure.
+
+12. Adapt to project type:
+    - Be flexible in your analysis, as project structures can vary widely depending on the type of project, programming language, or framework used.
+    - Look for common patterns in structure, but be open to unique or non-standard organizations.
+
+Remember: Your primary goal is to provide helpful, insightful analysis while maintaining the overall context of the conversation. Use the file size information provided by cat_multiple_files to guide your analysis strategy, and always err on the side of conserving tokens when in doubt. The goal is to understand the project structure accurately, regardless of its complexity or organization. Use the available tools wisely to build a comprehensive picture of the codebase.
 
 When you need current information or feel that a search could provide a better answer, use the tavily_search tool. This tool performs a web search and returns a concise answer along with relevant sources.
 
@@ -83,12 +148,12 @@ Always strive to provide the most accurate, helpful, and detailed responses poss
 When in automode:
 1. Set clear, achievable goals for yourself based on the user's request
 2. Work through these goals one by one, using the available tools as needed
-3. REMEMBER!! You can Read files, write code, LIST the files, and even SEARCH and make edits, use these tools as necessary to accomplish each goal
+3. REMEMBER!! You can Read files, write code, LIST the files, analyze file structures, view multiple file contents, and even SEARCH and make edits, use these tools as necessary to accomplish each goal
 4. ALWAYS READ A FILE BEFORE EDITING IT IF YOU ARE MISSING CONTENT. Provide regular updates on your progress
-5. IMPORTANT RULe!! When you know your goals are completed, DO NOT CONTINUE IN POINTLESS BACK AND FORTH CONVERSATIONS with yourself, if you think we achieved the results established to the original request say "AUTOMODE_COMPLETE" in your response to exit the loop!
+5. IMPORTANT RULE!! When you know your goals are completed, DO NOT CONTINUE IN POINTLESS BACK AND FORTH CONVERSATIONS with yourself, if you think we achieved the results established to the original request say "AUTOMODE_COMPLETE" in your response to exit the loop!
 6. ULTRA IMPORTANT! You have access to this {iteration_info} amount of iterations you have left to complete the request, you can use this information to make decisions and to provide updates on your progress knowing the amount of responses you have left to complete the request.
-Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
 
+Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
 """
 
 
@@ -148,6 +213,113 @@ def list_files(path="."):
         return "\n".join(files)
     except Exception as e:
         return f"Error listing files: {str(e)}"
+
+def tree_directory(path=".", max_lines=1000, max_depth=3, exclude_folders=None):
+    if exclude_folders is None:
+        exclude_folders = []
+
+    def count_items(path, level=0):
+        nonlocal total_dirs, total_files
+        try:
+            with os.scandir(path) as entries:
+                for entry in entries:
+                    if entry.is_dir():
+                        total_dirs += 1
+                        if entry.name not in exclude_folders and level < max_depth:
+                            count_items(entry.path, level + 1)
+                    else:
+                        total_files += 1
+        except PermissionError:
+            pass
+
+    def _tree(path, level=0):
+        nonlocal line_count, displayed_dirs, displayed_files, truncated_dirs
+        result = []
+        if level >= max_depth or line_count >= max_lines:
+            return result
+        try:
+            entries = sorted(os.scandir(path), key=lambda e: e.name)
+        except PermissionError:
+            return [f"{' ' * (level * 4)}[Permission Denied]"]
+        for entry in entries:
+            if line_count >= max_lines:
+                if level == 0:
+                    truncated_dirs.append(entry.name)
+                return result
+            prefix = "│   " * level + "├── "
+            result.append(f"{prefix}{entry.name}")
+            line_count += 1
+            if entry.is_dir():
+                displayed_dirs += 1
+                if entry.name not in exclude_folders:
+                    result.extend(_tree(entry.path, level + 1))
+                else:
+                    result.append(f"{prefix}│   [Contents excluded]")
+            else:
+                displayed_files += 1
+        return result
+
+    total_dirs = 0
+    total_files = 0
+    count_items(path)
+
+    line_count = 0
+    displayed_dirs = 0
+    displayed_files = 0
+    truncated_dirs = []
+    tree_output = _tree(path)
+    
+    summary = [
+        f"\nDirectory summary:",
+        f"Total directories: {total_dirs}",
+        f"Total files: {total_files}",
+        f"Displayed directories: {displayed_dirs}",
+        f"Displayed files: {displayed_files}",
+        f"Displayed items: {line_count}",
+    ]
+    
+    if truncated_dirs:
+        summary.append(f"Truncated directories: {', '.join(truncated_dirs)}")
+        summary.append("Use tree_directory or list_files on these directories for more details.")
+    
+    if exclude_folders:
+        summary.append(f"Folders with excluded contents: {', '.join(exclude_folders)}")
+    
+    return "\n".join(tree_output + summary)
+
+def cat_multiple_files(file_paths, max_total_size_kb=200, max_single_file_size_kb=50):
+    output = []
+    total_size = 0
+    files_to_display = []
+
+    # Check file sizes
+    for file_path in file_paths:
+        try:
+            file_size = os.path.getsize(file_path) / 1024  # Convert to KB
+            if file_size > max_single_file_size_kb:
+                output.append(f"Skipped {file_path}: File size ({file_size:.2f} KB) exceeds the maximum single file size limit ({max_single_file_size_kb} KB)")
+                continue
+            if total_size + file_size > max_total_size_kb:
+                output.append(f"Skipped remaining files: Total size would exceed the maximum limit ({max_total_size_kb} KB)")
+                break
+            total_size += file_size
+            files_to_display.append(file_path)
+        except Exception as e:
+            output.append(f"Error checking size of {file_path}: {str(e)}")
+
+    # Display file contents
+    for file_path in files_to_display:
+        try:
+            with open(file_path, 'r') as file:
+                content = file.read()
+                output.append(f"--- {file_path} ---\n{content}\n")
+        except Exception as e:
+            output.append(f"Error reading {file_path}: {str(e)}")
+
+    summary = f"\nFiles displayed: {len(files_to_display)} out of {len(file_paths)} requested"
+    summary += f"\nTotal size of displayed files: {total_size:.2f} KB"
+    
+    return "\n".join(output) + summary
 
 def tavily_search(query):
     try:
@@ -235,6 +407,51 @@ tools = [
         }
     },
     {
+        "name": "tree_directory",
+        "description": "Display the file and directory structure. Useful for getting an overview of the file structure. Limited to a maximum number of lines and depth to prevent excessive output. Can exclude specified folders.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The path of the directory to display (default: current directory)"
+                },
+                "max_lines": {
+                    "type": "integer",
+                    "description": "Maximum number of lines to output (default: 1000)"
+                },
+                "max_depth": {
+                    "type": "integer",
+                    "description": "Maximum depth of directories to display (default: 3)"
+                },
+                "exclude_folders": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "List of folder names to exclude from the tree (e.g., ['node_modules', '.git'])"
+                }
+            }
+        }
+    },
+    {
+        "name": "cat_multiple_files",
+        "description": "Concatenate and display the contents of multiple files. Useful for reviewing the content of several files at once.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "An array of file paths to concatenate and display"
+                }
+            },
+            "required": ["file_paths"]
+        }
+    },
+    {
         "name": "tavily_search",
         "description": "Perform a web search using Tavily API to get up-to-date information or additional context. Use this when you need current information or feel a search could provide a better answer.",
         "input_schema": {
@@ -261,6 +478,19 @@ def execute_tool(tool_name, tool_input):
         return read_file(tool_input["path"])
     elif tool_name == "list_files":
         return list_files(tool_input.get("path", "."))
+    elif tool_name == "tree_directory":
+        return tree_directory(
+            tool_input.get("path", "."),
+            tool_input.get("max_lines", 1000),
+            tool_input.get("max_depth", 3),
+            tool_input.get("exclude_folders")
+        )
+    elif tool_name == "cat_multiple_files":
+        return cat_multiple_files(
+            tool_input["file_paths"],
+            tool_input.get("max_total_size_kb", 200),
+            tool_input.get("max_single_file_size_kb", 50)
+        )
     elif tool_name == "tavily_search":
         return tavily_search(tool_input["query"])
     else:
