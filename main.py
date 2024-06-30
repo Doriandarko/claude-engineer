@@ -523,7 +523,7 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
     return assistant_response, exit_continuation
 
 def main():
-    global automode
+    global automode, conversation_history
     print_colored("Welcome to the Claude-3.5-Sonnet Engineer Chat with Image Support!", CLAUDE_COLOR)
     print_colored("Type 'exit' to end the conversation.", CLAUDE_COLOR)
     print_colored("Type 'image' to include an image in your message.", CLAUDE_COLOR)
@@ -561,26 +561,36 @@ def main():
                 user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
                 
                 iteration_count = 0
-                while automode and iteration_count < max_iterations:
-                    response, exit_continuation = chat_with_claude(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
-                    process_and_display_response(response)
-                    
-                    if exit_continuation or CONTINUATION_EXIT_PHRASE in response:
-                        print_colored("Automode completed.", TOOL_COLOR)
-                        automode = False
-                    else:
-                        print_colored(f"Continuation iteration {iteration_count + 1} completed.", TOOL_COLOR)
-                        print_colored("Press Ctrl+C to exit automode.", TOOL_COLOR)
-                        user_input = "Continue with the next step."
-                    
-                    iteration_count += 1
-                    
-                    if iteration_count >= max_iterations:
-                        print_colored("Max iterations reached. Exiting automode.", TOOL_COLOR)
-                        automode = False
+                try:
+                    while automode and iteration_count < max_iterations:
+                        response, exit_continuation = chat_with_claude(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
+                        process_and_display_response(response)
+                        
+                        if exit_continuation or CONTINUATION_EXIT_PHRASE in response:
+                            print_colored("Automode completed.", TOOL_COLOR)
+                            automode = False
+                        else:
+                            print_colored(f"Continuation iteration {iteration_count + 1} completed.", TOOL_COLOR)
+                            print_colored("Press Ctrl+C to exit automode.", TOOL_COLOR)
+                            user_input = "Continue with the next step."
+                        
+                        iteration_count += 1
+                        
+                        if iteration_count >= max_iterations:
+                            print_colored("Max iterations reached. Exiting automode.", TOOL_COLOR)
+                            automode = False
+                except KeyboardInterrupt:
+                    print_colored("\nAutomode interrupted by user. Exiting automode.", TOOL_COLOR)
+                    automode = False
+                    # Ensure the conversation history ends with an assistant message
+                    if conversation_history and conversation_history[-1]["role"] == "user":
+                        conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
             except KeyboardInterrupt:
                 print_colored("\nAutomode interrupted by user. Exiting automode.", TOOL_COLOR)
                 automode = False
+                # Ensure the conversation history ends with an assistant message
+                if conversation_history and conversation_history[-1]["role"] == "user":
+                    conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
             
             print_colored("Exited automode. Returning to regular chat.", TOOL_COLOR)
         else:
