@@ -32,20 +32,18 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
 ## 🚀 Usage
 
 On Windows run the `run.bat` script to automatically install all dependencies and then start the Claude Engineer interface:
-
 ```
 run.bat
 ```
 
 On Linux or Mac run `run.sh` instead.
 
-Make the script executable by running 
+Make the script executable by running:
 ```
 chmod +x run.sh
 ```
 
-Run the script using .
-
+Run the script using:
 ```
 ./run.sh
 ```
