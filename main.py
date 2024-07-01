@@ -31,14 +31,20 @@ CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 25
 
 try:
-    ANTHROPIC_API_KEY = os.getenv['ANTHROPIC_API_KEY']
-except KeyError:
+    ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+    if ANTHROPIC_API_KEY is None:
+        raise KeyError("ANTHROPIC_API_KEY not found in environment variables")
+except KeyError as e:
+    print(f"Error: {e}")
     print("Please set the ANTHROPIC_API_KEY environment variable and try again.")
     exit(1)
 
 try:
-    TAVILY_API_KEY = os.getenv['TAVILY_API_KEY']
-except KeyError:
+    TAVILY_API_KEY = os.getenv('TAVILY_API_KEY')
+    if TAVILY_API_KEY is None:
+        raise KeyError("TAVILY_API_KEY not found in environment variables")
+except KeyError as e:
+    print(f"Error: {e}")
     print("Please set the TAVILY_API_KEY environment variable and try again.")
     exit(1)
 
