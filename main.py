@@ -12,6 +12,7 @@ from PIL import Image
 import io
 import re
 from anthropic import Anthropic
+import difflib
 
 # Initialize colorama
 init()
@@ -27,10 +28,10 @@ CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 25
 
 # Initialize the Anthropic client
-client = Anthropic(api_key="YOUR API KEY")
+client = Anthropic(api_key="YOUR KEY")
 
 # Initialize the Tavily client
-tavily = TavilyClient(api_key="YOUR API KEY")
+tavily = TavilyClient(api_key="YOUR KEY")
 
 # Set up the conversation memory
 conversation_history = []
@@ -51,7 +52,7 @@ You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model. 
 7. Listing files in the root directory of the project
 8. Performing web searches to get up-to-date information or additional context
 9. When you use search make sure you use the best query to get the most accurate and up-to-date information
-10. IMPORTANT!! You NEVER remove existing code if doesnt require to be changed or removed, never use comments  like # ... (keep existing code) ... or # ... (rest of the code) ... etc, you only add new code or remove it or EDIT IT.
+10. IMPORTANT!! When editing files, always provide the full content of the file, even if you're only changing a small part. The system will automatically generate and apply the appropriate diff.
 11. Analyzing images provided by the user
 When an image is provided, carefully analyze its contents and incorporate your observations into your responses.
 
@@ -64,7 +65,7 @@ When asked to create a project:
 When asked to make edits or improvements:
 - Use the read_file tool to examine the contents of existing files.
 - Analyze the code and suggest improvements or make necessary edits.
-- Use the write_to_file tool to implement changes.
+- Use the write_to_file tool to implement changes, providing the full updated file content.
 
 Be sure to consider the type of project (e.g., Python, JavaScript, web application) when determining the appropriate structure and files to include.
 
@@ -90,7 +91,6 @@ When in automode:
 Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
 
 """
-
 
 def update_system_prompt(current_iteration=None, max_iterations=None):
     global system_prompt
@@ -126,11 +126,36 @@ def create_file(path, content=""):
     except Exception as e:
         return f"Error creating file: {str(e)}"
 
-def write_to_file(path, content):
+def generate_and_apply_diff(original_content, new_content, path):
+    diff = list(difflib.unified_diff(
+        original_content.splitlines(keepends=True),
+        new_content.splitlines(keepends=True),
+        fromfile=f"a/{path}",
+        tofile=f"b/{path}",
+        n=3
+    ))
+    
+    if not diff:
+        return "No changes detected."
+    
     try:
         with open(path, 'w') as f:
-            f.write(content)
-        return f"Content written to file: {path}"
+            f.writelines(new_content)
+        return f"Changes applied to {path}:\n" + ''.join(diff)
+    except Exception as e:
+        return f"Error applying changes: {str(e)}"
+
+def write_to_file(path, content):
+    try:
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                original_content = f.read()
+            result = generate_and_apply_diff(original_content, content, path)
+        else:
+            with open(path, 'w') as f:
+                f.write(content)
+            result = f"New file created and content written to: {path}"
+        return result
     except Exception as e:
         return f"Error writing to file: {str(e)}"
 
@@ -191,7 +216,7 @@ tools = [
     },
     {
         "name": "write_to_file",
-        "description": "Write content to an existing file at the specified path. Use this when you need to add or update content in an existing file.",
+        "description": "Write content to a file at the specified path. If the file exists, only the necessary changes will be applied. If the file doesn't exist, it will be created. Always provide the full intended content of the file.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -201,7 +226,7 @@ tools = [
                 },
                 "content": {
                     "type": "string",
-                    "description": "The content to write to the file"
+                    "description": "The full content to write to the file"
                 }
             },
             "required": ["path", "content"]
@@ -256,7 +281,7 @@ def execute_tool(tool_name, tool_input):
     elif tool_name == "create_file":
         return create_file(tool_input["path"], tool_input.get("content", ""))
     elif tool_name == "write_to_file":
-        return write_to_file(tool_input["path"], tool_input.get("content", ""))
+        return write_to_file(tool_input["path"], tool_input["content"])
     elif tool_name == "read_file":
         return read_file(tool_input["path"])
     elif tool_name == "list_files":
@@ -292,132 +317,6 @@ def execute_goals(goals):
             automode = False
             print_colored("Exiting automode.", TOOL_COLOR)
             break
-
-def chat_with_claude(user_input, image_path=None):
-    global conversation_history, automode
-    
-    if image_path:
-        print_colored(f"Processing image at path: {image_path}", TOOL_COLOR)
-        image_base64 = encode_image_to_base64(image_path)
-        
-        if image_base64.startswith("Error"):
-            print_colored(f"Error encoding image: {image_base64}", TOOL_COLOR)
-            return "I'm sorry, there was an error processing the image. Please try again.", False
-
-        image_message = {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/jpeg",
-                        "data": image_base64
-                    }
-                },
-                {
-                    "type": "text",
-                    "text": f"User input for image: {user_input}"
-                }
-            ]
-        }
-        conversation_history.append(image_message)
-        print_colored("Image message added to conversation history", TOOL_COLOR)
-    else:
-        conversation_history.append({"role": "user", "content": user_input})
-    
-    messages = [msg for msg in conversation_history if msg.get('content')]
-    
-    try:
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
-            max_tokens=4000,
-            system=update_system_prompt(),
-            messages=messages,
-            tools=tools,
-            tool_choice={"type": "auto"}
-        )
-    except Exception as e:
-        print_colored(f"Error calling Claude API: {str(e)}", TOOL_COLOR)
-        return "I'm sorry, there was an error communicating with the AI. Please try again.", False
-    
-    assistant_response = ""
-    exit_continuation = False
-    
-    for content_block in response.content:
-        if content_block.type == "text":
-            assistant_response += content_block.text
-            print_colored(f"\nClaude: {content_block.text}", CLAUDE_COLOR)
-            if CONTINUATION_EXIT_PHRASE in content_block.text:
-                exit_continuation = True
-        elif content_block.type == "tool_use":
-            tool_name = content_block.name
-            tool_input = content_block.input
-            tool_use_id = content_block.id
-            
-            print_colored(f"\nTool Used: {tool_name}", TOOL_COLOR)
-            print_colored(f"Tool Input: {tool_input}", TOOL_COLOR)
-            
-            result = execute_tool(tool_name, tool_input)
-            print_colored(f"Tool Result: {result}", RESULT_COLOR)
-            
-            conversation_history.append({"role": "assistant", "content": [content_block]})
-            conversation_history.append({
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
-                        "content": result
-                    }
-                ]
-            })
-            
-            try:
-                tool_response = client.messages.create(
-                    model="claude-3-5-sonnet-20240620",
-                    max_tokens=4000,
-                    system=update_system_prompt(),
-                    messages=[msg for msg in conversation_history if msg.get('content')],
-                    tools=tools,
-                    tool_choice={"type": "auto"}
-                )
-                
-                for tool_content_block in tool_response.content:
-                    if tool_content_block.type == "text":
-                        assistant_response += tool_content_block.text
-                        print_colored(f"\nClaude: {tool_content_block.text}", CLAUDE_COLOR)
-            except Exception as e:
-                print_colored(f"Error in tool response: {str(e)}", TOOL_COLOR)
-                assistant_response += "\nI encountered an error while processing the tool result. Please try again."
-    
-    if assistant_response:
-        conversation_history.append({"role": "assistant", "content": assistant_response})
-    
-    return assistant_response, exit_continuation
-
-def process_and_display_response(response):
-    if response.startswith("Error") or response.startswith("I'm sorry"):
-        print_colored(response, TOOL_COLOR)
-    else:
-        if "```" in response:
-            parts = response.split("```")
-            for i, part in enumerate(parts):
-                if i % 2 == 0:
-                    print_colored(part, CLAUDE_COLOR)
-                else:
-                    lines = part.split('\n')
-                    language = lines[0].strip() if lines else ""
-                    code = '\n'.join(lines[1:]) if len(lines) > 1 else ""
-                    
-                    if language and code:
-                        print_code(code, language)
-                    elif code:
-                        print_colored(f"Code:\n{code}", CLAUDE_COLOR)
-                    else:
-                        print_colored(part, CLAUDE_COLOR)
-        else:
-            print_colored(response, CLAUDE_COLOR)
 
 def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
     global conversation_history, automode
@@ -521,6 +420,29 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
         conversation_history.append({"role": "assistant", "content": assistant_response})
     
     return assistant_response, exit_continuation
+
+def process_and_display_response(response):
+    if response.startswith("Error") or response.startswith("I'm sorry"):
+        print_colored(response, TOOL_COLOR)
+    else:
+        if "```" in response:
+            parts = response.split("```")
+            for i, part in enumerate(parts):
+                if i % 2 == 0:
+                    print_colored(part, CLAUDE_COLOR)
+                else:
+                    lines = part.split('\n')
+                    language = lines[0].strip() if lines else ""
+                    code = '\n'.join(lines[1:]) if len(lines) > 1 else ""
+                    
+                    if language and code:
+                        print_code(code, language)
+                    elif code:
+                        print_colored(f"Code:\n{code}", CLAUDE_COLOR)
+                    else:
+                        print_colored(part, CLAUDE_COLOR)
+        else:
+            print_colored(response, CLAUDE_COLOR)
 
 def main():
     global automode, conversation_history
