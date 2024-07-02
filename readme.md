@@ -13,6 +13,7 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
 - 🖼️ Vision capabilities support via drag and drop of images in the terminal
 - 🚀 Automode for autonomous task completion
 - 🔄 Iteration tracking in automode
+- 📊 Diff-based file editing for precise code modifications
 
 ## 🛠️ Installation
 
@@ -69,6 +70,16 @@ To use automode:
 2. Provide your request when prompted.
 3. Claude will work autonomously, providing updates after each iteration.
 4. Automode exits when the task is completed or after reaching the maximum number of iterations.
+
+### 📊 Diff-based File Editing
+
+Claude Engineer now supports diff-based file editing, allowing for more precise and controlled modifications to existing files. When editing files, Claude will:
+
+1. Show a diff of the proposed changes, highlighting additions, removals, and unchanged lines.
+2. Focus on adding new code or modifying existing code without unnecessarily removing functionality.
+3. Provide explanations for any removed code, ensuring transparency in the editing process.
+
+This feature enhances Claude's ability to make targeted improvements to your codebase while maintaining the integrity of existing functionality.
 
 Note: Claude will only have access to the files in the root folders of the script or any folder path you provide it.
 
