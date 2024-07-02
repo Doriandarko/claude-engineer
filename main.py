@@ -1,4 +1,5 @@
 import os
+import sys
 from datetime import datetime
 import json
 from colorama import init, Fore, Style
@@ -276,6 +277,25 @@ tools = [
 ]
 
 def execute_tool(tool_name, tool_input):
+    if "path" in tool_input:
+        path = tool_input["path"]
+        
+        abs_path = os.path.abspath(os.path.normpath(path))
+        
+        cwd = os.path.abspath(os.getcwd())
+        
+        if not abs_path.startswith(cwd):
+            print(f"Error: Path attempts to access location outside current directory: {path}", file=sys.stderr)
+            sys.exit(1)
+        
+        safe_rel_path = os.path.relpath(abs_path, cwd)
+        
+        if safe_rel_path == ".git" or safe_rel_path.startswith(".git" + os.sep):
+            print(f"Error: Access to .git directory is not allowed: {path}", file=sys.stderr)
+            sys.exit(1)
+        
+        tool_input["path"] = safe_rel_path
+
     if tool_name == "create_folder":
         return create_folder(tool_input["path"])
     elif tool_name == "create_file":
