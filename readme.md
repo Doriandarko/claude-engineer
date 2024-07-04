@@ -14,6 +14,8 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
 - 🚀 Automode for autonomous task completion
 - 🔄 Iteration tracking in automode
 - 📊 Diff-based file editing for precise code modifications
+- 🔐 Environment variable management for secure configuration
+- 🔄 OpenRouter API integration for improved AI capabilities
 
 ## 🛠️ Installation
 
@@ -28,11 +30,13 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
    pip install -r requirements.txt
    ```
 
-3. Set up your API keys:
-   - Add your Anthropic and Tavily API keys at the start of the file:
-     ```python
-     client = Anthropic(api_key="YOUR API KEY")
-     tavily = TavilyClient(api_key="YOUR API KEY")
+3. Set up your environment variables:
+   - Copy the `.env.template` file to `.env`
+   - Fill in your API keys in the `.env` file:
+     ```
+     ANTHROPIC_API_KEY=your_anthropic_api_key_here
+     OPENROUTER_API_KEY=your_openrouter_api_key_here
+     TAVILY_API_KEY=your_tavily_api_key_here
      ```
 
 ## 🚀 Usage
@@ -73,13 +77,19 @@ To use automode:
 
 ### 📊 Diff-based File Editing
 
-Claude Engineer now supports diff-based file editing, allowing for more precise and controlled modifications to existing files. When editing files, Claude will:
+Claude Engineer supports diff-based file editing, allowing for more precise and controlled modifications to existing files. When editing files, Claude will:
 
 1. Show a diff of the proposed changes, highlighting additions, removals, and unchanged lines.
 2. Focus on adding new code or modifying existing code without unnecessarily removing functionality.
 3. Provide explanations for any removed code, ensuring transparency in the editing process.
 
 This feature enhances Claude's ability to make targeted improvements to your codebase while maintaining the integrity of existing functionality.
+
+### 🔐 Environment Variables and OpenRouter Integration
+
+Claude Engineer now uses environment variables for secure configuration management. The `.env` file stores sensitive information like API keys, which are loaded using the `python-dotenv` library.
+
+The integration with OpenRouter API provides improved AI capabilities and flexibility in choosing different language models.
 
 Note: Claude will only have access to the files in the root folders of the script or any folder path you provide it.
 

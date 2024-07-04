@@ -11,8 +11,12 @@ import base64
 from PIL import Image
 import io
 import re
-from anthropic import Anthropic
 import difflib
+from dotenv import load_dotenv
+from openai import OpenAI
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Initialize colorama
 init()
@@ -27,11 +31,26 @@ RESULT_COLOR = Fore.GREEN
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 25
 
-# Initialize the Anthropic client
-client = Anthropic(api_key="YOUR KEY")
+# Initialize the API clients
+anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+
+if not anthropic_api_key and not openrouter_api_key:
+    raise ValueError("No API keys found. Please set either ANTHROPIC_API_KEY or OPENROUTER_API_KEY in your .env file.")
+
+import requests
+from anthropic import Anthropic
+
+use_openrouter = False
+if anthropic_api_key:
+    anthropic_client = Anthropic(api_key=anthropic_api_key)
+    print("Using Anthropic API with claude-3-5-sonnet-20240620 model")
+else:
+    use_openrouter = True
+    print("Anthropic API key not found. Will use OpenRouter API.")
 
 # Initialize the Tavily client
-tavily = TavilyClient(api_key="YOUR KEY")
+tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
 # Set up the conversation memory
 conversation_history = []
@@ -183,94 +202,112 @@ def tavily_search(query):
 
 tools = [
     {
-        "name": "create_folder",
-        "description": "Create a new folder at the specified path. Use this when you need to create a new directory in the project structure.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The path where the folder should be created"
-                }
-            },
-            "required": ["path"]
-        }
-    },
-    {
-        "name": "create_file",
-        "description": "Create a new file at the specified path with optional content. Use this when you need to create a new file in the project structure.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The path where the file should be created"
+        "type": "function",
+        "function": {
+            "name": "create_folder",
+            "description": "Create a new folder at the specified path. Use this when you need to create a new directory in the project structure.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The path where the folder should be created"
+                    }
                 },
-                "content": {
-                    "type": "string",
-                    "description": "The initial content of the file (optional)"
-                }
-            },
-            "required": ["path"]
+                "required": ["path"]
+            }
         }
     },
     {
-        "name": "write_to_file",
-        "description": "Write content to a file at the specified path. If the file exists, only the necessary changes will be applied. If the file doesn't exist, it will be created. Always provide the full intended content of the file.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The path of the file to write to"
+        "type": "function",
+        "function": {
+            "name": "create_file",
+            "description": "Create a new file at the specified path with optional content. Use this when you need to create a new file in the project structure.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The path where the file should be created"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The initial content of the file (optional)"
+                    }
                 },
-                "content": {
-                    "type": "string",
-                    "description": "The full content to write to the file"
-                }
-            },
-            "required": ["path", "content"]
+                "required": ["path"]
+            }
         }
     },
     {
-        "name": "read_file",
-        "description": "Read the contents of a file at the specified path. Use this when you need to examine the contents of an existing file.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The path of the file to read"
-                }
-            },
-            "required": ["path"]
+        "type": "function",
+        "function": {
+            "name": "write_to_file",
+            "description": "Write content to a file at the specified path. If the file exists, only the necessary changes will be applied. If the file doesn't exist, it will be created. Always provide the full intended content of the file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The path of the file to write to"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The full content to write to the file"
+                    }
+                },
+                "required": ["path", "content"]
+            }
         }
     },
     {
-        "name": "list_files",
-        "description": "List all files and directories in the root folder where the script is running. Use this when you need to see the contents of the current directory.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The path of the folder to list (default: current directory)"
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "Read the contents of a file at the specified path. Use this when you need to examine the contents of an existing file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The path of the file to read"
+                    }
+                },
+                "required": ["path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_files",
+            "description": "List all files and directories in the root folder where the script is running. Use this when you need to see the contents of the current directory.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "The path of the folder to list (default: current directory)"
+                    }
                 }
             }
         }
     },
     {
-        "name": "tavily_search",
-        "description": "Perform a web search using Tavily API to get up-to-date information or additional context. Use this when you need current information or feel a search could provide a better answer.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The search query"
-                }
-            },
-            "required": ["query"]
+        "type": "function",
+        "function": {
+            "name": "tavily_search",
+            "description": "Perform a web search using Tavily API to get up-to-date information or additional context. Use this when you need current information or feel a search could provide a better answer.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query"
+                    }
+                },
+                "required": ["query"]
+            }
         }
     }
 ]
@@ -319,7 +356,7 @@ def execute_goals(goals):
             break
 
 def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
-    global conversation_history, automode
+    global conversation_history, automode, use_openrouter
     
     if image_path:
         print_colored(f"Processing image at path: {image_path}", TOOL_COLOR)
@@ -333,11 +370,9 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
             "role": "user",
             "content": [
                 {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/jpeg",
-                        "data": image_base64
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image_base64}"
                     }
                 },
                 {
@@ -351,73 +386,65 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
     else:
         conversation_history.append({"role": "user", "content": user_input})
     
-    messages = [msg for msg in conversation_history if msg.get('content')]
+    messages = [
+        {"role": "system", "content": update_system_prompt(current_iteration, max_iterations)},
+        *[msg for msg in conversation_history if msg.get('content')]
+    ]
     
     try:
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
-            max_tokens=4000,
-            system=update_system_prompt(current_iteration, max_iterations),
-            messages=messages,
-            tools=tools,
-            tool_choice={"type": "auto"}
-        )
-    except Exception as e:
-        print_colored(f"Error calling Claude API: {str(e)}", TOOL_COLOR)
-        return "I'm sorry, there was an error communicating with the AI. Please try again.", False
+        if not use_openrouter and anthropic_api_key:
+            try:
+                response = anthropic_client.messages.create(
+                    model="claude-3-sonnet-20240620",
+                    max_tokens=4000,
+                    temperature=0.7,
+                    messages=messages,
+                    system=update_system_prompt(current_iteration, max_iterations)
+                )
+                assistant_response = response.content[0].text
+                function_call = None  # Anthropic API doesn't support function calling in the same way
+            except Exception as e:
+                print_colored(f"Anthropic API error: {str(e)}. Switching to OpenRouter.", TOOL_COLOR)
+                use_openrouter = True
+                raise  # Re-raise the exception to trigger the OpenRouter fallback
+        else:
+            raise Exception("Using OpenRouter")
+    except Exception:
+        if openrouter_api_key:
+            try:
+                response = requests.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {openrouter_api_key}",
+                        "HTTP-Referer": "http://localhost:5000",  # Replace with your actual site URL
+                        "X-Title": "Claude Engineer",  # Replace with your actual site name
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "anthropic/claude-3.5-sonnet",
+                        "messages": messages,
+                        "max_tokens": 4000,
+                        "temperature": 0.7,
+                    }
+                )
+                response_json = response.json()
+                assistant_response = response_json['choices'][0]['message']['content']
+                function_call = None  # OpenRouter doesn't support function calling in the same way
+            except Exception as e:
+                print_colored(f"Error calling OpenRouter API: {str(e)}", TOOL_COLOR)
+                return "I'm sorry, there was an error communicating with the AI. Please try again.", False
+        else:
+            print_colored("No API keys available for fallback.", TOOL_COLOR)
+            return "I'm sorry, there was an error communicating with the AI. Please try again.", False
     
-    assistant_response = ""
     exit_continuation = False
     
-    for content_block in response.content:
-        if content_block.type == "text":
-            assistant_response += content_block.text
-            print_colored(f"\nClaude: {content_block.text}", CLAUDE_COLOR)
-            if CONTINUATION_EXIT_PHRASE in content_block.text:
-                exit_continuation = True
-        elif content_block.type == "tool_use":
-            tool_name = content_block.name
-            tool_input = content_block.input
-            tool_use_id = content_block.id
-            
-            print_colored(f"\nTool Used: {tool_name}", TOOL_COLOR)
-            print_colored(f"Tool Input: {tool_input}", TOOL_COLOR)
-            
-            result = execute_tool(tool_name, tool_input)
-            print_colored(f"Tool Result: {result}", RESULT_COLOR)
-            
-            conversation_history.append({"role": "assistant", "content": [content_block]})
-            conversation_history.append({
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
-                        "content": result
-                    }
-                ]
-            })
-            
-            try:
-                tool_response = client.messages.create(
-                    model="claude-3-5-sonnet-20240620",
-                    max_tokens=4000,
-                    system=update_system_prompt(current_iteration, max_iterations),
-                    messages=[msg for msg in conversation_history if msg.get('content')],
-                    tools=tools,
-                    tool_choice={"type": "auto"}
-                )
-                
-                for tool_content_block in tool_response.content:
-                    if tool_content_block.type == "text":
-                        assistant_response += tool_content_block.text
-                        print_colored(f"\nClaude: {tool_content_block.text}", CLAUDE_COLOR)
-            except Exception as e:
-                print_colored(f"Error in tool response: {str(e)}", TOOL_COLOR)
-                assistant_response += "\nI encountered an error while processing the tool result. Please try again."
+    if CONTINUATION_EXIT_PHRASE in assistant_response:
+        exit_continuation = True
     
-    if assistant_response:
-        conversation_history.append({"role": "assistant", "content": assistant_response})
+    print_colored(f"\nAI Assistant: {assistant_response}", CLAUDE_COLOR)
+    
+    conversation_history.append({"role": "assistant", "content": assistant_response})
     
     return assistant_response, exit_continuation
 
