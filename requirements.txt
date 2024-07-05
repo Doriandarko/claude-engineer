@@ -4,3 +4,4 @@ pygments
 tavily-python
 python-dotenv
 Pillow
+Jinja2

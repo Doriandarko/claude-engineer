@@ -44,3 +44,6 @@ bin/
 
 # Python associated files
 *pycache*
+
+# Work directory
+workspace/
