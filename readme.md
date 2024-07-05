@@ -1,10 +1,10 @@
-# 🤖 Claude Engineer
+# 🤖 LLM Engineer
 
-Claude Engineer is an interactive command-line interface (CLI) that leverages the power of Anthropic's Claude-3.5-Sonnet model to assist with software development tasks. This tool combines the capabilities of a large language model with practical file system operations and web search functionality.
+LLM Engineer is an interactive command-line interface (CLI) that leverages the power of advanced LLMs, such as Anthropic's Claude-3.5-Sonnet model, to assist with software development tasks. This tool combines the capabilities of a large language model with practical file system operations and web search functionality.
 
 ## ✨ Features
 
-- 💬 Interactive chat interface with Claude-3.5-Sonnet
+- 💬 Interactive chat interface with LLMs
 - 📁 File system operations (create folders, files, read/write files)
 - 🔍 Web search capabilities using Tavily API
 - 🌈 Syntax highlighting for code snippets
@@ -18,10 +18,7 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
 ## 🛠️ Installation
 
 1. Clone this repository:
-   ```
-   git clone https://github.com/Doriandarko/claude-engineer.git
-   cd claude-engineer
-   ```
+
 
 2. Install the required dependencies:
    ```
@@ -34,16 +31,17 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
      client = Anthropic(api_key="YOUR API KEY")
      tavily = TavilyClient(api_key="YOUR API KEY")
      ```
+  - As alternative to direct usage of Anthropic API - consider Anthropic via Bedrock (authorised by AWS profile), Cohere R+, local Mixtral, or any other LLM supported by LiteLLM
 
 ## 🚀 Usage
 
-Run the main script to start the Claude Engineer interface:
+Run the main script to start the LLM Engineer interface:
 
 ```
 python main.py
 ```
 
-Once started, you can interact with Claude Engineer by typing your queries or commands. Some example interactions:
+Once started, you can interact with LLM Engineer by typing your queries or commands. Some example interactions:
 
 - "Create a new Python project structure for a web application"
 - "Explain the code in file.py and suggest improvements"
@@ -58,30 +56,30 @@ Special commands:
 
 ### 🤖 Automode
 
-Automode allows Claude to work autonomously on complex tasks. When in automode:
+Automode allows LLM to work autonomously on complex tasks. When in automode:
 
-1. Claude sets clear, achievable goals based on your request.
+1. LLM sets clear, achievable goals based on your request.
 2. It works through these goals one by one, using available tools as needed.
-3. Claude provides regular updates on its progress.
+3. LLM provides regular updates on its progress.
 4. Automode continues until goals are completed or the maximum number of iterations is reached.
 
 To use automode:
 1. Type 'automode' when prompted for input.
 2. Provide your request when prompted.
-3. Claude will work autonomously, providing updates after each iteration.
+3. LLM will work autonomously, providing updates after each iteration.
 4. Automode exits when the task is completed or after reaching the maximum number of iterations.
 
 ### 📊 Diff-based File Editing
 
-Claude Engineer now supports diff-based file editing, allowing for more precise and controlled modifications to existing files. When editing files, Claude will:
+LLM Engineer now supports diff-based file editing, allowing for more precise and controlled modifications to existing files. When editing files, LLM will:
 
 1. Show a diff of the proposed changes, highlighting additions, removals, and unchanged lines.
 2. Focus on adding new code or modifying existing code without unnecessarily removing functionality.
 3. Provide explanations for any removed code, ensuring transparency in the editing process.
 
-This feature enhances Claude's ability to make targeted improvements to your codebase while maintaining the integrity of existing functionality.
+This feature enhances LLM's ability to make targeted improvements to your codebase while maintaining the integrity of existing functionality.
 
-Note: Claude will only have access to the files in the root folders of the script or any folder path you provide it.
+Note: LLM will only have access to the files in the root folders of the script or any folder path you provide it.
 
 ## 👥 Contributing
 
