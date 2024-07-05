@@ -9,10 +9,11 @@ from tavily import TavilyClient
 import pygments.util
 import base64
 from PIL import Image
-import io
+import io   
 import re
-from anthropic import Anthropic
 import difflib
+from client_litellm import ClientLiteLLM
+#from client_anthropic import CientAnthroipc
 
 # Initialize colorama
 init()
@@ -27,8 +28,8 @@ RESULT_COLOR = Fore.GREEN
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 25
 
-# Initialize the Anthropic client
-client = Anthropic(api_key="YOUR KEY")
+# Initialize the LLM client
+client = ClientLiteLLM()
 
 # Initialize the Tavily client
 tavily = TavilyClient(api_key="YOUR KEY")
@@ -354,8 +355,7 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
     messages = [msg for msg in conversation_history if msg.get('content')]
     
     try:
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
+        response = client.completion(
             max_tokens=4000,
             system=update_system_prompt(current_iteration, max_iterations),
             messages=messages,
@@ -399,8 +399,7 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
             })
             
             try:
-                tool_response = client.messages.create(
-                    model="claude-3-5-sonnet-20240620",
+                tool_response = client.completion(
                     max_tokens=4000,
                     system=update_system_prompt(current_iteration, max_iterations),
                     messages=[msg for msg in conversation_history if msg.get('content')],
