@@ -1,4 +1,5 @@
 import os
+from dotenv import load_dotenv
 from datetime import datetime
 import json
 from colorama import init, Fore, Style
@@ -27,11 +28,13 @@ RESULT_COLOR = Fore.GREEN
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 25
 
+load_dotenv()
+
 # Initialize the Anthropic client
-client = Anthropic(api_key="YOUR KEY")
+client = Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
 
 # Initialize the Tavily client
-tavily = TavilyClient(api_key="YOUR KEY")
+tavily = TavilyClient(api_key=os.getenv("TAV_API_KEY"))
 
 # Set up the conversation memory
 conversation_history = []
