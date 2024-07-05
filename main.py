@@ -1,6 +1,6 @@
 import os
-import json
 from datetime import datetime
+import json
 from colorama import init, Fore, Style
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
@@ -13,7 +13,6 @@ import io
 import re
 from anthropic import Anthropic
 import difflib
-import httpx
 
 # Initialize colorama
 init()
@@ -42,6 +41,7 @@ conversation_history = []
 # automode flag
 automode = False
 
+# System prompt
 # System prompt
 system_prompt = """
 You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model. You are a versatile software developer and problem-solver with access to various tools and capabilities. Your primary function is to assist users with coding tasks, answer questions, and provide up-to-date information.
@@ -194,19 +194,16 @@ def tavily_search(query):
     except Exception as e:
         return f"Error performing search: {str(e)}"
 
-def format_json(data):
-    return json.dumps(data, indent=2)
-
 tools = [
     {
         "name": "create_folder",
-        "description": "Create a new folder at the specified path. Use this when you need to create a new directory in the project structure. This tool is useful for organizing files and setting up the initial project layout. It will not create parent directories if they don't exist. Use with caution in existing projects to avoid overwriting.",
+        "description": "Create a new folder at the specified path. Use this when you need to create a new directory in the project structure.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The full path where the folder should be created, e.g., '/project/src/components'"
+                    "description": "The path where the folder should be created"
                 }
             },
             "required": ["path"]
@@ -214,13 +211,13 @@ tools = [
     },
     {
         "name": "create_file",
-        "description": "Create a new file at the specified path with optional content. Use this when you need to create a new file in the project structure. This tool is ideal for initializing new source code files, configuration files, or documentation. Be careful not to overwrite existing files unintentionally.",
+        "description": "Create a new file at the specified path with optional content. Use this when you need to create a new file in the project structure.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The full path where the file should be created, including the filename and extension"
+                    "description": "The path where the file should be created"
                 },
                 "content": {
                     "type": "string",
@@ -232,13 +229,13 @@ tools = [
     },
     {
         "name": "write_to_file",
-        "description": "Write content to a file at the specified path. If the file exists, only the necessary changes will be applied. If the file doesn't exist, it will be created. Always provide the full intended content of the file. This tool is useful for updating existing files or creating new ones with specific content.",
+        "description": "Write content to a file at the specified path. If the file exists, only the necessary changes will be applied. If the file doesn't exist, it will be created. Always provide the full intended content of the file.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The full path of the file to write to, including the filename and extension"
+                    "description": "The path of the file to write to"
                 },
                 "content": {
                     "type": "string",
@@ -250,13 +247,13 @@ tools = [
     },
     {
         "name": "read_file",
-        "description": "Read the contents of a file at the specified path. Use this when you need to examine the contents of an existing file. This tool is helpful for understanding the current state of a file before making changes or for retrieving information from configuration files, source code, or documentation.",
+        "description": "Read the contents of a file at the specified path. Use this when you need to examine the contents of an existing file.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The full path of the file to read, including the filename and extension"
+                    "description": "The path of the file to read"
                 }
             },
             "required": ["path"]
@@ -264,7 +261,7 @@ tools = [
     },
     {
         "name": "list_files",
-        "description": "List all files and directories in the specified folder. Use this when you need to see the contents of a directory. This tool is useful for understanding the structure of a project, finding specific files, or verifying the presence of expected files and folders.",
+        "description": "List all files and directories in the root folder where the script is running. Use this when you need to see the contents of the current directory.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -277,7 +274,7 @@ tools = [
     },
     {
         "name": "tavily_search",
-        "description": "Perform a web search using Tavily API to get up-to-date information or additional context. Use this when you need current information or feel a search could provide a better answer. This tool is particularly useful for finding recent developments, verifying facts, or gathering supplementary information on a topic.",
+        "description": "Perform a web search using Tavily API to get up-to-date information or additional context. Use this when you need current information or feel a search could provide a better answer.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -288,46 +285,24 @@ tools = [
             },
             "required": ["query"]
         }
-    },
-    {
-        "name": "format_json",
-        "description": "Format the given data as a JSON string. Use this when you need to return structured data in JSON format. This tool is helpful for creating configuration files, API responses, or any situation where data needs to be represented in a standardized, machine-readable format.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "object",
-                    "description": "The data to be formatted as JSON"
-                }
-            },
-            "required": ["data"]
-        }
     }
 ]
 
 def execute_tool(tool_name, tool_input):
-    try:
-        if tool_name == "create_folder":
-            return create_folder(tool_input["path"])
-        elif tool_name == "create_file":
-            return create_file(tool_input["path"], tool_input.get("content", ""))
-        elif tool_name == "write_to_file":
-            return write_to_file(tool_input["path"], tool_input["content"])
-        elif tool_name == "read_file":
-            return read_file(tool_input["path"])
-        elif tool_name == "list_files":
-            return list_files(tool_input.get("path", "."))
-        elif tool_name == "tavily_search":
-            return tavily_search(tool_input["query"])
-        elif tool_name == "format_json":
-            return format_json(tool_input["data"])
-        else:
-            raise ValueError(f"Unknown tool: {tool_name}")
-    except Exception as e:
-        return {
-            "content": f"Error executing {tool_name}: {str(e)}",
-            "is_error": True
-        }
+    if tool_name == "create_folder":
+        return create_folder(tool_input["path"])
+    elif tool_name == "create_file":
+        return create_file(tool_input["path"], tool_input.get("content", ""))
+    elif tool_name == "write_to_file":
+        return write_to_file(tool_input["path"], tool_input["content"])
+    elif tool_name == "read_file":
+        return read_file(tool_input["path"])
+    elif tool_name == "list_files":
+        return list_files(tool_input.get("path", "."))
+    elif tool_name == "tavily_search":
+        return tavily_search(tool_input["query"])
+    else:
+        return f"Unknown tool: {tool_name}"
 
 def encode_image_to_base64(image_path):
     try:
@@ -355,17 +330,6 @@ def execute_goals(goals):
             automode = False
             print_colored("Exiting automode.", TOOL_COLOR)
             break
-
-def manage_tool_dependencies(tool_results):
-    # This function can be expanded to handle complex dependencies between tools
-    return tool_results
-
-def estimate_token_usage(messages, tools):
-    # This is a very rough estimate and should be refined based on actual usage
-    message_tokens = sum(len(str(m.get("content", ""))) for m in messages)
-    tool_tokens = sum(len(str(t)) for t in tools)
-    system_prompt_tokens = 294  # For Claude 3.5 Sonnet with auto tool choice
-    return message_tokens + tool_tokens + system_prompt_tokens
 
 def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None, max_tokens=4000):
     global conversation_history, automode
@@ -402,8 +366,7 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
     
     messages = [msg for msg in conversation_history if msg.get('content')]
     
-    estimated_tokens = estimate_token_usage(messages, tools)
-    print_colored(f"Estimated token usage: {estimated_tokens}", TOOL_COLOR)
+
     
     try:
         response = client.messages.create(
