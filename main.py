@@ -425,7 +425,6 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
     for content_block in response.content:
         if content_block.type == "text":
             assistant_response += content_block.text
-            print_colored(f"\nClaude: {content_block.text}", CLAUDE_COLOR)
             if CONTINUATION_EXIT_PHRASE in content_block.text:
                 exit_continuation = True
         elif content_block.type == "tool_use":
