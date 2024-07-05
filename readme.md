@@ -18,28 +18,33 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
 ## 🛠️ Installation
 
 1. Clone this repository:
-   ```
-   git clone https://github.com/Doriandarko/claude-engineer.git
-   cd claude-engineer
-   ```
+
+```shell
+git clone https://github.com/Doriandarko/claude-engineer.git
+cd claude-engineer
+```
 
 2. Install the required dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
+
+```shell
+pip install -r requirements.txt
+```
 
 3. Set up your API keys:
+
+   - Copy from `.env.example` into `.env`
    - Add your Anthropic and Tavily API keys at the start of the file:
-     ```python
-     client = Anthropic(api_key="YOUR API KEY")
-     tavily = TavilyClient(api_key="YOUR API KEY")
-     ```
+
+```plain
+ANTHROPIC_API_KEY=YOUR ANTHROPIC API KEY HERE
+TAVILY_API_KEY=YOUR TAVILY API KEY HERE
+```
 
 ## 🚀 Usage
 
 Run the main script to start the Claude Engineer interface:
 
-```
+```shell
 python main.py
 ```
 
@@ -51,6 +56,7 @@ Once started, you can interact with Claude Engineer by typing your queries or co
 - "Help me debug this error: [paste your error message]"
 
 Special commands:
+
 - Type 'exit' to end the conversation and close the application.
 - Type 'image' to include an image in your message.
 - Type 'automode' plus the max amount of iterations to enter Autonomous mode.
@@ -66,6 +72,7 @@ Automode allows Claude to work autonomously on complex tasks. When in automode:
 4. Automode continues until goals are completed or the maximum number of iterations is reached.
 
 To use automode:
+
 1. Type 'automode' when prompted for input.
 2. Provide your request when prompted.
 3. Claude will work autonomously, providing updates after each iteration.
