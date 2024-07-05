@@ -3,25 +3,19 @@ import io
 import os
 import pygments.util
 from anthropic import Anthropic
-from colorama import Fore, Style
+from colorama import Style
 from jinja2 import Environment, FileSystemLoader
 from PIL import Image
 from pygments import highlight
 from pygments.lexers import get_lexer_by_name
 from pygments.formatters import TerminalFormatter
 
+from config import (
+    ANTHROPIC_API_KEY, CLAUDE_MODEL, MAX_TOKENS, MAX_CONTINUATION_ITERATIONS,
+    CONTINUATION_EXIT_PHRASE, USER_COLOR, CLAUDE_COLOR, TOOL_COLOR, RESULT_COLOR,
+    PROMPTS_DIR, SYSTEM_PROMPT_TEMPLATE, MAX_IMAGE_SIZE
+)
 from tools import tools, execute_tool
-
-# Color constants
-USER_COLOR = Fore.WHITE
-CLAUDE_COLOR = Fore.BLUE
-TOOL_COLOR = Fore.YELLOW
-RESULT_COLOR = Fore.GREEN
-
-# Add these constants at the top of the file
-CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
-MAX_CONTINUATION_ITERATIONS = 25
-
 
 def print_colored(text, color):
     print(f"{color}{text}{Style.RESET_ALL}")
@@ -37,8 +31,7 @@ def print_code(code, language):
 def encode_image_to_base64(image_path):
     try:
         with Image.open(image_path) as img:
-            max_size = (1024, 1024)
-            img.thumbnail(max_size, Image.DEFAULT_STRATEGY)
+            img.thumbnail(MAX_IMAGE_SIZE, Image.DEFAULT_STRATEGY)
             if img.mode != 'RGB':
                 img = img.convert('RGB')
             img_byte_arr = io.BytesIO()
@@ -72,18 +65,17 @@ def process_and_display_response(response: str):
 
 class ClaudeAgent:
     def __init__(self):
-        environment = Environment(loader=FileSystemLoader("prompts/"))
-        self.template = environment.get_template("swe.jinja")
+        environment = Environment(loader=FileSystemLoader(PROMPTS_DIR))
+        self.template = environment.get_template(SYSTEM_PROMPT_TEMPLATE)
 
         # Initialize the Anthropic client
-        self.client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+        self.client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
         # Initialize the automode status
         self.automode = False
 
         # Set up the conversation memory
         self.conversation_history = []
-
 
     def update_system_prompt(self, current_iteration=None, max_iterations=None):
         iterations_left = 1
@@ -96,7 +88,6 @@ class ClaudeAgent:
             automode_status=automode_status,
             iterations_left=iterations_left
         )
-
 
     def chat_with_claude(self, user_input, image_path=None, current_iteration=None, max_iterations=None):
         if image_path:
@@ -133,8 +124,8 @@ class ClaudeAgent:
         
         try:
             response = self.client.messages.create(
-                model="claude-3-5-sonnet-20240620",
-                max_tokens=4000,
+                model=CLAUDE_MODEL,
+                max_tokens=MAX_TOKENS,
                 system=self.update_system_prompt(current_iteration, max_iterations),
                 messages=messages,
                 tools=tools,
@@ -178,8 +169,8 @@ class ClaudeAgent:
                 
                 try:
                     tool_response = self.client.messages.create(
-                        model="claude-3-5-sonnet-20240620",
-                        max_tokens=4000,
+                        model=CLAUDE_MODEL,
+                        max_tokens=MAX_TOKENS,
                         system=self.update_system_prompt(current_iteration, max_iterations),
                         messages=[msg for msg in self.conversation_history if msg.get('content')],
                         tools=tools,

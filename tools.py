@@ -2,6 +2,8 @@ import os
 import difflib
 from tavily import TavilyClient
 
+from config import TAVILY_API_KEY
+
 tools = [
     {
         "name": "create_folder",
@@ -97,7 +99,7 @@ tools = [
 ]
 
 # Initialize the Tavily client
-tavily = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
+tavily = TavilyClient(api_key=TAVILY_API_KEY)
 
 def create_folder(path):
     try:
