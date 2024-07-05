@@ -54,7 +54,6 @@ Your available tools and their functions are:
 4. read_file(path): Read and return the contents of a file at the specified path.
 5. list_files(path="."): List all files and directories in the specified folder (default is current directory).
 6. tavily_search(query): Perform a web search using the Tavily API to get up-to-date information.
-7. format_json(data): Format the given data as a JSON string.
 
 When using these tools:
 - Always provide full paths for file and folder operations.
