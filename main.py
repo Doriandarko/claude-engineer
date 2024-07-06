@@ -322,6 +322,9 @@ def execute_goals(goals):
 def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
     global conversation_history, automode
     
+    # Create a new list for the current conversation
+    current_conversation = []
+    
     if image_path:
         print_colored(f"Processing image at path: {image_path}", TOOL_COLOR)
         image_base64 = encode_image_to_base64(image_path)
@@ -347,12 +350,13 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
                 }
             ]
         }
-        conversation_history.append(image_message)
+        current_conversation.append(image_message)
         print_colored("Image message added to conversation history", TOOL_COLOR)
     else:
-        conversation_history.append({"role": "user", "content": user_input})
+        current_conversation.append({"role": "user", "content": user_input})
     
-    messages = [msg for msg in conversation_history if msg.get('content')]
+    # Combine the previous conversation history with the current conversation
+    messages = conversation_history + current_conversation
     
     try:
         response = client.completion(
@@ -372,7 +376,6 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
     for content_block in response.content:
         if content_block.type == "text":
             assistant_response += content_block.text
-            print_colored(f"\nClaude: {content_block.text}", CLAUDE_COLOR)
             if CONTINUATION_EXIT_PHRASE in content_block.text:
                 exit_continuation = True
         elif content_block.type == "tool_use":
@@ -386,8 +389,21 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
             result = execute_tool(tool_name, tool_input)
             print_colored(f"Tool Result: {result}", RESULT_COLOR)
             
-            conversation_history.append({"role": "assistant", "content": [content_block]})
-            conversation_history.append({
+            # Add the tool use to the current conversation
+            current_conversation.append({
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": tool_use_id,
+                        "name": tool_name,
+                        "input": tool_input
+                    }
+                ]
+            })
+            
+            # Add the tool result to the current conversation
+            current_conversation.append({
                 "role": "user",
                 "content": [
                     {
@@ -398,11 +414,14 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
                 ]
             })
             
+            # Update the messages with the new tool use and result
+            messages = conversation_history + current_conversation
+            
             try:
                 tool_response = client.completion(
                     max_tokens=4000,
                     system=update_system_prompt(current_iteration, max_iterations),
-                    messages=[msg for msg in conversation_history if msg.get('content')],
+                    messages=messages,
                     tools=tools,
                     tool_choice={"type": "auto"}
                 )
@@ -410,13 +429,15 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
                 for tool_content_block in tool_response.content:
                     if tool_content_block.type == "text":
                         assistant_response += tool_content_block.text
-                        print_colored(f"\nClaude: {tool_content_block.text}", CLAUDE_COLOR)
             except Exception as e:
                 print_colored(f"Error in tool response: {str(e)}", TOOL_COLOR)
                 assistant_response += "\nI encountered an error while processing the tool result. Please try again."
     
     if assistant_response:
-        conversation_history.append({"role": "assistant", "content": assistant_response})
+        current_conversation.append({"role": "assistant", "content": assistant_response})
+    
+    # Update the global conversation history
+    conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
     
     return assistant_response, exit_continuation
 
