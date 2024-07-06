@@ -3,8 +3,9 @@ from datetime import datetime
 import json
 from colorama import init, Fore, Style
 from pygments import highlight
-from pygments.lexers import get_lexer_by_name
+from pygments.lexers import get_lexer_by_name, guess_lexer
 from pygments.formatters import TerminalFormatter
+from pygments.lexers.diff import DiffLexer
 from tavily import TavilyClient
 import pygments.util
 import base64
@@ -13,6 +14,7 @@ import io
 import re
 from anthropic import Anthropic
 import difflib
+from difflib import SequenceMatcher
 
 # Initialize colorama
 init()
@@ -51,45 +53,85 @@ You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model. 
 6. Reading and analyzing existing files in the project directory
 7. Listing files in the root directory of the project
 8. Performing web searches to get up-to-date information or additional context
-9. When you use search make sure you use the best query to get the most accurate and up-to-date information
-10. IMPORTANT!! When editing files, always provide the full content of the file, even if you're only changing a small part. The system will automatically generate and apply the appropriate diff.
-11. Analyzing images provided by the user
-When an image is provided, carefully analyze its contents and incorporate your observations into your responses.
+9. When you use search, make sure you use the best query to get the most accurate and up-to-date information
+10. Analyzing images provided by the user
+
+Available tools and when to use them:
+
+1. create_folder: Use this tool to create a new folder at a specified path.
+   Example: When setting up a new project structure.
+
+2. create_file: Use this tool to create a new file at a specified path with content.
+   Example: When creating new source code files or configuration files.
+
+3. search_and_edit_file: Use this tool for ALL modifications to existing files, regardless of file size. This includes:
+   - Making targeted changes to specific sections of code
+   - Appending content to the end of a file
+   - Inserting content at the beginning of a file
+   - Replacing entire file contents
+   Example: When updating functions, adding new code, or completely rewriting a file.
+
+4. read_file: Use this tool to read the contents of a file at a specified path.
+   Example: When you need to examine the current content of a file before making changes.
+
+5. list_files: Use this tool to list all files and directories in a specified folder (default is the current directory).
+   Example: When you need to understand the current project structure or find specific files.
+
+6. tavily_search: Use this tool to perform a web search and get up-to-date information or additional context.
+   Example: When you need current information about a technology, library, or best practice.
+
+IMPORTANT: For all file modifications, always use the search_and_edit_file tool. This tool is versatile and can handle various editing scenarios:
+
+1. Targeted changes: Use a specific search pattern to locate the section of code to modify.
+   Example: search_pattern="def example_function\\(.*\\):", replacement="def example_function(param1, param2):"
+
+2. Appending content: Use a pattern that matches the end of the file to add content.
+   Example: search_pattern="\\Z", replacement="\\n# New content appended", edit_type="append"
+
+3. Inserting at the beginning: Use a pattern that matches the start of the file to add content.
+   Example: search_pattern="\\A", replacement="# New content prepended\\n", edit_type="prepend"
+
+4. Replacing entire file contents: Use a pattern that matches the entire file content.
+   Example: search_pattern="[\\s\\S]*", replacement="# Entirely new content", edit_type="replace_all"
+
+5. Complex edits: For more complex edits, you can use regex capture groups in your search pattern and reference them in your replacement.
+   Example: search_pattern="(def \\w+\\(.*?\\)):\\n\\s*(.*?)\\n(\\s*return)", replacement="\\1:\\n    # New comment\\n    \\2\\n\\3"
+
+Follow these steps when editing files:
+1. ALWAYS ALWAYS!!! Use the read_file tool to examine the current contents of the file you want to edit.Since the file may change, you must read the file before editing it.
+2. Identify the specific section of code that needs to be changed, or determine if you're appending, inserting at the beginning, or replacing the entire file.
+3. Craft an appropriate search pattern to locate the section. Use regex patterns for precise matching.
+4. Prepare the new code to replace the matched section, ensuring it fits seamlessly with the existing code.
+5. Determine the appropriate edit_type: "replace" (default), "append", "prepend", or "replace_all".
+6. Use the search_and_edit_file tool with these parameters: path, search_pattern, replacement, and edit_type.
+
+This approach will help you make precise edits to files of any size or complexity. The function can handle exact matches, fuzzy matching for similar content, and multiple matches in a file.
 
 When asked to create a project:
-- Always start by creating a root folder for the project.
-- Then, create the necessary subdirectories and files within that root folder.
+- Always start by creating a root folder for the project using the create_folder tool.
+- Then, create the necessary subdirectories and files within that root folder using the create_folder and create_file tools.
 - Organize the project structure logically and follow best practices for the specific type of project being created.
-- Use the provided tools to create folders and files as needed.
 
 When asked to make edits or improvements:
-- Use the read_file tool to examine the contents of existing files.
+- ALWAYS START by using the read_file tool to examine the contents of existing files.
+- Use the search_and_edit_file tool for ALL modifications to existing files, as described above.
 - Analyze the code and suggest improvements or make necessary edits.
-- Use the write_to_file tool to implement changes, providing the full updated file content.
 
 Be sure to consider the type of project (e.g., Python, JavaScript, web application) when determining the appropriate structure and files to include.
 
-You can now read files, list the contents of the root folder where this script is being run, and perform web searches. Use these capabilities when:
-- The user asks for edits or improvements to existing files
-- You need to understand the current state of the project
-- You believe reading a file or listing directory contents will be beneficial to accomplish the user's goal
-- You need up-to-date information or additional context to answer a question accurately
-
-When you need current information or feel that a search could provide a better answer, use the tavily_search tool. This tool performs a web search and returns a concise answer along with relevant sources.
-
-Always strive to provide the most accurate, helpful, and detailed responses possible. If you're unsure about something, admit it and consider using the search tool to find the most current information.
+Always strive to provide the most accurate, helpful, and detailed responses possible. If you're unsure about something, admit it and consider using the tavily_search tool to find the most current information.
 
 {automode_status}
 
 When in automode:
 1. Set clear, achievable goals for yourself based on the user's request
 2. Work through these goals one by one, using the available tools as needed
-3. REMEMBER!! You can Read files, write code, LIST the files, and even SEARCH and make edits, use these tools as necessary to accomplish each goal
+3. REMEMBER!! You can read files, write code, list the files, search the web, and make edits. Use these tools as necessary to accomplish each goal
 4. ALWAYS READ A FILE BEFORE EDITING IT IF YOU ARE MISSING CONTENT. Provide regular updates on your progress
-5. IMPORTANT RULe!! When you know your goals are completed, DO NOT CONTINUE IN POINTLESS BACK AND FORTH CONVERSATIONS with yourself, if you think we achieved the results established to the original request say "AUTOMODE_COMPLETE" in your response to exit the loop!
-6. ULTRA IMPORTANT! You have access to this {iteration_info} amount of iterations you have left to complete the request, you can use this information to make decisions and to provide updates on your progress knowing the amount of responses you have left to complete the request.
-Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
+5. IMPORTANT RULE!! When you know your goals are completed, DO NOT CONTINUE IN POINTLESS BACK AND FORTH CONVERSATIONS with yourself. If you think you've achieved the results established in the original request, say "AUTOMODE_COMPLETE" in your response to exit the loop!
+6. ULTRA IMPORTANT! You have access to this {iteration_info} amount of iterations you have left to complete the request. Use this information to make decisions and to provide updates on your progress, knowing the number of responses you have left to complete the request.
 
+Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
 """
 
 def update_system_prompt(current_iteration=None, max_iterations=None):
@@ -101,7 +143,11 @@ def update_system_prompt(current_iteration=None, max_iterations=None):
     return system_prompt.format(automode_status=automode_status, iteration_info=iteration_info)
 
 def print_colored(text, color):
-    print(f"{color}{text}{Style.RESET_ALL}")
+    # Check if the text already contains color codes
+    if '\033[' in text:
+        print(text)  # Print as-is if color codes are present
+    else:
+        print(f"{color}{text}{Style.RESET_ALL}")
 
 def print_code(code, language):
     try:
@@ -126,6 +172,9 @@ def create_file(path, content=""):
     except Exception as e:
         return f"Error creating file: {str(e)}"
 
+def highlight_diff(diff_text):
+    return highlight(diff_text, DiffLexer(), TerminalFormatter())
+
 def generate_and_apply_diff(original_content, new_content, path):
     diff = list(difflib.unified_diff(
         original_content.splitlines(keepends=True),
@@ -141,23 +190,79 @@ def generate_and_apply_diff(original_content, new_content, path):
     try:
         with open(path, 'w') as f:
             f.writelines(new_content)
-        return f"Changes applied to {path}:\n" + ''.join(diff)
+        
+        diff_text = ''.join(diff)
+        highlighted_diff = highlight_diff(diff_text)
+        
+        # Apply additional color coding for additions and deletions
+        colored_diff = []
+        for line in highlighted_diff.splitlines(True):
+            if line.startswith('+'):
+                colored_diff.append(Fore.GREEN + line + Fore.RESET)
+            elif line.startswith('-'):
+                colored_diff.append(Fore.RED + line + Fore.RESET)
+            else:
+                colored_diff.append(line)
+        
+        return f"Changes applied to {path}:\n" + ''.join(colored_diff)
     except Exception as e:
         return f"Error applying changes: {str(e)}"
 
-def write_to_file(path, content):
+def search_and_edit_file(path, search_pattern, replacement, edit_type="replace"):
     try:
-        if os.path.exists(path):
-            with open(path, 'r') as f:
-                original_content = f.read()
-            result = generate_and_apply_diff(original_content, content, path)
-        else:
-            with open(path, 'w') as f:
-                f.write(content)
-            result = f"New file created and content written to: {path}"
-        return result
+        with open(path, 'r') as file:
+            content = file.read()
+
+        # Handle different edit types
+        if edit_type == "append":
+            new_content = content + replacement
+            return generate_and_apply_diff(content, new_content, path)
+        elif edit_type == "prepend":
+            new_content = replacement + content
+            return generate_and_apply_diff(content, new_content, path)
+        elif edit_type == "replace_all":
+            new_content = replacement
+            return generate_and_apply_diff(content, new_content, path)
+
+        # Try exact regex match
+        matches = list(re.finditer(search_pattern, content, re.DOTALL | re.MULTILINE))
+        
+        if matches:
+            # Handle multiple matches
+            new_content = content
+            offset = 0
+            for match in matches:
+                start = match.start() + offset
+                end = match.end() + offset
+                new_content = new_content[:start] + replacement + new_content[end:]
+                offset += len(replacement) - (end - start)
+            return generate_and_apply_diff(content, new_content, path)
+
+        # If exact match fails, try fuzzy matching
+        lines = content.split('\n')
+        best_matches = []
+        
+        for i, line in enumerate(lines):
+            ratio = SequenceMatcher(None, search_pattern, line).ratio()
+            if ratio > 0.6:  # Adjust this threshold as needed
+                best_matches.append((i, ratio))
+
+        if best_matches:
+            best_matches.sort(key=lambda x: x[1], reverse=True)
+            new_content = content
+            offset = 0
+            for i, _ in best_matches[:3]:  # Limit to top 3 matches
+                start = max(0, i - 1)
+                end = min(len(lines), i + 2)
+                match_content = '\n'.join(lines[start:end])
+                replacement_with_context = '\n'.join(lines[:start]) + '\n' + replacement + '\n' + '\n'.join(lines[end:])
+                new_content = new_content.replace(match_content, replacement_with_context)
+            return generate_and_apply_diff(content, new_content, path)
+
+        return f"Error: Could not find a close match for the specified pattern in {path}"
+
     except Exception as e:
-        return f"Error writing to file: {str(e)}"
+        return f"Error editing file: {str(e)}"
 
 def read_file(path):
     try:
@@ -198,7 +303,7 @@ tools = [
     },
     {
         "name": "create_file",
-        "description": "Create a new file at the specified path with optional content. Use this when you need to create a new file in the project structure.",
+        "description": "Create a new file at the specified path with content. Use this when you need to create a new file in the project structure.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -208,30 +313,40 @@ tools = [
                 },
                 "content": {
                     "type": "string",
-                    "description": "The initial content of the file (optional)"
-                }
-            },
-            "required": ["path"]
-        }
-    },
-    {
-        "name": "write_to_file",
-        "description": "Write content to a file at the specified path. If the file exists, only the necessary changes will be applied. If the file doesn't exist, it will be created. Always provide the full intended content of the file.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The path of the file to write to"
-                },
-                "content": {
-                    "type": "string",
-                    "description": "The full content to write to the file"
+                    "description": "The content of the file"
                 }
             },
             "required": ["path", "content"]
         }
     },
+    {
+    "name": "search_and_edit_file",
+    "description": "Search for a specific part of the code in a file and edit that part. Use this for all modifications to existing files, regardless of file size.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "The path of the file to edit"
+            },
+            "search_pattern": {
+                "type": "string",
+                "description": "The pattern to search for in the file"
+            },
+            "replacement": {
+                "type": "string",
+                "description": "The new code to replace the matched section"
+            },
+            "edit_type": {
+                "type": "string",
+                "description": "The type of edit to perform (replace, append, prepend, replace_all)",
+                "enum": ["replace", "append", "prepend", "replace_all"],
+                "default": "replace"
+            }
+        },
+        "required": ["path", "search_pattern", "replacement"]
+    }
+},
     {
         "name": "read_file",
         "description": "Read the contents of a file at the specified path. Use this when you need to examine the contents of an existing file.",
@@ -279,9 +394,14 @@ def execute_tool(tool_name, tool_input):
     if tool_name == "create_folder":
         return create_folder(tool_input["path"])
     elif tool_name == "create_file":
-        return create_file(tool_input["path"], tool_input.get("content", ""))
-    elif tool_name == "write_to_file":
-        return write_to_file(tool_input["path"], tool_input["content"])
+        return create_file(tool_input["path"], tool_input["content"])
+    elif tool_name == "search_and_edit_file":
+        return search_and_edit_file(
+            tool_input["path"],
+            tool_input["search_pattern"],
+            tool_input["replacement"],
+            tool_input.get("edit_type", "replace")
+        )
     elif tool_name == "read_file":
         return read_file(tool_input["path"])
     elif tool_name == "list_files":
