@@ -548,7 +548,30 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
         if file_path_match:
             file_path = file_path_match.group(1)
             file_content = read_file(file_path)
-            review_prompt = f"I've made edits to the file {file_path}. Please review the entire file content to ensure no unintended duplications were introduced:\n\n{file_content}\n\nIf you find any duplications, please remove them and explain the changes. If no duplications are found, confirm that the file is clean."
+            review_prompt = f"""I've made edits to the file {file_path}. Please perform a thorough review of the entire file content:
+
+{file_content}
+
+1. Check for any unintended duplications:
+   - If you find duplications, remove them and explain the changes.
+   - Ensure that the removal of duplications doesn't affect the code's functionality.
+
+2. Verify that no essential code is missing:
+   - Look for any incomplete functions, classes, or logic flows.
+   - Identify any missing imports, variable declarations, or closing brackets.
+
+3. Assess the overall structure and coherence of the code:
+   - Ensure that the edits maintain the logical flow of the code.
+   - Check that all necessary components are present and properly connected.
+
+If you find any issues (duplications, missing code, or structural problems), please provide:
+1. A clear explanation of the issue
+2. The corrected code snippet
+3. A brief justification for the changes
+
+If no issues are found, confirm that the file is clean, complete, and structurally sound.
+
+Please present your review findings and any necessary corrections."""
             
             try:
                 review_response = client.messages.create(
