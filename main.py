@@ -3,7 +3,7 @@ from datetime import datetime
 import json
 from colorama import init, Fore, Style
 from pygments import highlight
-from pygments.lexers import get_lexer_by_name, guess_lexer
+from pygments.lexers import get_lexer_by_name
 from pygments.formatters import TerminalFormatter
 from pygments.lexers.diff import DiffLexer
 from tavily import TavilyClient
@@ -14,8 +14,7 @@ import io
 import re
 from anthropic import Anthropic
 import difflib
-from difflib import SequenceMatcher
-import time  # Add this line to import the time module
+import time
 
 # Initialize colorama
 init()
@@ -65,63 +64,29 @@ Available tools and when to use them:
 2. create_file: Use this tool to create a new file at a specified path with content.
    Example: When creating new source code files or configuration files.
 
-3. search_and_edit_file: Use this tool for ALL modifications to existing files, regardless of file size. This includes:
-   - Making targeted changes to specific sections of code
-   - Appending content to the end of a file
-   - Inserting content at the beginning of a file
-   - Replacing entire file contents
-   Example: When updating functions, adding new code, or completely rewriting a file.
+3. search_file: Use this tool to search for specific patterns in a file and get the line numbers where the pattern is found. This is especially useful for large files.
+   Example: When you need to locate specific functions or variables in a large codebase.
 
-4. read_file: Use this tool to read the contents of a file at a specified path.
+4. edit_file: Use this tool to edit a specific range of lines in a file. You should use this after using search_file to identify the lines you want to edit.
+   Example: When you need to modify a specific function or block of code.
+
+5. read_file: Use this tool to read the contents of a file at a specified path.
    Example: When you need to examine the current content of a file before making changes.
 
-5. list_files: Use this tool to list all files and directories in a specified folder (default is the current directory).
+6. list_files: Use this tool to list all files and directories in a specified folder (default is the current directory).
    Example: When you need to understand the current project structure or find specific files.
 
-6. tavily_search: Use this tool to perform a web search and get up-to-date information or additional context.
+7. tavily_search: Use this tool to perform a web search and get up-to-date information or additional context.
    Example: When you need current information about a technology, library, or best practice.
 
-IMPORTANT: For all file modifications, always use the search_and_edit_file tool. This tool is versatile and can handle various editing scenarios:
-
-1. Targeted changes: Use a specific search pattern to locate the section of code to modify.
-   Example: search_pattern="def example_function\\(.*\\):", replacement="def example_function(param1, param2):"
-
-2. Appending content: Use a pattern that matches the end of the file to add content.
-   Example: search_pattern="\\Z", replacement="\\n# New content appended", edit_type="append"
-
-3. Inserting at the beginning: Use a pattern that matches the start of the file to add content.
-   Example: search_pattern="\\A", replacement="# New content prepended\\n", edit_type="prepend"
-
-4. Replacing entire file contents: Use a pattern that matches the entire file content.
-   Example: search_pattern="[\\s\\S]*", replacement="# Entirely new content", edit_type="replace_all"
-
-5. Complex edits: For more complex edits, you can use regex capture groups in your search pattern and reference them in your replacement.
-   Example: search_pattern="(def \\w+\\(.*?\\)):\\n\\s*(.*?)\\n(\\s*return)", replacement="\\1:\\n    # New comment\\n    \\2\\n\\3"
-
-IMPORTANT: For all file modifications, always use the search_and_edit_file tool. This tool is versatile and can handle various editing scenarios:
-
-1. Targeted changes: Use a flexible search pattern to locate the section of code to modify. Consider using partial matches or key identifiers rather than exact matches.
-   Example: search_pattern="def example_function", replacement="def example_function(param1, param2):"
-
-2. Appending content: Use the "append" edit type to add content to the end of the file.
-   Example: search_pattern="", replacement="# New content appended", edit_type="append"
-
-3. Inserting at the beginning: Use the "prepend" edit type to add content to the beginning of the file.
-   Example: search_pattern="", replacement="# New content prepended\n", edit_type="prepend"
-
-4. Replacing entire file contents: Use the "replace_all" edit type to completely replace the file content.
-   Example: search_pattern="", replacement="# Entirely new content", edit_type="replace_all"
-
-5. Complex edits: For more complex edits, you can use regex capture groups in your search pattern and reference them in your replacement.
-   Example: search_pattern="(def \\w+)(.*?):", replacement="\\1(new_param)\\2:"
+IMPORTANT: For file modifications, always use the search_file tool first to identify the lines you want to edit, then use the edit_file tool to make the changes. This two-step process ensures more accurate and targeted edits.
 
 Follow these steps when editing files:
-1. ALWAYS use the read_file tool to examine the current contents of the file you want to edit.
-2. Craft a flexible search pattern that is likely to match the desired section, even if the file content has changed slightly.
-3. Prepare the new code to replace the matched section, ensuring it fits seamlessly with the existing code.
-4. Use the search_and_edit_file tool with these parameters: path, search_pattern, replacement, and edit_type.
+1. Use the read_file tool to examine the current contents of the file you want to edit.
+2. Use the search_file tool to find the specific lines you want to edit.
+3. Use the edit_file tool with the line numbers returned by search_file to make the changes.
 
-This approach will help you make precise edits to files of any size or complexity. The function can handle exact matches, fuzzy matching for similar content, and multiple matches in a file.
+This approach will help you make precise edits to files of any size or complexity.
 
 When asked to create a project:
 - Always start by creating a root folder for the project using the create_folder tool.
@@ -130,7 +95,8 @@ When asked to create a project:
 
 When asked to make edits or improvements:
 - ALWAYS START by using the read_file tool to examine the contents of existing files.
-- Use the search_and_edit_file tool for ALL modifications to existing files, as described above.
+- Use the search_file tool to locate the specific lines you want to edit.
+- Use the edit_file tool to make the necessary changes.
 - Analyze the code and suggest improvements or make necessary edits.
 
 Be sure to consider the type of project (e.g., Python, JavaScript, web application) when determining the appropriate structure and files to include.
@@ -148,6 +114,9 @@ When in automode:
 6. ULTRA IMPORTANT! You have access to this {iteration_info} amount of iterations you have left to complete the request. Use this information to make decisions and to provide updates on your progress, knowing the number of responses you have left to complete the request.
 
 Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
+
+YOU NEVER ASK "Is there anything else you'd like to add or modify in the project or code?" once you feel the request is complete. just say "AUTOMODE_COMPLETE" in your response to exit the loop!
+
 """
 
 def update_system_prompt(current_iteration=None, max_iterations=None):
@@ -214,9 +183,9 @@ def generate_and_apply_diff(original_content, new_content, path):
         colored_diff = []
         for line in highlighted_diff.splitlines(True):
             if line.startswith('+'):
-                colored_diff.append(Fore.GREEN + line + Fore.RESET)
+                colored_diff.append(Fore.GREEN + line + Style.RESET_ALL)
             elif line.startswith('-'):
-                colored_diff.append(Fore.RED + line + Fore.RESET)
+                colored_diff.append(Fore.RED + line + Style.RESET_ALL)
             else:
                 colored_diff.append(line)
         
@@ -224,49 +193,41 @@ def generate_and_apply_diff(original_content, new_content, path):
     except Exception as e:
         return f"Error applying changes: {str(e)}"
 
-def search_and_edit_file(path, search_pattern, replacement, edit_type="replace", max_retries=3):
-    for attempt in range(max_retries):
-        try:
-            with open(path, 'r') as file:
-                content = file.read()
+def search_file(path, search_pattern):
+    try:
+        with open(path, 'r') as file:
+            content = file.readlines()
+        
+        matches = []
+        for i, line in enumerate(content, 1):
+            if re.search(search_pattern, line):
+                matches.append(i)
+        
+        return f"Matches found at lines: {matches}"
+    except Exception as e:
+        return f"Error searching file: {str(e)}"
 
-            print(f"File content read successfully. File size: {len(content)} characters.")
-
-            if edit_type == "replace_all":
-                new_content = replacement
-            elif edit_type == "append":
-                new_content = content + replacement
-            elif edit_type == "prepend":
-                new_content = replacement + content
-            else:  # replace
-                # Try exact regex match
-                matches = list(re.finditer(search_pattern, content, re.DOTALL | re.MULTILINE))
-                
-                if matches:
-                    new_content = content
-                    for match in reversed(matches):
-                        new_content = new_content[:match.start()] + replacement + new_content[match.end():]
-                else:
-                    # If exact match fails, try fuzzy matching
-                    matcher = difflib.SequenceMatcher(None, search_pattern, content)
-                    match = matcher.find_longest_match(0, len(search_pattern), 0, len(content))
-                    if match.size > len(search_pattern) * 0.6:  # Adjust this threshold as needed
-                        new_content = content[:match.b] + replacement + content[match.b + match.size:]
-                    else:
-                        print(f"No match found for pattern: {search_pattern}")
-                        print(f"Content preview: {content[:100]}...")
-                        return f"Error: Could not find a close match for the specified pattern in {path}"
-
-            if new_content == content:
-                return f"No changes made to {path}. The search pattern did not match any content."
-
-            result = generate_and_apply_diff(content, new_content, path)
-            return f"Successfully edited file {path}. Changes:\n{result}"
-        except Exception as e:
-            print(f"Error during attempt {attempt + 1}: {str(e)}")
-            if attempt == max_retries - 1:
-                return f"Error editing file after {max_retries} attempts: {str(e)}"
-            time.sleep(0.5)  # Wait a bit before retrying
+def edit_file(path, start_line, end_line, new_content):
+    try:
+        with open(path, 'r') as file:
+            content = file.readlines()
+        
+        # Convert to 0-based index
+        start_index = start_line - 1
+        end_index = end_line
+        
+        original_content = ''.join(content)
+        
+        # Replace the specified lines with new content
+        content[start_index:end_index] = new_content.splitlines(True)
+        
+        new_content = ''.join(content)
+        
+        diff_result = generate_and_apply_diff(original_content, new_content, path)
+        
+        return f"Successfully edited lines {start_line} to {end_line} in {path}\n{diff_result}"
+    except Exception as e:
+        return f"Error editing file: {str(e)}"
 
 def read_file(path):
     try:
@@ -324,33 +285,49 @@ tools = [
         }
     },
     {
-    "name": "search_and_edit_file",
-    "description": "Search for a specific part of the code in a file and edit that part. Use this for all modifications to existing files, regardless of file size.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "path": {
-                "type": "string",
-                "description": "The path of the file to edit"
+        "name": "search_file",
+        "description": "Search for a specific pattern in a file and return the line numbers where the pattern is found.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The path of the file to search"
+                },
+                "search_pattern": {
+                    "type": "string",
+                    "description": "The pattern to search for in the file"
+                }
             },
-            "search_pattern": {
-                "type": "string",
-                "description": "The pattern to search for in the file"
+            "required": ["path", "search_pattern"]
+        }
+    },
+    {
+        "name": "edit_file",
+        "description": "Edit a specific range of lines in a file.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The path of the file to edit"
+                },
+                "start_line": {
+                    "type": "integer",
+                    "description": "The starting line number of the edit"
+                },
+                "end_line": {
+                    "type": "integer",
+                    "description": "The ending line number of the edit"
+                },
+                "new_content": {
+                    "type": "string",
+                    "description": "The new content to replace the specified lines"
+                }
             },
-            "replacement": {
-                "type": "string",
-                "description": "The new code to replace the matched section"
-            },
-            "edit_type": {
-                "type": "string",
-                "description": "The type of edit to perform (replace, append, prepend, replace_all)",
-                "enum": ["replace", "append", "prepend", "replace_all"],
-                "default": "replace"
-            }
-        },
-        "required": ["path", "search_pattern", "replacement"]
-    }
-},
+            "required": ["path", "start_line", "end_line", "new_content"]
+        }
+    },
     {
         "name": "read_file",
         "description": "Read the contents of a file at the specified path. Use this when you need to examine the contents of an existing file.",
@@ -400,18 +377,10 @@ def execute_tool(tool_name, tool_input):
             return create_folder(tool_input["path"])
         elif tool_name == "create_file":
             return create_file(tool_input["path"], tool_input.get("content", ""))
-        elif tool_name == "search_and_edit_file":
-            required_params = ["path", "search_pattern", "replacement"]
-            missing_params = [param for param in required_params if param not in tool_input]
-            if missing_params:
-                return f"Error: Missing required parameters for search_and_edit_file: {', '.join(missing_params)}"
-            return search_and_edit_file(
-                tool_input["path"],
-                tool_input["search_pattern"],
-                tool_input["replacement"],
-                tool_input.get("edit_type", "replace"),
-                max_retries=3
-            )
+        elif tool_name == "search_file":
+            return search_file(tool_input["path"], tool_input["search_pattern"])
+        elif tool_name == "edit_file":
+            return edit_file(tool_input["path"], tool_input["start_line"], tool_input["end_line"], tool_input["new_content"])
         elif tool_name == "read_file":
             return read_file(tool_input["path"])
         elif tool_name == "list_files":
