@@ -98,6 +98,10 @@ When asked to make edits or improvements:
 - Use the search_file tool to locate the specific lines you want to edit.
 - Use the edit_file tool to make the necessary changes.
 - Analyze the code and suggest improvements or make necessary edits.
+- Pay close attention to the existing code structure.
+- Ensure that you're replacing old code with new code, not just adding new code alongside the old.
+- After making changes, always re-read the entire file to check for any unintended duplications.
+- If you notice any duplicated code after your edits, immediately remove the duplication and explain the correction.
 
 Be sure to consider the type of project (e.g., Python, JavaScript, web application) when determining the appropriate structure and files to include.
 
@@ -115,7 +119,7 @@ When in automode:
 
 Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
 
-YOU NEVER ASK "Is there anything else you'd like to add or modify in the project or code?" once you feel the request is complete. just say "AUTOMODE_COMPLETE" in your response to exit the loop!
+YOU NEVER ASK "Is there anything else you'd like to add or modify in the project or code?" or "Is there anything else you'd like to add or modify in the project?" or anything like that once you feel the request is complete. just say "AUTOMODE_COMPLETE" in your response to exit the loop!
 
 """
 
@@ -212,11 +216,11 @@ def edit_file(path, start_line, end_line, new_content):
         with open(path, 'r') as file:
             content = file.readlines()
         
+        original_content = ''.join(content)
+        
         # Convert to 0-based index
         start_index = start_line - 1
         end_index = end_line
-        
-        original_content = ''.join(content)
         
         # Replace the specified lines with new content
         content[start_index:end_index] = new_content.splitlines(True)
@@ -228,6 +232,7 @@ def edit_file(path, start_line, end_line, new_content):
         return f"Successfully edited lines {start_line} to {end_line} in {path}\n{diff_result}"
     except Exception as e:
         return f"Error editing file: {str(e)}"
+
 
 def read_file(path):
     try:
@@ -536,6 +541,43 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
             except Exception as e:
                 print_colored(f"Error in tool response: {str(e)}", TOOL_COLOR)
                 assistant_response += "\nI encountered an error while processing the tool result. Please try again."
+    
+    # Check if edit_file was used and perform a review
+    if "edit_file" in assistant_response:
+        file_path_match = re.search(r"Successfully edited lines \d+ to \d+ in (.+)\n", assistant_response)
+        if file_path_match:
+            file_path = file_path_match.group(1)
+            file_content = read_file(file_path)
+            review_prompt = f"I've made edits to the file {file_path}. Please review the entire file content to ensure no unintended duplications were introduced:\n\n{file_content}\n\nIf you find any duplications, please remove them and explain the changes. If no duplications are found, confirm that the file is clean."
+            
+            try:
+                review_response = client.messages.create(
+                    model="claude-3-5-sonnet-20240620",
+                    max_tokens=4000,
+                    system=update_system_prompt(current_iteration, max_iterations),
+                    messages=messages + [{"role": "user", "content": review_prompt}],
+                    tools=tools,
+                    tool_choice={"type": "auto"}
+                )
+                
+                review_text = ""
+                for review_content_block in review_response.content:
+                    if review_content_block.type == "text":
+                        review_text += review_content_block.text
+                
+                assistant_response += "\n\nCode Review:\n" + review_text
+                
+                # If the review found and fixed duplications, update the file
+                if "removed" in review_text.lower() or "fixed" in review_text.lower():
+                    updated_content = re.search(r"Updated file content:\n```(?:python)?\n(.*?)```", review_text, re.DOTALL)
+                    if updated_content:
+                        with open(file_path, 'w') as file:
+                            file.write(updated_content.group(1))
+                        assistant_response += "\n\nFile updated to remove duplications."
+                
+            except Exception as e:
+                print_colored(f"Error in review response: {str(e)}", TOOL_COLOR)
+                assistant_response += "\nI encountered an error while reviewing the file for duplications."
     
     if assistant_response:
         current_conversation.append({"role": "assistant", "content": assistant_response})
