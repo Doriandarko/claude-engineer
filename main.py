@@ -15,6 +15,7 @@ import re
 from anthropic import Anthropic
 import difflib
 from difflib import SequenceMatcher
+import time  # Add this line to import the time module
 
 # Initialize colorama
 init()
@@ -97,13 +98,28 @@ IMPORTANT: For all file modifications, always use the search_and_edit_file tool.
 5. Complex edits: For more complex edits, you can use regex capture groups in your search pattern and reference them in your replacement.
    Example: search_pattern="(def \\w+\\(.*?\\)):\\n\\s*(.*?)\\n(\\s*return)", replacement="\\1:\\n    # New comment\\n    \\2\\n\\3"
 
+IMPORTANT: For all file modifications, always use the search_and_edit_file tool. This tool is versatile and can handle various editing scenarios:
+
+1. Targeted changes: Use a flexible search pattern to locate the section of code to modify. Consider using partial matches or key identifiers rather than exact matches.
+   Example: search_pattern="def example_function", replacement="def example_function(param1, param2):"
+
+2. Appending content: Use the "append" edit type to add content to the end of the file.
+   Example: search_pattern="", replacement="# New content appended", edit_type="append"
+
+3. Inserting at the beginning: Use the "prepend" edit type to add content to the beginning of the file.
+   Example: search_pattern="", replacement="# New content prepended\n", edit_type="prepend"
+
+4. Replacing entire file contents: Use the "replace_all" edit type to completely replace the file content.
+   Example: search_pattern="", replacement="# Entirely new content", edit_type="replace_all"
+
+5. Complex edits: For more complex edits, you can use regex capture groups in your search pattern and reference them in your replacement.
+   Example: search_pattern="(def \\w+)(.*?):", replacement="\\1(new_param)\\2:"
+
 Follow these steps when editing files:
-1. ALWAYS ALWAYS!!! Use the read_file tool to examine the current contents of the file you want to edit.Since the file may change, you must read the file before editing it.
-2. Identify the specific section of code that needs to be changed, or determine if you're appending, inserting at the beginning, or replacing the entire file.
-3. Craft an appropriate search pattern to locate the section. Use regex patterns for precise matching.
-4. Prepare the new code to replace the matched section, ensuring it fits seamlessly with the existing code.
-5. Determine the appropriate edit_type: "replace" (default), "append", "prepend", or "replace_all".
-6. Use the search_and_edit_file tool with these parameters: path, search_pattern, replacement, and edit_type.
+1. ALWAYS use the read_file tool to examine the current contents of the file you want to edit.
+2. Craft a flexible search pattern that is likely to match the desired section, even if the file content has changed slightly.
+3. Prepare the new code to replace the matched section, ensuring it fits seamlessly with the existing code.
+4. Use the search_and_edit_file tool with these parameters: path, search_pattern, replacement, and edit_type.
 
 This approach will help you make precise edits to files of any size or complexity. The function can handle exact matches, fuzzy matching for similar content, and multiple matches in a file.
 
@@ -208,61 +224,49 @@ def generate_and_apply_diff(original_content, new_content, path):
     except Exception as e:
         return f"Error applying changes: {str(e)}"
 
-def search_and_edit_file(path, search_pattern, replacement, edit_type="replace"):
-    try:
-        with open(path, 'r') as file:
-            content = file.read()
+def search_and_edit_file(path, search_pattern, replacement, edit_type="replace", max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            with open(path, 'r') as file:
+                content = file.read()
 
-        # Handle different edit types
-        if edit_type == "append":
-            new_content = content + replacement
-            return generate_and_apply_diff(content, new_content, path)
-        elif edit_type == "prepend":
-            new_content = replacement + content
-            return generate_and_apply_diff(content, new_content, path)
-        elif edit_type == "replace_all":
-            new_content = replacement
-            return generate_and_apply_diff(content, new_content, path)
+            print(f"File content read successfully. File size: {len(content)} characters.")
 
-        # Try exact regex match
-        matches = list(re.finditer(search_pattern, content, re.DOTALL | re.MULTILINE))
-        
-        if matches:
-            # Handle multiple matches
-            new_content = content
-            offset = 0
-            for match in matches:
-                start = match.start() + offset
-                end = match.end() + offset
-                new_content = new_content[:start] + replacement + new_content[end:]
-                offset += len(replacement) - (end - start)
-            return generate_and_apply_diff(content, new_content, path)
+            if edit_type == "replace_all":
+                new_content = replacement
+            elif edit_type == "append":
+                new_content = content + replacement
+            elif edit_type == "prepend":
+                new_content = replacement + content
+            else:  # replace
+                # Try exact regex match
+                matches = list(re.finditer(search_pattern, content, re.DOTALL | re.MULTILINE))
+                
+                if matches:
+                    new_content = content
+                    for match in reversed(matches):
+                        new_content = new_content[:match.start()] + replacement + new_content[match.end():]
+                else:
+                    # If exact match fails, try fuzzy matching
+                    matcher = difflib.SequenceMatcher(None, search_pattern, content)
+                    match = matcher.find_longest_match(0, len(search_pattern), 0, len(content))
+                    if match.size > len(search_pattern) * 0.6:  # Adjust this threshold as needed
+                        new_content = content[:match.b] + replacement + content[match.b + match.size:]
+                    else:
+                        print(f"No match found for pattern: {search_pattern}")
+                        print(f"Content preview: {content[:100]}...")
+                        return f"Error: Could not find a close match for the specified pattern in {path}"
 
-        # If exact match fails, try fuzzy matching
-        lines = content.split('\n')
-        best_matches = []
-        
-        for i, line in enumerate(lines):
-            ratio = SequenceMatcher(None, search_pattern, line).ratio()
-            if ratio > 0.6:  # Adjust this threshold as needed
-                best_matches.append((i, ratio))
+            if new_content == content:
+                return f"No changes made to {path}. The search pattern did not match any content."
 
-        if best_matches:
-            best_matches.sort(key=lambda x: x[1], reverse=True)
-            new_content = content
-            offset = 0
-            for i, _ in best_matches[:3]:  # Limit to top 3 matches
-                start = max(0, i - 1)
-                end = min(len(lines), i + 2)
-                match_content = '\n'.join(lines[start:end])
-                replacement_with_context = '\n'.join(lines[:start]) + '\n' + replacement + '\n' + '\n'.join(lines[end:])
-                new_content = new_content.replace(match_content, replacement_with_context)
-            return generate_and_apply_diff(content, new_content, path)
-
-        return f"Error: Could not find a close match for the specified pattern in {path}"
-
-    except Exception as e:
-        return f"Error editing file: {str(e)}"
+            result = generate_and_apply_diff(content, new_content, path)
+            return f"Successfully edited file {path}. Changes:\n{result}"
+        except Exception as e:
+            print(f"Error during attempt {attempt + 1}: {str(e)}")
+            if attempt == max_retries - 1:
+                return f"Error editing file after {max_retries} attempts: {str(e)}"
+            time.sleep(0.5)  # Wait a bit before retrying
 
 def read_file(path):
     try:
@@ -391,25 +395,35 @@ tools = [
 ]
 
 def execute_tool(tool_name, tool_input):
-    if tool_name == "create_folder":
-        return create_folder(tool_input["path"])
-    elif tool_name == "create_file":
-        return create_file(tool_input["path"], tool_input["content"])
-    elif tool_name == "search_and_edit_file":
-        return search_and_edit_file(
-            tool_input["path"],
-            tool_input["search_pattern"],
-            tool_input["replacement"],
-            tool_input.get("edit_type", "replace")
-        )
-    elif tool_name == "read_file":
-        return read_file(tool_input["path"])
-    elif tool_name == "list_files":
-        return list_files(tool_input.get("path", "."))
-    elif tool_name == "tavily_search":
-        return tavily_search(tool_input["query"])
-    else:
-        return f"Unknown tool: {tool_name}"
+    try:
+        if tool_name == "create_folder":
+            return create_folder(tool_input["path"])
+        elif tool_name == "create_file":
+            return create_file(tool_input["path"], tool_input.get("content", ""))
+        elif tool_name == "search_and_edit_file":
+            required_params = ["path", "search_pattern", "replacement"]
+            missing_params = [param for param in required_params if param not in tool_input]
+            if missing_params:
+                return f"Error: Missing required parameters for search_and_edit_file: {', '.join(missing_params)}"
+            return search_and_edit_file(
+                tool_input["path"],
+                tool_input["search_pattern"],
+                tool_input["replacement"],
+                tool_input.get("edit_type", "replace"),
+                max_retries=3
+            )
+        elif tool_name == "read_file":
+            return read_file(tool_input["path"])
+        elif tool_name == "list_files":
+            return list_files(tool_input.get("path", "."))
+        elif tool_name == "tavily_search":
+            return tavily_search(tool_input["query"])
+        else:
+            return f"Unknown tool: {tool_name}"
+    except KeyError as e:
+        return f"Error: Missing required parameter {str(e)} for tool {tool_name}"
+    except Exception as e:
+        return f"Error executing tool {tool_name}: {str(e)}"
 
 def encode_image_to_base64(image_path):
     try:
