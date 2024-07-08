@@ -1,13 +1,6 @@
 import os
-from datetime import datetime
 import json
-from colorama import init, Fore, Style
-from pygments import highlight
-from pygments.lexers import get_lexer_by_name
-from pygments.formatters import TerminalFormatter
-from pygments.lexers.diff import DiffLexer
 from tavily import TavilyClient
-import pygments.util
 import base64
 from PIL import Image
 import io
@@ -15,15 +8,12 @@ import re
 from anthropic import Anthropic
 import difflib
 import time
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.markdown import Markdown
 
-# Initialize colorama
-init()
-
-# Color constants
-USER_COLOR = Fore.WHITE
-CLAUDE_COLOR = Fore.BLUE
-TOOL_COLOR = Fore.YELLOW
-RESULT_COLOR = Fore.GREEN
+console = Console()
 
 # Add these constants at the top of the file
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
@@ -31,9 +21,7 @@ MAX_CONTINUATION_ITERATIONS = 25
 
 # Models to use
 MAINMODEL = "claude-3-5-sonnet-20240620"
-# Tool Checker Model
 TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
-# Code Checker Model
 CODECHECKERMODEL = "claude-3-5-sonnet-20240620"
 
 # Initialize the Anthropic client
@@ -132,6 +120,8 @@ Answer the user's request using relevant tools (if they are available). Before c
 YOU NEVER ASK "Is there anything else you'd like to add or modify in the project or code?" or "Is there anything else you'd like to add or modify in the project?" or anything like that once you feel the request is complete. just say "AUTOMODE_COMPLETE" in your response to exit the loop!
 """
 
+# Base system prompt and automode_system_prompt remain unchanged
+
 def update_system_prompt(current_iteration=None, max_iterations=None):
     global base_system_prompt, automode_system_prompt
     if automode:
@@ -142,28 +132,12 @@ def update_system_prompt(current_iteration=None, max_iterations=None):
     else:
         return base_system_prompt
 
-def print_colored(text, color):
-    # Check if the text already contains color codes
-    if '\033[' in text:
-        print(text)  # Print as-is if color codes are present
-    else:
-        print(f"{color}{text}{Style.RESET_ALL}")
-
-def print_code(code, language):
-    try:
-        lexer = get_lexer_by_name(language, stripall=True)
-        formatted_code = highlight(code, lexer, TerminalFormatter())
-        print(formatted_code)
-    except pygments.util.ClassNotFound:
-        print_colored(f"Code (language: {language}):\n{code}", CLAUDE_COLOR)
-
 def create_folder(path):
     try:
         os.makedirs(path, exist_ok=True)
         return f"Folder created: {path}"
     except Exception as e:
         return f"Error creating folder: {str(e)}"
-
 def create_file(path, content=""):
     try:
         with open(path, 'w') as f:
@@ -173,7 +147,7 @@ def create_file(path, content=""):
         return f"Error creating file: {str(e)}"
 
 def highlight_diff(diff_text):
-    return highlight(diff_text, DiffLexer(), TerminalFormatter())
+    return Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
 
 def generate_and_apply_diff(original_content, new_content, path):
     diff = list(difflib.unified_diff(
@@ -194,18 +168,35 @@ def generate_and_apply_diff(original_content, new_content, path):
         diff_text = ''.join(diff)
         highlighted_diff = highlight_diff(diff_text)
 
-        # Apply additional color coding for additions and deletions
-        colored_diff = []
-        for line in highlighted_diff.splitlines(True):
-            if line.startswith('+'):
-                colored_diff.append(Fore.GREEN + line + Style.RESET_ALL)
-            elif line.startswith('-'):
-                colored_diff.append(Fore.RED + line + Style.RESET_ALL)
-            else:
-                colored_diff.append(line)
+        # Create a panel with the highlighted diff
+        diff_panel = Panel(
+            highlighted_diff,
+            title=f"Changes in {path}",
+            expand=False,
+            border_style="cyan"
+        )
 
-        return f"Changes applied to {path}:\n" + ''.join(colored_diff)
+        # Print the panel
+        console.print(diff_panel)
+
+        # Count the number of added and removed lines
+        added_lines = sum(1 for line in diff if line.startswith('+') and not line.startswith('+++'))
+        removed_lines = sum(1 for line in diff if line.startswith('-') and not line.startswith('---'))
+
+        # Create a summary message
+        summary = f"Changes applied to {path}:\n"
+        summary += f"  Lines added: {added_lines}\n"
+        summary += f"  Lines removed: {removed_lines}\n"
+
+        return summary
+
     except Exception as e:
+        error_panel = Panel(
+            f"Error: {str(e)}",
+            title="Error Applying Changes",
+            style="bold red"
+        )
+        console.print(error_panel)
         return f"Error applying changes: {str(e)}"
 
 def search_file(path, search_pattern):
@@ -429,25 +420,24 @@ def parse_goals(response):
 def execute_goals(goals):
     global automode
     for i, goal in enumerate(goals, 1):
-        print_colored(f"\nExecuting Goal {i}: {goal}", TOOL_COLOR)
+        console.print(Panel(f"Executing Goal {i}: {goal}", title="Goal Execution", style="bold yellow"))
         response, _ = chat_with_claude(f"Continue working on goal: {goal}")
         if CONTINUATION_EXIT_PHRASE in response:
             automode = False
-            print_colored("Exiting automode.", TOOL_COLOR)
+            console.print(Panel("Exiting automode.", title="Automode", style="bold green"))
             break
 
 def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
     global conversation_history, automode
 
-    # Create a new list for the current conversation
     current_conversation = []
 
     if image_path:
-        print_colored(f"Processing image at path: {image_path}", TOOL_COLOR)
+        console.print(Panel(f"Processing image at path: {image_path}", title_align="left", title="Image Processing", expand=False, style="yellow"))
         image_base64 = encode_image_to_base64(image_path)
 
         if image_base64.startswith("Error"):
-            print_colored(f"Error encoding image: {image_base64}", TOOL_COLOR)
+            console.print(Panel(f"Error encoding image: {image_base64}", title="Error", style="bold red"))
             return "I'm sorry, there was an error processing the image. Please try again.", False
 
         image_message = {
@@ -468,11 +458,10 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
             ]
         }
         current_conversation.append(image_message)
-        print_colored("Image message added to conversation history", TOOL_COLOR)
+        console.print(Panel("Image message added to conversation history", title_align="left", title="Image Added", style="green"))
     else:
         current_conversation.append({"role": "user", "content": user_input})
 
-    # Combine the previous conversation history with the current conversation
     messages = conversation_history + current_conversation
 
     try:
@@ -485,11 +474,12 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
             tool_choice={"type": "auto"}
         )
     except Exception as e:
-        print_colored(f"Error calling Claude API: {str(e)}", TOOL_COLOR)
+        console.print(Panel(f"Error calling Claude API: {str(e)}", title="API Error", style="bold red"))
         return "I'm sorry, there was an error communicating with the AI. Please try again.", False
 
     assistant_response = ""
     exit_continuation = False
+    tool_uses = []
 
     for content_block in response.content:
         if content_block.type == "text":
@@ -497,62 +487,71 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
             if CONTINUATION_EXIT_PHRASE in content_block.text:
                 exit_continuation = True
         elif content_block.type == "tool_use":
-            tool_name = content_block.name
-            tool_input = content_block.input
-            tool_use_id = content_block.id
+            tool_uses.append(content_block)
 
-            print_colored(f"\nTool Used: {tool_name}", TOOL_COLOR)
-            print_colored(f"Tool Input: {tool_input}", TOOL_COLOR)
+    # Display main model response
+    console.print(Panel(Markdown(assistant_response), title="Claude's Response", title_align="left", expand=False))
 
-            result = execute_tool(tool_name, tool_input)
-            print_colored(f"Tool Result: {result}", RESULT_COLOR)
+    # Process tool uses
+    for tool_use in tool_uses:
+        tool_name = tool_use.name
+        tool_input = tool_use.input
+        tool_use_id = tool_use.id
 
-            # Add the tool use to the current conversation
-            current_conversation.append({
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "tool_use",
-                        "id": tool_use_id,
-                        "name": tool_name,
-                        "input": tool_input
-                    }
-                ]
-            })
+        console.print(Panel(f"Tool Used: {tool_name}", style="yellow"))
+        console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="yellow"))
 
-            # Add the tool result to the current conversation
-            current_conversation.append({
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
-                        "content": result
-                    }
-                ]
-            })
+        result = execute_tool(tool_name, tool_input)
+        console.print(Panel(result, title_align="left", title="Tool Result", style="green"))
 
-            # Update the messages with the new tool use and result
-            messages = conversation_history + current_conversation
+        current_conversation.append({
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": tool_use_id,
+                    "name": tool_name,
+                    "input": tool_input
+                }
+            ]
+        })
 
-            try:
-                tool_response = client.messages.create(
-                    model=TOOLCHECKERMODEL,
-                    max_tokens=4000,
-                    system=update_system_prompt(current_iteration, max_iterations),
-                    messages=messages,
-                    tools=tools,
-                    tool_choice={"type": "auto"}
-                )
+        current_conversation.append({
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tool_use_id,
+                    "content": result
+                }
+            ]
+        })
 
-                for tool_content_block in tool_response.content:
-                    if tool_content_block.type == "text":
-                        assistant_response += tool_content_block.text
-            except Exception as e:
-                print_colored(f"Error in tool response: {str(e)}", TOOL_COLOR)
-                assistant_response += "\nI encountered an error while processing the tool result. Please try again."
+        messages = conversation_history + current_conversation
 
-# Check if edit_file was used and perform a review
+        try:
+            tool_response = client.messages.create(
+                model=TOOLCHECKERMODEL,
+                max_tokens=4000,
+                system=update_system_prompt(current_iteration, max_iterations),
+                messages=messages,
+                tools=tools,
+                tool_choice={"type": "auto"}
+            )
+
+            tool_checker_response = ""
+            for tool_content_block in tool_response.content:
+                if tool_content_block.type == "text":
+                    tool_checker_response += tool_content_block.text
+            #tookchecker response
+            console.print(Panel(Markdown(tool_checker_response), title_align="left", title="Claude's Response"))
+            assistant_response += "\n\n" + tool_checker_response
+        except Exception as e:
+            error_message = f"Error in tool response: {str(e)}"
+            console.print(Panel(error_message, title="Error", style="bold red"))
+            assistant_response += f"\n\n{error_message}"
+
+    # Check if edit_file was used and perform a review
     if "edit_file" in assistant_response:
         file_path_match = re.search(r"Successfully edited lines \d+ to \d+ in (.+)\n", assistant_response)
         if file_path_match:
@@ -598,6 +597,7 @@ Please present your review findings and any necessary corrections."""
                     if review_content_block.type == "text":
                         review_text += review_content_block.text
 
+                console.print(Panel(Markdown(review_text), title_align="left", title="Code Review", style="bold blue"))
                 assistant_response += "\n\nCode Review:\n" + review_text
 
                 # If the review found and fixed duplications, update the file
@@ -606,11 +606,12 @@ Please present your review findings and any necessary corrections."""
                     if updated_content:
                         with open(file_path, 'w') as file:
                             file.write(updated_content.group(1))
-                        assistant_response += "\n\nFile updated to remove duplications."
+                        console.print(Panel("File updated to remove duplications.", title_align="left", title="File Update", style="bold green"))
 
             except Exception as e:
-                print_colored(f"Error in review response: {str(e)}", TOOL_COLOR)
-                assistant_response += "\nI encountered an error while reviewing the file for duplications."
+                error_message = f"Error in review response: {str(e)}"
+                console.print(Panel(error_message, title="Error", style="bold red"))
+                assistant_response += f"\n\n{error_message}"
 
     if assistant_response:
         current_conversation.append({"role": "assistant", "content": assistant_response})
@@ -620,53 +621,30 @@ Please present your review findings and any necessary corrections."""
 
     return assistant_response, exit_continuation
 
-def process_and_display_response(response):
-    if response.startswith("Error") or response.startswith("I'm sorry"):
-        print_colored(response, TOOL_COLOR)
-    else:
-        if "```" in response:
-            parts = response.split("```")
-            for i, part in enumerate(parts):
-                if i % 2 == 0:
-                    print_colored(part, CLAUDE_COLOR)
-                else:
-                    lines = part.split('\n')
-                    language = lines[0].strip() if lines else ""
-                    code = '\n'.join(lines[1:]) if len(lines) > 1 else ""
-
-                    if language and code:
-                        print_code(code, language)
-                    elif code:
-                        print_colored(f"Code:\n{code}", CLAUDE_COLOR)
-                    else:
-                        print_colored(part, CLAUDE_COLOR)
-        else:
-            print_colored(response, CLAUDE_COLOR)
-
 def main():
     global automode, conversation_history
-    print_colored("Welcome to the Claude-3.5-Sonnet Engineer Chat with Image Support!", CLAUDE_COLOR)
-    print_colored("Type 'exit' to end the conversation.", CLAUDE_COLOR)
-    print_colored("Type 'image' to include an image in your message.", CLAUDE_COLOR)
-    print_colored("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.", CLAUDE_COLOR)
-    print_colored("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.", CLAUDE_COLOR)
+    console.print(Panel("Welcome to the Claude-3.5-Sonnet Engineer Chat with Image Support!", title="Welcome", style="bold green"))
+    console.print("Type 'exit' to end the conversation.")
+    console.print("Type 'image' to include an image in your message.")
+    console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
+    console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
     while True:
-        user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
+        user_input = console.input("[bold cyan]You:[/bold cyan] ")
 
         if user_input.lower() == 'exit':
-            print_colored("Thank you for chatting. Goodbye!", CLAUDE_COLOR)
+            console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
             break
 
         if user_input.lower() == 'image':
-            image_path = input(f"{USER_COLOR}Drag and drop your image here: {Style.RESET_ALL}").strip().replace("'", "")
+            image_path = console.input("[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] ").strip().replace("'", "")
 
             if os.path.isfile(image_path):
-                user_input = input(f"{USER_COLOR}You (prompt for image): {Style.RESET_ALL}")
+                user_input = console.input("[bold cyan]You (prompt for image):[/bold cyan] ")
                 response, _ = chat_with_claude(user_input, image_path)
-                process_and_display_response(response)
+                # process_and_display_response(response) # Remove this call
             else:
-                print_colored("Invalid image path. Please try again.", CLAUDE_COLOR)
+                console.print(Panel("Invalid image path. Please try again.", title="Error", style="bold red"))
                 continue
         elif user_input.lower().startswith('automode'):
             try:
@@ -677,46 +655,45 @@ def main():
                     max_iterations = MAX_CONTINUATION_ITERATIONS
 
                 automode = True
-                print_colored(f"Entering automode with {max_iterations} iterations. Press Ctrl+C to exit automode at any time.", TOOL_COLOR)
-                print_colored("Press Ctrl+C at any time to exit the automode loop.", TOOL_COLOR)
-                user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
+                console.print(Panel(f"Entering automode with {max_iterations} iterations. Please provide the goal of the automode.", title_align="left", title="Automode", style="bold yellow"))
+                console.print(Panel("Press Ctrl+C at any time to exit the automode loop.", style="bold yellow"))
+                user_input = console.input("[bold cyan]You:[/bold cyan] ")
 
                 iteration_count = 0
                 try:
                     while automode and iteration_count < max_iterations:
                         response, exit_continuation = chat_with_claude(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
-                        process_and_display_response(response)
+                        # process_and_display_response(response) # Remove this call
 
                         if exit_continuation or CONTINUATION_EXIT_PHRASE in response:
-                            print_colored("Automode completed.", TOOL_COLOR)
+                            console.print(Panel("Automode completed.", title_align="left", title="Automode", style="green"))
                             automode = False
                         else:
-                            print_colored(f"Continuation iteration {iteration_count + 1} completed.", TOOL_COLOR)
-                            print_colored("Press Ctrl+C to exit automode.", TOOL_COLOR)
-                            user_input = "Continue with the next step."
-
+                            console.print(Panel(f"Continuation iteration {iteration_count + 1} completed. Press Ctrl+C to exit automode. ", title_align="left", title="Automode", style="yellow"))
+                            # console.print(Panel("Press Ctrl+C to exit automode.", style="bold yellow"))
+                            user_input = "Continue with the next step. Or STOP by saying 'AUTOMODE_COMPLETE' if you think you've achieved the results established in the original request."
                         iteration_count += 1
 
                         if iteration_count >= max_iterations:
-                            print_colored("Max iterations reached. Exiting automode.", TOOL_COLOR)
+                            console.print(Panel("Max iterations reached. Exiting automode.", title_align="left", title="Automode", style="bold red"))
                             automode = False
                 except KeyboardInterrupt:
-                    print_colored("\nAutomode interrupted by user. Exiting automode.", TOOL_COLOR)
+                    console.print(Panel("\nAutomode interrupted by user. Exiting automode.", title_align="left", title="Automode", style="bold red"))
                     automode = False
                     # Ensure the conversation history ends with an assistant message
                     if conversation_history and conversation_history[-1]["role"] == "user":
                         conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
             except KeyboardInterrupt:
-                print_colored("\nAutomode interrupted by user. Exiting automode.", TOOL_COLOR)
+                console.print(Panel("\nAutomode interrupted by user. Exiting automode.", title_align="left", title="Automode", style="bold red"))
                 automode = False
                 # Ensure the conversation history ends with an assistant message
                 if conversation_history and conversation_history[-1]["role"] == "user":
                     conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
 
-            print_colored("Exited automode. Returning to regular chat.", TOOL_COLOR)
+            console.print(Panel("Exited automode. Returning to regular chat.", style="green"))
         else:
             response, _ = chat_with_claude(user_input)
-            process_and_display_response(response)
+            # process_and_display_response(response) # Remove this call
 
 if __name__ == "__main__":
     main()
