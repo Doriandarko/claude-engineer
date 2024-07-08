@@ -29,6 +29,13 @@ RESULT_COLOR = Fore.GREEN
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 25
 
+# Models to use
+MAINMODEL = "claude-3-5-sonnet-20240620"
+# Tool Checker Model
+TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
+# Code Checker Model
+CODECHECKERMODEL = "claude-3-5-sonnet-20240620"
+
 # Initialize the Anthropic client
 client = Anthropic(api_key="YOUR KEY")
 
@@ -41,8 +48,8 @@ conversation_history = []
 # automode flag
 automode = False
 
-# System prompt
-system_prompt = """
+# Base system prompt
+base_system_prompt = """
 You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model. You are an exceptional software developer with vast knowledge across multiple programming languages, frameworks, and best practices. Your capabilities include:
 
 1. Creating project structures, including folders and files
@@ -83,7 +90,7 @@ IMPORTANT: For file modifications, always use the search_file tool first to iden
 
 Follow these steps when editing files:
 1. Use the read_file tool to examine the current contents of the file you want to edit.
-2. Use the search_file tool to find the specific lines you want to edit.
+2. For longer files, use the search_file tool to find the specific lines you want to edit.
 3. Use the edit_file tool with the line numbers returned by search_file to make the changes.
 
 This approach will help you make precise edits to files of any size or complexity.
@@ -106,13 +113,16 @@ When asked to make edits or improvements:
 Be sure to consider the type of project (e.g., Python, JavaScript, web application) when determining the appropriate structure and files to include.
 
 Always strive to provide the most accurate, helpful, and detailed responses possible. If you're unsure about something, admit it and consider using the tavily_search tool to find the most current information.
+"""
 
-{automode_status}
+# Auto mode-specific system prompt
+automode_system_prompt = """
+You are currently in automode!!!
 
 When in automode:
 1. Set clear, achievable goals for yourself based on the user's request
 2. Work through these goals one by one, using the available tools as needed
-3. REMEMBER!! You can read files, write code, list the files, search the web, and make edits. Use these tools as necessary to accomplish each goal
+3. REMEMBER!! You can read files, write code, search for specific lines of code to make edits and list the files, search the web. Use these tools as necessary to accomplish each goal
 4. ALWAYS READ A FILE BEFORE EDITING IT IF YOU ARE MISSING CONTENT. Provide regular updates on your progress
 5. IMPORTANT RULE!! When you know your goals are completed, DO NOT CONTINUE IN POINTLESS BACK AND FORTH CONVERSATIONS with yourself. If you think you've achieved the results established in the original request, say "AUTOMODE_COMPLETE" in your response to exit the loop!
 6. ULTRA IMPORTANT! You have access to this {iteration_info} amount of iterations you have left to complete the request. Use this information to make decisions and to provide updates on your progress, knowing the number of responses you have left to complete the request.
@@ -120,16 +130,17 @@ When in automode:
 Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
 
 YOU NEVER ASK "Is there anything else you'd like to add or modify in the project or code?" or "Is there anything else you'd like to add or modify in the project?" or anything like that once you feel the request is complete. just say "AUTOMODE_COMPLETE" in your response to exit the loop!
-
 """
 
 def update_system_prompt(current_iteration=None, max_iterations=None):
-    global system_prompt
-    automode_status = "You are currently in automode." if automode else "You are not in automode."
-    iteration_info = ""
-    if current_iteration is not None and max_iterations is not None:
-        iteration_info = f"You are currently on iteration {current_iteration} out of {max_iterations} in automode."
-    return system_prompt.format(automode_status=automode_status, iteration_info=iteration_info)
+    global base_system_prompt, automode_system_prompt
+    if automode:
+        iteration_info = ""
+        if current_iteration is not None and max_iterations is not None:
+            iteration_info = f"You are currently on iteration {current_iteration} out of {max_iterations} in automode."
+        return base_system_prompt + "\n\n" + automode_system_prompt.format(iteration_info=iteration_info)
+    else:
+        return base_system_prompt
 
 def print_colored(text, color):
     # Check if the text already contains color codes
@@ -172,17 +183,17 @@ def generate_and_apply_diff(original_content, new_content, path):
         tofile=f"b/{path}",
         n=3
     ))
-    
+
     if not diff:
         return "No changes detected."
-    
+
     try:
         with open(path, 'w') as f:
             f.writelines(new_content)
-        
+
         diff_text = ''.join(diff)
         highlighted_diff = highlight_diff(diff_text)
-        
+
         # Apply additional color coding for additions and deletions
         colored_diff = []
         for line in highlighted_diff.splitlines(True):
@@ -192,7 +203,7 @@ def generate_and_apply_diff(original_content, new_content, path):
                 colored_diff.append(Fore.RED + line + Style.RESET_ALL)
             else:
                 colored_diff.append(line)
-        
+
         return f"Changes applied to {path}:\n" + ''.join(colored_diff)
     except Exception as e:
         return f"Error applying changes: {str(e)}"
@@ -201,12 +212,12 @@ def search_file(path, search_pattern):
     try:
         with open(path, 'r') as file:
             content = file.readlines()
-        
+
         matches = []
         for i, line in enumerate(content, 1):
             if re.search(search_pattern, line):
                 matches.append(i)
-        
+
         return f"Matches found at lines: {matches}"
     except Exception as e:
         return f"Error searching file: {str(e)}"
@@ -215,24 +226,23 @@ def edit_file(path, start_line, end_line, new_content):
     try:
         with open(path, 'r') as file:
             content = file.readlines()
-        
+
         original_content = ''.join(content)
-        
+
         # Convert to 0-based index
         start_index = start_line - 1
         end_index = end_line
-        
+
         # Replace the specified lines with new content
         content[start_index:end_index] = new_content.splitlines(True)
-        
+
         new_content = ''.join(content)
-        
+
         diff_result = generate_and_apply_diff(original_content, new_content, path)
-        
+
         return f"Successfully edited lines {start_line} to {end_line} in {path}\n{diff_result}"
     except Exception as e:
         return f"Error editing file: {str(e)}"
-
 
 def read_file(path):
     try:
@@ -428,14 +438,14 @@ def execute_goals(goals):
 
 def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
     global conversation_history, automode
-    
+
     # Create a new list for the current conversation
     current_conversation = []
-    
+
     if image_path:
         print_colored(f"Processing image at path: {image_path}", TOOL_COLOR)
         image_base64 = encode_image_to_base64(image_path)
-        
+
         if image_base64.startswith("Error"):
             print_colored(f"Error encoding image: {image_base64}", TOOL_COLOR)
             return "I'm sorry, there was an error processing the image. Please try again.", False
@@ -461,13 +471,13 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
         print_colored("Image message added to conversation history", TOOL_COLOR)
     else:
         current_conversation.append({"role": "user", "content": user_input})
-    
+
     # Combine the previous conversation history with the current conversation
     messages = conversation_history + current_conversation
-    
+
     try:
         response = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
+            model=MAINMODEL,
             max_tokens=4000,
             system=update_system_prompt(current_iteration, max_iterations),
             messages=messages,
@@ -477,10 +487,10 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
     except Exception as e:
         print_colored(f"Error calling Claude API: {str(e)}", TOOL_COLOR)
         return "I'm sorry, there was an error communicating with the AI. Please try again.", False
-    
+
     assistant_response = ""
     exit_continuation = False
-    
+
     for content_block in response.content:
         if content_block.type == "text":
             assistant_response += content_block.text
@@ -490,13 +500,13 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
             tool_name = content_block.name
             tool_input = content_block.input
             tool_use_id = content_block.id
-            
+
             print_colored(f"\nTool Used: {tool_name}", TOOL_COLOR)
             print_colored(f"Tool Input: {tool_input}", TOOL_COLOR)
-            
+
             result = execute_tool(tool_name, tool_input)
             print_colored(f"Tool Result: {result}", RESULT_COLOR)
-            
+
             # Add the tool use to the current conversation
             current_conversation.append({
                 "role": "assistant",
@@ -509,7 +519,7 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
                     }
                 ]
             })
-            
+
             # Add the tool result to the current conversation
             current_conversation.append({
                 "role": "user",
@@ -521,28 +531,28 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
                     }
                 ]
             })
-            
+
             # Update the messages with the new tool use and result
             messages = conversation_history + current_conversation
-            
+
             try:
                 tool_response = client.messages.create(
-                    model="claude-3-5-sonnet-20240620",
+                    model=TOOLCHECKERMODEL,
                     max_tokens=4000,
                     system=update_system_prompt(current_iteration, max_iterations),
                     messages=messages,
                     tools=tools,
                     tool_choice={"type": "auto"}
                 )
-                
+
                 for tool_content_block in tool_response.content:
                     if tool_content_block.type == "text":
                         assistant_response += tool_content_block.text
             except Exception as e:
                 print_colored(f"Error in tool response: {str(e)}", TOOL_COLOR)
                 assistant_response += "\nI encountered an error while processing the tool result. Please try again."
-    
-    # Check if edit_file was used and perform a review
+
+# Check if edit_file was used and perform a review
     if "edit_file" in assistant_response:
         file_path_match = re.search(r"Successfully edited lines \d+ to \d+ in (.+)\n", assistant_response)
         if file_path_match:
@@ -572,24 +582,24 @@ If you find any issues (duplications, missing code, or structural problems), ple
 If no issues are found, confirm that the file is clean, complete, and structurally sound.
 
 Please present your review findings and any necessary corrections."""
-            
+
             try:
                 review_response = client.messages.create(
-                    model="claude-3-5-sonnet-20240620",
+                    model=CODECHECKERMODEL,
                     max_tokens=4000,
                     system=update_system_prompt(current_iteration, max_iterations),
                     messages=messages + [{"role": "user", "content": review_prompt}],
                     tools=tools,
                     tool_choice={"type": "auto"}
                 )
-                
+
                 review_text = ""
                 for review_content_block in review_response.content:
                     if review_content_block.type == "text":
                         review_text += review_content_block.text
-                
+
                 assistant_response += "\n\nCode Review:\n" + review_text
-                
+
                 # If the review found and fixed duplications, update the file
                 if "removed" in review_text.lower() or "fixed" in review_text.lower():
                     updated_content = re.search(r"Updated file content:\n```(?:python)?\n(.*?)```", review_text, re.DOTALL)
@@ -597,17 +607,17 @@ Please present your review findings and any necessary corrections."""
                         with open(file_path, 'w') as file:
                             file.write(updated_content.group(1))
                         assistant_response += "\n\nFile updated to remove duplications."
-                
+
             except Exception as e:
                 print_colored(f"Error in review response: {str(e)}", TOOL_COLOR)
                 assistant_response += "\nI encountered an error while reviewing the file for duplications."
-    
+
     if assistant_response:
         current_conversation.append({"role": "assistant", "content": assistant_response})
-    
+
     # Update the global conversation history
     conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
-    
+
     return assistant_response, exit_continuation
 
 def process_and_display_response(response):
@@ -623,7 +633,7 @@ def process_and_display_response(response):
                     lines = part.split('\n')
                     language = lines[0].strip() if lines else ""
                     code = '\n'.join(lines[1:]) if len(lines) > 1 else ""
-                    
+
                     if language and code:
                         print_code(code, language)
                     elif code:
@@ -640,17 +650,17 @@ def main():
     print_colored("Type 'image' to include an image in your message.", CLAUDE_COLOR)
     print_colored("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.", CLAUDE_COLOR)
     print_colored("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.", CLAUDE_COLOR)
-    
+
     while True:
         user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
-        
+
         if user_input.lower() == 'exit':
             print_colored("Thank you for chatting. Goodbye!", CLAUDE_COLOR)
             break
-        
+
         if user_input.lower() == 'image':
             image_path = input(f"{USER_COLOR}Drag and drop your image here: {Style.RESET_ALL}").strip().replace("'", "")
-            
+
             if os.path.isfile(image_path):
                 user_input = input(f"{USER_COLOR}You (prompt for image): {Style.RESET_ALL}")
                 response, _ = chat_with_claude(user_input, image_path)
@@ -665,18 +675,18 @@ def main():
                     max_iterations = int(parts[1])
                 else:
                     max_iterations = MAX_CONTINUATION_ITERATIONS
-                
+
                 automode = True
                 print_colored(f"Entering automode with {max_iterations} iterations. Press Ctrl+C to exit automode at any time.", TOOL_COLOR)
                 print_colored("Press Ctrl+C at any time to exit the automode loop.", TOOL_COLOR)
                 user_input = input(f"\n{USER_COLOR}You: {Style.RESET_ALL}")
-                
+
                 iteration_count = 0
                 try:
                     while automode and iteration_count < max_iterations:
                         response, exit_continuation = chat_with_claude(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
                         process_and_display_response(response)
-                        
+
                         if exit_continuation or CONTINUATION_EXIT_PHRASE in response:
                             print_colored("Automode completed.", TOOL_COLOR)
                             automode = False
@@ -684,9 +694,9 @@ def main():
                             print_colored(f"Continuation iteration {iteration_count + 1} completed.", TOOL_COLOR)
                             print_colored("Press Ctrl+C to exit automode.", TOOL_COLOR)
                             user_input = "Continue with the next step."
-                        
+
                         iteration_count += 1
-                        
+
                         if iteration_count >= max_iterations:
                             print_colored("Max iterations reached. Exiting automode.", TOOL_COLOR)
                             automode = False
@@ -702,7 +712,7 @@ def main():
                 # Ensure the conversation history ends with an assistant message
                 if conversation_history and conversation_history[-1]["role"] == "user":
                     conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
-            
+
             print_colored("Exited automode. Returning to regular chat.", TOOL_COLOR)
         else:
             response, _ = chat_with_claude(user_input)
