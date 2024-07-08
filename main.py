@@ -5,7 +5,7 @@ import base64
 from PIL import Image
 import io
 import re
-from anthropic import Anthropic
+from anthropic import Anthropic, APIStatusError, APIError
 import difflib
 import time
 from rich.console import Console
@@ -27,7 +27,6 @@ MAX_CONTINUATION_ITERATIONS = 25
 # Models to use
 MAINMODEL = "claude-3-5-sonnet-20240620"
 TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
-CODECHECKERMODEL = "claude-3-5-sonnet-20240620"
 
 # Initialize the Anthropic client
 if "ANTHROPIC_API_KEY" in os.environ:
@@ -125,25 +124,27 @@ When in automode:
 2. Work through these goals one by one, using the available tools as needed
 3. REMEMBER!! You can read files, write code, search for specific lines of code to make edits and list the files, search the web. Use these tools as necessary to accomplish each goal
 4. ALWAYS READ A FILE BEFORE EDITING IT IF YOU ARE MISSING CONTENT. Provide regular updates on your progress
+5. ALWAYS READ A FILE AFTER EDITING IT. So you can see if you made any unintended changes or duplications.
 5. IMPORTANT RULE!! When you know your goals are completed, DO NOT CONTINUE IN POINTLESS BACK AND FORTH CONVERSATIONS with yourself. If you think you've achieved the results established in the original request, say "AUTOMODE_COMPLETE" in your response to exit the loop!
-6. ULTRA IMPORTANT! You have access to this {iteration_info} amount of iterations you have left to complete the request. Use this information to make decisions and to provide updates on your progress, knowing the number of responses you have left to complete the request.
-
-Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
+6. You have access to this {iteration_info} amount of iterations you have left to complete the request. Use this information to make decisions and to provide updates on your progress, knowing the number of responses you have left to complete the request.
 
 YOU NEVER ASK "Is there anything else you'd like to add or modify in the project or code?" or "Is there anything else you'd like to add or modify in the project?" or anything like that once you feel the request is complete. just say "AUTOMODE_COMPLETE" in your response to exit the loop!
 """
 
-# Base system prompt and automode_system_prompt remain unchanged
-
 def update_system_prompt(current_iteration=None, max_iterations=None):
     global base_system_prompt, automode_system_prompt
+    chain_of_thought_prompt = """
+    Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
+
+    Do not reflect on the quality of the returned search results in your response.
+    """
     if automode:
         iteration_info = ""
         if current_iteration is not None and max_iterations is not None:
             iteration_info = f"You are currently on iteration {current_iteration} out of {max_iterations} in automode."
-        return base_system_prompt + "\n\n" + automode_system_prompt.format(iteration_info=iteration_info)
+        return base_system_prompt + "\n\n" + automode_system_prompt.format(iteration_info=iteration_info) + "\n\n" + chain_of_thought_prompt
     else:
-        return base_system_prompt
+        return base_system_prompt + "\n\n" + chain_of_thought_prompt
 
 def create_folder(path):
     try:
@@ -151,6 +152,7 @@ def create_folder(path):
         return f"Folder created: {path}"
     except Exception as e:
         return f"Error creating folder: {str(e)}"
+
 def create_file(path, content=""):
     try:
         with open(path, 'w') as f:
@@ -181,7 +183,6 @@ def generate_and_apply_diff(original_content, new_content, path):
         diff_text = ''.join(diff)
         highlighted_diff = highlight_diff(diff_text)
 
-        # Create a panel with the highlighted diff
         diff_panel = Panel(
             highlighted_diff,
             title=f"Changes in {path}",
@@ -189,14 +190,11 @@ def generate_and_apply_diff(original_content, new_content, path):
             border_style="cyan"
         )
 
-        # Print the panel
         console.print(diff_panel)
 
-        # Count the number of added and removed lines
         added_lines = sum(1 for line in diff if line.startswith('+') and not line.startswith('+++'))
         removed_lines = sum(1 for line in diff if line.startswith('-') and not line.startswith('---'))
 
-        # Create a summary message
         summary = f"Changes applied to {path}:\n"
         summary += f"  Lines added: {added_lines}\n"
         summary += f"  Lines removed: {removed_lines}\n"
@@ -233,11 +231,9 @@ def edit_file(path, start_line, end_line, new_content):
 
         original_content = ''.join(content)
 
-        # Convert to 0-based index
         start_index = start_line - 1
         end_index = end_line
 
-        # Replace the specified lines with new content
         content[start_index:end_index] = new_content.splitlines(True)
 
         new_content = ''.join(content)
@@ -305,7 +301,7 @@ tools = [
     },
     {
         "name": "search_file",
-        "description": "Search for a specific pattern in a file and return the line numbers where the pattern is found.",
+        "description": "Search for a specific pattern in a file and return the line numbers where the pattern is found. Use this to locate specific code or text within a file.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -323,7 +319,7 @@ tools = [
     },
     {
         "name": "edit_file",
-        "description": "Edit a specific range of lines in a file.",
+        "description": "Edit a specific range of lines in a file. Use this after using search_file to identify the lines you want to edit.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -363,7 +359,7 @@ tools = [
     },
     {
         "name": "list_files",
-        "description": "List all files and directories in the root folder where the script is running. Use this when you need to see the contents of the current directory.",
+        "description": "List all files and directories in the specified folder. Use this when you need to see the contents of a directory.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -486,8 +482,16 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
             tools=tools,
             tool_choice={"type": "auto"}
         )
-    except Exception as e:
-        console.print(Panel(f"Error calling Claude API: {str(e)}", title="API Error", style="bold red"))
+    except APIStatusError as e:
+        if e.status_code == 429:
+            console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
+            time.sleep(5)
+            return chat_with_claude(user_input, image_path, current_iteration, max_iterations)
+        else:
+            console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
+            return "I'm sorry, there was an error communicating with the AI. Please try again.", False
+    except APIError as e:
+        console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
         return "I'm sorry, there was an error communicating with the AI. Please try again.", False
 
     assistant_response = ""
@@ -502,21 +506,23 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
         elif content_block.type == "tool_use":
             tool_uses.append(content_block)
 
-    # Display main model response
     console.print(Panel(Markdown(assistant_response), title="Claude's Response", title_align="left", expand=False))
 
-    # Process tool uses
     for tool_use in tool_uses:
         tool_name = tool_use.name
         tool_input = tool_use.input
         tool_use_id = tool_use.id
 
-        console.print(Panel(f"Tool Used: {tool_name}", style="yellow"))
-        console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="yellow"))
+        console.print(Panel(f"Tool Used: {tool_name}", style="green"))
+        console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
 
-        result = execute_tool(tool_name, tool_input)
-        console.print(Panel(result, title_align="left", title="Tool Result", style="green"))
-
+        try:
+            result = execute_tool(tool_name, tool_input)
+            console.print(Panel(result, title_align="left", title="Tool Result", style="green"))
+        except Exception as e:
+            result = f"Error executing tool: {str(e)}"
+            console.print(Panel(result, title="Tool Execution Error", style="bold red"))
+        
         current_conversation.append({
             "role": "assistant",
             "content": [
@@ -556,87 +562,23 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
             for tool_content_block in tool_response.content:
                 if tool_content_block.type == "text":
                     tool_checker_response += tool_content_block.text
-            #tookchecker response
-            console.print(Panel(Markdown(tool_checker_response), title_align="left", title="Claude's Response"))
+            console.print(Panel(Markdown(tool_checker_response), title="Claude's Response to Tool Result", title_align="left"))
             assistant_response += "\n\n" + tool_checker_response
-        except Exception as e:
+        except APIError as e:
             error_message = f"Error in tool response: {str(e)}"
             console.print(Panel(error_message, title="Error", style="bold red"))
             assistant_response += f"\n\n{error_message}"
 
-    # Check if edit_file was used and perform a review
-    if "edit_file" in assistant_response:
-        file_path_match = re.search(r"Successfully edited lines \d+ to \d+ in (.+)\n", assistant_response)
-        if file_path_match:
-            file_path = file_path_match.group(1)
-            file_content = read_file(file_path)
-            review_prompt = f"""I've made edits to the file {file_path}. Please perform a thorough review of the entire file content:
-
-{file_content}
-
-1. Check for any unintended duplications:
-   - If you find duplications, remove them and explain the changes.
-   - Ensure that the removal of duplications doesn't affect the code's functionality.
-
-2. Verify that no essential code is missing:
-   - Look for any incomplete functions, classes, or logic flows.
-   - Identify any missing imports, variable declarations, or closing brackets.
-
-3. Assess the overall structure and coherence of the code:
-   - Ensure that the edits maintain the logical flow of the code.
-   - Check that all necessary components are present and properly connected.
-
-If you find any issues (duplications, missing code, or structural problems), please provide:
-1. A clear explanation of the issue
-2. The corrected code snippet
-3. A brief justification for the changes
-
-If no issues are found, confirm that the file is clean, complete, and structurally sound.
-
-Please present your review findings and any necessary corrections."""
-
-            try:
-                review_response = client.messages.create(
-                    model=CODECHECKERMODEL,
-                    max_tokens=4000,
-                    system=update_system_prompt(current_iteration, max_iterations),
-                    messages=messages + [{"role": "user", "content": review_prompt}],
-                    tools=tools,
-                    tool_choice={"type": "auto"}
-                )
-
-                review_text = ""
-                for review_content_block in review_response.content:
-                    if review_content_block.type == "text":
-                        review_text += review_content_block.text
-
-                console.print(Panel(Markdown(review_text), title_align="left", title="Code Review", style="bold blue"))
-                assistant_response += "\n\nCode Review:\n" + review_text
-
-                # If the review found and fixed duplications, update the file
-                if "removed" in review_text.lower() or "fixed" in review_text.lower():
-                    updated_content = re.search(r"Updated file content:\n```(?:python)?\n(.*?)```", review_text, re.DOTALL)
-                    if updated_content:
-                        with open(file_path, 'w') as file:
-                            file.write(updated_content.group(1))
-                        console.print(Panel("File updated to remove duplications.", title_align="left", title="File Update", style="bold green"))
-
-            except Exception as e:
-                error_message = f"Error in review response: {str(e)}"
-                console.print(Panel(error_message, title="Error", style="bold red"))
-                assistant_response += f"\n\n{error_message}"
-
     if assistant_response:
         current_conversation.append({"role": "assistant", "content": assistant_response})
 
-    # Update the global conversation history
     conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
 
     return assistant_response, exit_continuation
 
 def main():
     global automode, conversation_history
-    console.print(Panel("Welcome to the Claude-3.5-Sonnet Engineer Chat with Image Support!", title="Welcome", style="bold green"))
+    console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Image Support!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
     console.print("Type 'image' to include an image in your message.")
     console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
@@ -655,7 +597,6 @@ def main():
             if os.path.isfile(image_path):
                 user_input = console.input("[bold cyan]You (prompt for image):[/bold cyan] ")
                 response, _ = chat_with_claude(user_input, image_path)
-                # process_and_display_response(response) # Remove this call
             else:
                 console.print(Panel("Invalid image path. Please try again.", title="Error", style="bold red"))
                 continue
@@ -676,14 +617,12 @@ def main():
                 try:
                     while automode and iteration_count < max_iterations:
                         response, exit_continuation = chat_with_claude(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
-                        # process_and_display_response(response) # Remove this call
 
                         if exit_continuation or CONTINUATION_EXIT_PHRASE in response:
                             console.print(Panel("Automode completed.", title_align="left", title="Automode", style="green"))
                             automode = False
                         else:
                             console.print(Panel(f"Continuation iteration {iteration_count + 1} completed. Press Ctrl+C to exit automode. ", title_align="left", title="Automode", style="yellow"))
-                            # console.print(Panel("Press Ctrl+C to exit automode.", style="bold yellow"))
                             user_input = "Continue with the next step. Or STOP by saying 'AUTOMODE_COMPLETE' if you think you've achieved the results established in the original request."
                         iteration_count += 1
 
@@ -693,20 +632,17 @@ def main():
                 except KeyboardInterrupt:
                     console.print(Panel("\nAutomode interrupted by user. Exiting automode.", title_align="left", title="Automode", style="bold red"))
                     automode = False
-                    # Ensure the conversation history ends with an assistant message
                     if conversation_history and conversation_history[-1]["role"] == "user":
                         conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
             except KeyboardInterrupt:
                 console.print(Panel("\nAutomode interrupted by user. Exiting automode.", title_align="left", title="Automode", style="bold red"))
                 automode = False
-                # Ensure the conversation history ends with an assistant message
                 if conversation_history and conversation_history[-1]["role"] == "user":
                     conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
 
             console.print(Panel("Exited automode. Returning to regular chat.", style="green"))
         else:
             response, _ = chat_with_claude(user_input)
-            # process_and_display_response(response) # Remove this call
 
 if __name__ == "__main__":
     main()
