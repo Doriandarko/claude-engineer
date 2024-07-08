@@ -87,6 +87,8 @@ Available tools and when to use them:
 7. tavily_search: Use this tool to perform a web search and get up-to-date information or additional context.
    Example: When you need current information about a technology, library, or best practice.
 
+8. list_files_recursively: Use this tool to list all files and directories in a specified folder and its subdirectories.
+
 IMPORTANT: For file modifications, always use the search_file tool first to identify the lines you want to edit, then use the edit_file tool to make the changes. This two-step process ensures more accurate and targeted edits.
 
 Follow these steps when editing files:
@@ -263,6 +265,16 @@ def list_files(path="."):
     except Exception as e:
         return f"Error listing files: {str(e)}"
 
+def list_files_recursively(path="."):
+    try:
+        files = []
+        for root, _, filenames in os.walk(path):
+            for filename in filenames:
+                files.append(os.path.relpath(os.path.join(root, filename), path))
+        return "\n".join(files)
+    except Exception as e:
+        return f"Error listing files: {str(e)}"
+
 def tavily_search(query):
     try:
         response = tavily.qna_search(query=query, search_depth="advanced")
@@ -375,6 +387,19 @@ tools = [
         }
     },
     {
+        "name": "list_files_recursively",
+        "description": "List all files and directories in the specified folder and its subdirectories. Use this when you need to see the contents of a directory and its subdirectories.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The path of the folder to list recursively (default: current directory)"
+                }
+            }
+        }
+    },
+    {
         "name": "tavily_search",
         "description": "Perform a web search using Tavily API to get up-to-date information or additional context. Use this when you need current information or feel a search could provide a better answer.",
         "input_schema": {
@@ -404,6 +429,8 @@ def execute_tool(tool_name, tool_input):
             return read_file(tool_input["path"])
         elif tool_name == "list_files":
             return list_files(tool_input.get("path", "."))
+        elif tool_name == "list_files_recursively":
+            return list_files_recursively(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
             return tavily_search(tool_input["query"])
         else:
