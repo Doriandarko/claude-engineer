@@ -54,6 +54,7 @@ Available tools and their optimal use cases:
 4. read_file: View the contents of existing files without making changes.
 5. list_files: Understand the current project structure or locate specific files.
 6. tavily_search: Obtain current information on technologies, libraries, or best practices.
+7. Analyzing images provided by the user
 
 Tool Usage Guidelines:
 - Always use the most appropriate tool for the task at hand.
