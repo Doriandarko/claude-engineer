@@ -54,7 +54,7 @@ Claude Engineer offers two main scripts:
 
 2. Run the GPT-enhanced version (using OpenRouter):
    ```
-   python main-gpt.py
+   python main-openrouter.py
    ```
 
 Once started, you can interact with Claude Engineer by typing your queries or commands. Some example interactions:
@@ -104,36 +104,36 @@ The system prompt has been updated with more detailed instructions and best prac
 
 Note: Claude will only have access to the files in the root folders of the script or any folder path you provide it.
 
-## 🔄 main-gpt.py vs main.py
+## 🔄 main-openrouter.py vs main.py
 
-The project includes two main scripts: `main.py` and `main-gpt.py`. Here are the key differences:
+The project includes two main scripts: `main.py` and `main-openrouter.py`. Here are the key differences:
 
 1. API Client:
    - main.py uses the Anthropic client directly.
-   - main-gpt.py uses the OpenAI client with a custom base URL for OpenRouter.
+   - main-openrouter.py uses the OpenAI client with a custom base URL for OpenRouter.
 
 2. Model:
    - main.py uses "claude-3-5-sonnet-20240620".
-   - main-gpt.py uses "anthropic/claude-3.5-sonnet:beta" through OpenRouter.
+   - main-openrouter.py uses "anthropic/claude-3.5-sonnet:beta" through OpenRouter.
 
 3. API Integration:
-   - main-gpt.py includes a function `get_openai_tools()` to transform the tools into OpenAI-compatible format.
+   - main-openrouter.py includes a function `get_openai_tools()` to transform the tools into OpenAI-compatible format.
 
 4. Message Handling:
-   - main-gpt.py has modified message handling to work with the OpenAI-style API responses.
+   - main-openrouter.py has modified message handling to work with the OpenAI-style API responses.
 
 5. Tool Execution:
-   - While both files use similar tool execution logic, main-gpt.py adapts the tool calls to work with the OpenAI-style responses.
+   - While both files use similar tool execution logic, main-openrouter.py adapts the tool calls to work with the OpenAI-style responses.
 
 6. Environment Variables:
    - main.py uses ANTHROPIC_API_KEY.
-   - main-gpt.py uses OPENROUTER_API_KEY.
+   - main-openrouter.py uses OPENROUTER_API_KEY.
 
 7. Image Handling:
    - Both versions support image analysis, but the implementation details may differ slightly due to API differences.
 
 8. Error Handling:
-   - Both versions include robust error handling, but main-gpt.py may have additional checks for OpenAI-specific response formats.
+   - Both versions include robust error handling, but main-openrouter.py may have additional checks for OpenAI-specific response formats.
 
 Choose the version that best suits your needs based on your preferred API and model access.
 
