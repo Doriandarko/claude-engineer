@@ -16,6 +16,7 @@ from rich.markdown import Markdown
 console = Console()
 
 from dotenv import load_dotenv
+import chardet
 
 # try to load the .env file. If it doesn't exist, the code will continue without it
 load_dotenv()
@@ -246,8 +247,11 @@ def edit_file(path, start_line, end_line, new_content):
 
 def read_file(path):
     try:
-        with open(path, 'r') as f:
-            content = f.read()
+        with open(path, 'rb') as f:
+            raw_data = f.read()
+        detected = chardet.detect(raw_data)
+        encoding = detected['encoding']
+        content = raw_data.decode(encoding)
         return content
     except Exception as e:
         return f"Error reading file: {str(e)}"
@@ -522,7 +526,7 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
         except Exception as e:
             result = f"Error executing tool: {str(e)}"
             console.print(Panel(result, title="Tool Execution Error", style="bold red"))
-        
+
         current_conversation.append({
             "role": "assistant",
             "content": [
