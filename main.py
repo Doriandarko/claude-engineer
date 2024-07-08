@@ -58,29 +58,26 @@ Available tools and when to use them:
 2. create_file: Use this tool to create a new file at a specified path with content.
    Example: When creating new source code files or configuration files.
 
-3. search_file: Use this tool to search for specific patterns in a file and get the line numbers where the pattern is found. This is especially useful for large files.
-   Example: When you need to locate specific functions or variables in a large codebase.
+3. edit_and_apply: Use this tool to read the contents of a file at the specified path and optionally apply changes.
+   Example: When you need to examine the current content of a file or make changes to it.
 
-4. edit_file: Use this tool to edit a specific range of lines in a file. You should use this after using search_file to identify the lines you want to edit.
-   Example: When you need to modify a specific function or block of code.
+4. read_file: Use this tool to read the contents of a file at the specified path.
+   Example: When you need to examine the contents of an existing file without making changes.
 
-5. read_file: Use this tool to read the contents of a file at a specified path.
-   Example: When you need to examine the current content of a file before making changes.
-
-6. list_files: Use this tool to list all files and directories in a specified folder (default is the current directory).
+5. list_files: Use this tool to list all files and directories in the specified folder (default is the current directory).
    Example: When you need to understand the current project structure or find specific files.
 
-7. tavily_search: Use this tool to perform a web search and get up-to-date information or additional context.
+6. tavily_search: Use this tool to perform a web search using Tavily API to get up-to-date information or additional context.
    Example: When you need current information about a technology, library, or best practice.
 
-IMPORTANT: For file modifications, always use the search_file tool first to identify the lines you want to edit, then use the edit_file tool to make the changes. This two-step process ensures more accurate and targeted edits.
+IMPORTANT: For file modifications, use the edit_and_apply tool. If you only need to read the file, don't provide the new_content parameter. If you need to make changes, provide the full updated content in the new_content parameter.
 
 Follow these steps when editing files:
-1. Use the read_file tool to examine the current contents of the file you want to edit.
-2. For longer files, use the search_file tool to find the specific lines you want to edit.
-3. Use the edit_file tool with the line numbers returned by search_file to make the changes.
+1. Use the edit_and_apply tool to examine the current contents of the file you want to edit.
+2. Determine the necessary changes based on the current content and the desired modifications.
+3. Use the edit_and_apply tool again with the full updated content to make the changes.
 
-This approach will help you make precise edits to files of any size or complexity.
+This approach will help you make precise edits to files of any size or complexity while avoiding unintended duplications or replacements.
 
 When asked to create a project:
 - Always start by creating a root folder for the project using the create_folder tool.
@@ -88,14 +85,12 @@ When asked to create a project:
 - Organize the project structure logically and follow best practices for the specific type of project being created.
 
 When asked to make edits or improvements:
-- ALWAYS START by using the read_file tool to examine the contents of existing files.
-- Use the search_file tool to locate the specific lines you want to edit.
-- Use the edit_file tool to make the necessary changes.
-- Analyze the code and suggest improvements or make necessary edits.
-- Pay close attention to the existing code structure.
-- Ensure that you're replacing old code with new code, not just adding new code alongside the old.
-- After making changes, always re-read the entire file to check for any unintended duplications.
-- If you notice any duplicated code after your edits, immediately remove the duplication and explain the correction.
+- ALWAYS START by using the edit_and_apply tool without providing new_content to examine the contents of existing files.
+- Analyze the code and determine the necessary changes.
+- Use the edit_and_apply tool again, this time providing the full updated content to make the necessary changes.
+- FOR LONG EDITS, APPLY THE CHANGES IN CHUNKS!!!!
+- Pay close attention to the existing code structure to avoid duplications or unintended replacements.
+- After making changes, always review the diff output (which is automatically provided by the edit_and_apply tool) to ensure the changes are correct and as intended.
 
 Be sure to consider the type of project (e.g., Python, JavaScript, web application) when determining the appropriate structure and files to include.
 
@@ -197,39 +192,24 @@ def generate_and_apply_diff(original_content, new_content, path):
         console.print(error_panel)
         return f"Error applying changes: {str(e)}"
 
-def search_file(path, search_pattern):
+
+
+# Update the edit_file function
+def edit_and_apply(path, new_content=None):
     try:
         with open(path, 'r') as file:
-            content = file.readlines()
-
-        matches = []
-        for i, line in enumerate(content, 1):
-            if re.search(search_pattern, line):
-                matches.append(i)
-
-        return f"Matches found at lines: {matches}"
+            original_content = file.read()
+        
+        if new_content is None:
+            return f"File content of {path}:\n\n{original_content}"
+        
+        if new_content != original_content:
+            diff_result = generate_and_apply_diff(original_content, new_content, path)
+            return f"Original content:\n\n{original_content}\n\nChanges applied to {path}:\n{diff_result}"
+        else:
+            return f"No changes needed for {path}"
     except Exception as e:
-        return f"Error searching file: {str(e)}"
-
-def edit_file(path, start_line, end_line, new_content):
-    try:
-        with open(path, 'r') as file:
-            content = file.readlines()
-
-        original_content = ''.join(content)
-
-        start_index = start_line - 1
-        end_index = end_line
-
-        content[start_index:end_index] = new_content.splitlines(True)
-
-        new_content = ''.join(content)
-
-        diff_result = generate_and_apply_diff(original_content, new_content, path)
-
-        return f"Successfully edited lines {start_line} to {end_line} in {path}\n{diff_result}"
-    except Exception as e:
-        return f"Error editing file: {str(e)}"
+        return f"Error editing/applying to file: {str(e)}"
 
 def read_file(path):
     try:
@@ -305,29 +285,21 @@ tools = [
         }
     },
     {
-        "name": "edit_file",
-        "description": "Edit a specific range of lines in a file. Use this after using search_file to identify the lines you want to edit.",
+        "name": "edit_and_apply",
+        "description": "Read the contents of a file, and optionally apply changes. Use this when you need to read or edit a file.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The path of the file to edit"
-                },
-                "start_line": {
-                    "type": "integer",
-                    "description": "The starting line number of the edit"
-                },
-                "end_line": {
-                    "type": "integer",
-                    "description": "The ending line number of the edit"
+                    "description": "The path of the file to read or edit"
                 },
                 "new_content": {
                     "type": "string",
-                    "description": "The new content to replace the specified lines"
+                    "description": "The new content to apply to the file (optional)"
                 }
             },
-            "required": ["path", "start_line", "end_line", "new_content"]
+            "required": ["path"]
         }
     },
     {
@@ -373,16 +345,15 @@ tools = [
     }
 ]
 
+# Update the execute_tool function
 def execute_tool(tool_name, tool_input):
     try:
         if tool_name == "create_folder":
             return create_folder(tool_input["path"])
         elif tool_name == "create_file":
             return create_file(tool_input["path"], tool_input.get("content", ""))
-        elif tool_name == "search_file":
-            return search_file(tool_input["path"], tool_input["search_pattern"])
-        elif tool_name == "edit_file":
-            return edit_file(tool_input["path"], tool_input["start_line"], tool_input["end_line"], tool_input["new_content"])
+        elif tool_name == "edit_and_apply":
+            return edit_and_apply(tool_input["path"], tool_input.get("new_content"))
         elif tool_name == "read_file":
             return read_file(tool_input["path"])
         elif tool_name == "list_files":
