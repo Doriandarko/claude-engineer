@@ -1,6 +1,7 @@
 anthropic
 colorama
 pygments
+rich
 tavily-python
 python-dotenv
 Pillow
