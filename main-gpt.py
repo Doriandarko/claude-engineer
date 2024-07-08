@@ -12,9 +12,8 @@ import base64
 from PIL import Image
 import io
 import re
-from anthropic import Anthropic
 import difflib
-import time
+from openai import OpenAI
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -33,8 +32,9 @@ RESULT_COLOR = Fore.GREEN
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 25
 
+
 # Initialize the Anthropic client
-client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 
 # Initialize the Tavily client
 tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
@@ -380,6 +380,20 @@ tools = [
     }
 ]
 
+# This function transforms the CLAUDE_TOOLS object into an openai-compatible object
+def get_openai_tools(tools):
+    openai_tools = []
+    for tool in tools:
+        openai_tools.append({
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "parameters": tool["input_schema"],
+                "description": tool["description"]
+            }
+        })
+    return openai_tools
+
 def execute_tool(tool_name, tool_input):
     try:
         if tool_name == "create_folder":
@@ -470,148 +484,128 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
     messages = conversation_history + current_conversation
     
     try:
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
+        openai_messages = [{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}]
+        for msg in messages:
+            new_msg = {
+                "role": msg["role"],
+            }
+            if "tool_calls" in msg:
+                new_msg["tool_calls"] = msg["tool_calls"]
+            if "tool_call_id" in msg:
+                new_msg["tool_call_id"] = msg["tool_call_id"]
+            if "content" in msg:
+                new_msg["content"] = msg["content"]
+            openai_messages.append(new_msg)
+
+        response = client.chat.completions.create(
+            model="anthropic/claude-3.5-sonnet:beta",
+            messages=openai_messages,
             max_tokens=4000,
-            system=update_system_prompt(current_iteration, max_iterations),
-            messages=messages,
-            tools=tools,
-            tool_choice={"type": "auto"}
+            tools=get_openai_tools(tools),
+            tool_choice="auto"
         )
     except Exception as e:
-        print_colored(f"Error calling Claude API: {str(e)}", TOOL_COLOR)
+        print_colored(f"Error calling LLM API: {str(e)}", TOOL_COLOR)
         return "I'm sorry, there was an error communicating with the AI. Please try again.", False
-    
+
     assistant_response = ""
     exit_continuation = False
-    
-    for content_block in response.content:
-        if content_block.type == "text":
-            assistant_response += content_block.text
-            if CONTINUATION_EXIT_PHRASE in content_block.text:
-                exit_continuation = True
-        elif content_block.type == "tool_use":
-            tool_name = content_block.name
-            tool_input = content_block.input
-            tool_use_id = content_block.id
-            
-            print_colored(f"\nTool Used: {tool_name}", TOOL_COLOR)
-            print_colored(f"Tool Input: {tool_input}", TOOL_COLOR)
-            
-            result = execute_tool(tool_name, tool_input)
-            print_colored(f"Tool Result: {result}", RESULT_COLOR)
-            
-            # Add the tool use to the current conversation
-            current_conversation.append({
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "tool_use",
-                        "id": tool_use_id,
-                        "name": tool_name,
-                        "input": tool_input
-                    }
-                ]
-            })
-            
-            # Add the tool result to the current conversation
-            current_conversation.append({
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
-                        "content": result
-                    }
-                ]
-            })
-            
-            # Update the messages with the new tool use and result
-            messages = conversation_history + current_conversation
-            
-            try:
-                tool_response = client.messages.create(
-                    model="claude-3-5-sonnet-20240620",
-                    max_tokens=4000,
-                    system=update_system_prompt(current_iteration, max_iterations),
-                    messages=messages,
-                    tools=tools,
-                    tool_choice={"type": "auto"}
-                )
+
+    msg = response.choices[0].message
+    if msg.tool_calls:
+        tool_name = msg.tool_calls[0].function.name
+        tool_input = eval(msg.tool_calls[0].function.arguments)
+        tool_use_id = msg.tool_calls[0].id
+        current_conversation.append({
+            "role": msg.role,
+            "tool_call_id": tool_use_id,
+            "tool_calls": msg.tool_calls
+        })
+        print_colored(f"\nTool Used: {tool_name}", TOOL_COLOR)
+        print_colored(f"\nTool Input: {tool_input}", TOOL_COLOR)
+        result = execute_tool(tool_name, tool_input)
+        print_colored(f"\nTool Result:\n<result>\n```{result}```\n</result>", RESULT_COLOR)
+        # add the tool use to the current conversation
+        current_conversation.append({
+            "role": "tool",
+            "tool_call_id": tool_use_id,
+            "name": tool_name,
+            "content": result
+        })
+        if "edit_file" in assistant_response:
+            file_path_match = re.search(r"Successfully edited lines \d+ to \d+ in (.+)\n", assistant_response)
+            if file_path_match:
+                file_path = file_path_match.group(1)
+                file_content = read_file(file_path)
+                review_prompt = f"""I've made edits to the file {file_path}. Please perform a thorough review of the entire file content:
+
+                    {file_content}
+
+                    1. Check for any unintended duplications:
+                    - If you find duplications, remove them and explain the changes.
+                    - Ensure that the removal of duplications doesn't affect the code's functionality.
+
+                    2. Verify that no essential code is missing:
+                    - Look for any incomplete functions, classes, or logic flows.
+                    - Identify any missing imports, variable declarations, or closing brackets.
+
+                    3. Assess the overall structure and coherence of the code:
+                    - Ensure that the edits maintain the logical flow of the code.
+                    - Check that all necessary components are present and properly connected.
+
+                    If you find any issues (duplications, missing code, or structural problems), please provide:
+                    1. A clear explanation of the issue
+                    2. The corrected code snippet
+                    3. A brief justification for the changes
+
+                    If no issues are found, confirm that the file is clean, complete, and structurally sound.
+
+                    Please present your review findings and any necessary corrections."""
                 
-                for tool_content_block in tool_response.content:
-                    if tool_content_block.type == "text":
-                        assistant_response += tool_content_block.text
-            except Exception as e:
-                print_colored(f"Error in tool response: {str(e)}", TOOL_COLOR)
-                assistant_response += "\nI encountered an error while processing the tool result. Please try again."
-    
-    # Check if edit_file was used and perform a review
-    if "edit_file" in assistant_response:
-        file_path_match = re.search(r"Successfully edited lines \d+ to \d+ in (.+)\n", assistant_response)
-        if file_path_match:
-            file_path = file_path_match.group(1)
-            file_content = read_file(file_path)
-            review_prompt = f"""I've made edits to the file {file_path}. Please perform a thorough review of the entire file content:
+                try:
+                    review_response = client.chat.completions.create(
+                        model="anthropic/claude-3.5-sonnet:beta",
+                        messages=[
+                            {"role": "system", "content": review_prompt}
+                        ],
+                        max_tokens=4000,
+                        tools=get_openai_tools(tools),
+                        tool_choice="auto"
+                    )
+                    
+                    review_text = review_response.choices[0].message.content
+                    assistant_response += "\n\nCode Review:\n" + review_text
 
-{file_content}
+                    # If the review found and fixed duplications, update the file
+                    if "removed" in review_text.lower() or "fixed" in review_text.lower():
+                        updated_content = re.search(r"Updated file content:\n```(?:python)?\n(.*?)```", review_text, re.DOTALL)
+                        if updated_content:
+                            with open(file_path, 'w') as file:
+                                file.write(updated_content.group(1))
+                            assistant_response += "\n\nFile updated to remove duplications."
+                    
+                except Exception as e:
+                    print_colored(f"Error in review response: {str(e)}", TOOL_COLOR)
+                    assistant_response += "\nI encountered an error while reviewing the file for duplications."
+        
+    elif msg.content:
+        current_conversation.append({
+            "role": msg.role,
+            "content": msg.content
+        })
+        if CONTINUATION_EXIT_PHRASE in msg.content:
+            exit_continuation = True
 
-1. Check for any unintended duplications:
-   - If you find duplications, remove them and explain the changes.
-   - Ensure that the removal of duplications doesn't affect the code's functionality.
+    if msg.role == "assistant":
+        assistant_response = msg.content
 
-2. Verify that no essential code is missing:
-   - Look for any incomplete functions, classes, or logic flows.
-   - Identify any missing imports, variable declarations, or closing brackets.
+        if "Goal" in assistant_response:
+            goals = parse_goals(assistant_response)
+            execute_goals(goals)
 
-3. Assess the overall structure and coherence of the code:
-   - Ensure that the edits maintain the logical flow of the code.
-   - Check that all necessary components are present and properly connected.
-
-If you find any issues (duplications, missing code, or structural problems), please provide:
-1. A clear explanation of the issue
-2. The corrected code snippet
-3. A brief justification for the changes
-
-If no issues are found, confirm that the file is clean, complete, and structurally sound.
-
-Please present your review findings and any necessary corrections."""
-            
-            try:
-                review_response = client.messages.create(
-                    model="claude-3-5-sonnet-20240620",
-                    max_tokens=4000,
-                    system=update_system_prompt(current_iteration, max_iterations),
-                    messages=messages + [{"role": "user", "content": review_prompt}],
-                    tools=tools,
-                    tool_choice={"type": "auto"}
-                )
-                
-                review_text = ""
-                for review_content_block in review_response.content:
-                    if review_content_block.type == "text":
-                        review_text += review_content_block.text
-                
-                assistant_response += "\n\nCode Review:\n" + review_text
-                
-                # If the review found and fixed duplications, update the file
-                if "removed" in review_text.lower() or "fixed" in review_text.lower():
-                    updated_content = re.search(r"Updated file content:\n```(?:python)?\n(.*?)```", review_text, re.DOTALL)
-                    if updated_content:
-                        with open(file_path, 'w') as file:
-                            file.write(updated_content.group(1))
-                        assistant_response += "\n\nFile updated to remove duplications."
-                
-            except Exception as e:
-                print_colored(f"Error in review response: {str(e)}", TOOL_COLOR)
-                assistant_response += "\nI encountered an error while reviewing the file for duplications."
-    
-    if assistant_response:
-        current_conversation.append({"role": "assistant", "content": assistant_response})
-    
     # Update the global conversation history
-    conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
-    
+    conversation_history = messages + current_conversation
+
     return assistant_response, exit_continuation
 
 def process_and_display_response(response):

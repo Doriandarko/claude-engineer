@@ -18,6 +18,7 @@ Claude Engineer is an advanced interactive command-line interface (CLI) that har
 - 🎨 Color-coded terminal output for improved readability
 - 📸 Image processing and analysis capabilities
 - 🔧 Detailed logging of tool usage and results
+- 🔀 Compatibility with OpenRouter API for flexible model selection
 
 ## 🛠️ Installation
 
@@ -33,19 +34,28 @@ Claude Engineer is an advanced interactive command-line interface (CLI) that har
    ```
 
 3. Set up your API keys:
-   - Add your Anthropic and Tavily API keys at the start of the file:
-     ```python
-     client = Anthropic(api_key="YOUR API KEY")
-     tavily = TavilyClient(api_key="YOUR API KEY")
+   - Create a `.env` file in the root directory of the project
+   - Add your API keys to the `.env` file:
      ```
+     ANTHROPIC_API_KEY=your_anthropic_api_key
+     TAVILY_API_KEY=your_tavily_api_key
+     OPENROUTER_API_KEY=your_openrouter_api_key
+     ```
+   Note: Do not commit your `.env` file to version control. It's already included in the `.gitignore` file to prevent accidental commits.
 
 ## 🚀 Usage
 
-Run the main script to start the Claude Engineer interface:
+Claude Engineer offers two main scripts:
 
-```
-python main.py
-```
+1. Run the original Claude Engineer interface:
+   ```
+   python main.py
+   ```
+
+2. Run the GPT-enhanced version (using OpenRouter):
+   ```
+   python main-gpt.py
+   ```
 
 Once started, you can interact with Claude Engineer by typing your queries or commands. Some example interactions:
 
@@ -78,7 +88,7 @@ To use automode:
 
 ### 📊 Enhanced Diff-based File Editing
 
-Claude Engineer now supports an improved diff-based file editing system, allowing for more precise and controlled modifications to existing files. When editing files, Claude will:
+Claude Engineer supports an improved diff-based file editing system, allowing for more precise and controlled modifications to existing files. When editing files, Claude will:
 
 1. Show a detailed diff of the proposed changes, highlighting additions, removals, and unchanged lines with color coding.
 2. Focus on adding new code or modifying existing code without unnecessarily removing functionality.
@@ -94,9 +104,50 @@ The system prompt has been updated with more detailed instructions and best prac
 
 Note: Claude will only have access to the files in the root folders of the script or any folder path you provide it.
 
+## 🔄 main-gpt.py vs main.py
+
+The project includes two main scripts: `main.py` and `main-gpt.py`. Here are the key differences:
+
+1. API Client:
+   - main.py uses the Anthropic client directly.
+   - main-gpt.py uses the OpenAI client with a custom base URL for OpenRouter.
+
+2. Model:
+   - main.py uses "claude-3-5-sonnet-20240620".
+   - main-gpt.py uses "anthropic/claude-3.5-sonnet:beta" through OpenRouter.
+
+3. API Integration:
+   - main-gpt.py includes a function `get_openai_tools()` to transform the tools into OpenAI-compatible format.
+
+4. Message Handling:
+   - main-gpt.py has modified message handling to work with the OpenAI-style API responses.
+
+5. Tool Execution:
+   - While both files use similar tool execution logic, main-gpt.py adapts the tool calls to work with the OpenAI-style responses.
+
+6. Environment Variables:
+   - main.py uses ANTHROPIC_API_KEY.
+   - main-gpt.py uses OPENROUTER_API_KEY.
+
+7. Image Handling:
+   - Both versions support image analysis, but the implementation details may differ slightly due to API differences.
+
+8. Error Handling:
+   - Both versions include robust error handling, but main-gpt.py may have additional checks for OpenAI-specific response formats.
+
+Choose the version that best suits your needs based on your preferred API and model access.
+
 ## 👥 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please follow these steps to contribute:
+
+1. Fork the repository
+2. Create a new branch for your feature or bug fix
+3. Make your changes and commit them with clear, descriptive messages
+4. Push your changes to your fork
+5. Create a pull request to the `main` branch of the original repository
+
+Please ensure your code adheres to the existing style and includes appropriate tests and documentation.
 
 ## 📄 License
 
@@ -104,4 +155,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Doriandarko/claude-engineer&type=Date)](https://star-history.com/#Doriandarko/claude-engineer&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=Doriandarko/claude-engineer&type=Date)](https://star-history.com/#Doriandarko/claude-engineer&Date)[![Star History Chart](https://api.star-history.com/svg?repos=Doriandarko/claude-engineer&type=Date)](https://star-history.com/#Doriandarko/claude-engineer&Date)
