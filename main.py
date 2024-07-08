@@ -265,12 +265,32 @@ def list_files(path="."):
     except Exception as e:
         return f"Error listing files: {str(e)}"
 
-def list_files_recursively(path="."):
+def list_files_recursively(path=".", depth=0, max_depth=5, exclude_dirs=['dist', 'node_modules', 'build', 'target', 'debug', 'cache'], exclude_file_extensions=[], max_tokens=19999):
     try:
         files = []
-        for root, _, filenames in os.walk(path):
+        anthropic = Anthropic()
+        total_tokens = 0
+
+        for root, dirs, filenames in os.walk(path):
+            current_depth = root[len(path):].count(os.sep)
+
+            if current_depth > max_depth:
+                del dirs[:]
+                continue
+
+            dirs[:] = [d for d in dirs if d not in exclude_dirs]
+
             for filename in filenames:
-                files.append(os.path.relpath(os.path.join(root, filename), path))
+                if not any(filename.endswith(ext) for ext in exclude_file_extensions):
+                    file_path = os.path.relpath(os.path.join(root, filename), path)
+                    file_tokens = anthropic.count_tokens(file_path + "\n")
+
+                    if total_tokens + file_tokens > max_tokens:
+                        return "\n".join(files) + "\n...\n(truncated)"
+
+                    files.append(file_path)
+                    total_tokens += file_tokens
+
         return "\n".join(files)
     except Exception as e:
         return f"Error listing files: {str(e)}"
