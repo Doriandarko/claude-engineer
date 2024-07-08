@@ -15,6 +15,11 @@ from rich.markdown import Markdown
 
 console = Console()
 
+from dotenv import load_dotenv
+
+# try to load the .env file. If it doesn't exist, the code will continue without it
+load_dotenv()
+
 # Add these constants at the top of the file
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 25
@@ -25,10 +30,18 @@ TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
 CODECHECKERMODEL = "claude-3-5-sonnet-20240620"
 
 # Initialize the Anthropic client
-client = Anthropic(api_key="YOUR KEY")
+if "ANTHROPIC_API_KEY" in os.environ:
+    api_key = os.environ["ANTHROPIC_API_KEY"]
+    client = Anthropic(api_key=api_key)
+else:
+    client = Anthropic(api_key="YOUR KEY")
 
 # Initialize the Tavily client
-tavily = TavilyClient(api_key="YOUR KEY")
+if "TAVILY_API_KEY" in os.environ:
+    api_key = os.environ["TAVILY_API_KEY"]
+    tavily = TavilyClient(api_key=api_key)
+else:
+    tavily = TavilyClient(api_key="YOUR KEY")
 
 # Set up the conversation memory
 conversation_history = []
