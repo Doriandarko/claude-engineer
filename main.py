@@ -1,5 +1,6 @@
 import os
 import json
+import readline
 from tavily import TavilyClient
 import base64
 from PIL import Image
@@ -31,6 +32,19 @@ tavily = TavilyClient(api_key="YOUR KEY")
 
 # Set up the conversation memory
 conversation_history = []
+
+# Set up history file
+history_file = os.path.expanduser("~/.claude_engineer_history")
+try:
+    readline.read_history_file(history_file)
+except FileNotFoundError:
+    pass
+
+def save_history():
+    readline.write_history_file(history_file)
+
+import atexit
+atexit.register(save_history)
 
 # automode flag
 automode = False
