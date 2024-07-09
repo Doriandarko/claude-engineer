@@ -1,7 +1,5 @@
-anthropic
-colorama
-pygments
 tavily-python
-python-dotenv
 Pillow
 requests
+anthropic
+rich
