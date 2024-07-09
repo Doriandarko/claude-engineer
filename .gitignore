@@ -1,0 +1,7 @@
+#ignore everything except main.py readme.md requirements.txt and .gitignore
+
+*
+!main.py
+!readme.md
+!requirements.txt
+!.gitignore

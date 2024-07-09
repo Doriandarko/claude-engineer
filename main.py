@@ -398,6 +398,11 @@ def execute_goals(goals):
             console.print(Panel("Exiting automode.", title="Automode", style="bold green"))
             break
 
+
+def save_conversation_history():
+    with open('conversation_history.json', 'w') as f:
+        json.dump(conversation_history, f, indent=2)    
+
 def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
     global conversation_history, automode
 
@@ -544,6 +549,9 @@ def main():
     console.print("Type 'exit' to end the conversation.")
     console.print("Type 'image' to include an image in your message.")
     console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
+    console.print("Type 'save' to save the conversation history to a file.")
+    console.print("Type 'load' to load a previously saved conversation history from a file.")
+
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
     while True:
@@ -552,6 +560,21 @@ def main():
         if user_input.lower() == 'exit':
             console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
             break
+
+        if user_input.lower() == 'save':
+            save_conversation_history()
+            console.print(Panel("Conversation history saved to file.", title="Conversation History Saved", style="bold green"))
+            continue
+        
+        if user_input.lower() == 'load':
+            try:
+                with open('conversation_history.json', 'r') as f:
+                    conversation_history = json.load(f)
+                console.print(Panel("Conversation history loaded from file.", title="Conversation History Loaded", style="bold green"))
+            except FileNotFoundError:
+                console.print(Panel("Conversation history file not found. Please save the conversation history first.", title="Conversation History Not Found", style="bold red"))
+                continue
+            continue
 
         if user_input.lower() == 'image':
             image_path = console.input("[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] ").strip().replace("'", "")
