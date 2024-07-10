@@ -12,8 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
-
-console = Console()
+from dotenv import load_dotenv
 
 # Add these constants at the top of the file
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
@@ -23,11 +22,34 @@ MAX_CONTINUATION_ITERATIONS = 25
 MAINMODEL = "claude-3-5-sonnet-20240620"
 TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
 
+# Add your API keys here (or use a .env file)
+ANTHROPIC_API_KEY = None
+TAVILY_API_KEY = None
+
+# Load environment variables from .env file if exists (OPTIONAL)
+if os.path.exists(".env"):
+    load_dotenv(".env")
+
+    # Show which environment variables are loaded
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+    TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+
+    if ANTHROPIC_API_KEY is not None or TAVILY_API_KEY is not None:
+        print("Environment variables loaded from .env file.")
+
+        # List the keys that are loaded
+        if ANTHROPIC_API_KEY is not None:
+            print("ANTHROPIC_API_KEY loaded.")
+        if TAVILY_API_KEY is not None:
+            print("TAVILY_API_KEY loaded.")
+
+console = Console()
+
 # Initialize the Anthropic client
-client = Anthropic(api_key="YOUR KEY")
+client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # Initialize the Tavily client
-tavily = TavilyClient(api_key="YOUR KEY")
+tavily = TavilyClient(api_key=TAVILY_API_KEY)
 
 # Set up the conversation memory
 conversation_history = []
