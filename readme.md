@@ -23,12 +23,14 @@ Claude Engineer is an advanced interactive command-line interface (CLI) that har
 ## 🛠️ Installation
 
 1. Clone this repository:
+
    ```
    git clone https://github.com/yourusername/claude-engineer.git
    cd claude-engineer
    ```
 
 2. Install the required dependencies:
+
    ```
    pip install -r requirements.txt
    ```
@@ -57,6 +59,7 @@ Once started, you can interact with Claude Engineer by typing your queries or co
 - "Analyze this image and describe its contents"
 
 Special commands:
+
 - Type 'exit' to end the conversation and close the application.
 - Type 'image' to include an image in your message for analysis.
 - Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.
@@ -73,6 +76,7 @@ The enhanced automode allows Claude to work autonomously on complex tasks with g
 5. You can specify the maximum number of iterations when entering automode (default is 25).
 
 To use automode:
+
 1. Type 'automode [number]' when prompted for input, where [number] is the maximum number of iterations.
 2. Provide your request when prompted.
 3. Claude will work autonomously, providing updates after each iteration.
