@@ -649,11 +649,11 @@ def main():
             style="bold green",
         )
     )
-    console.print("Type 'exit' to end the conversation.")
-    console.print("Type 'voice' or 'v' to use voice input for your message.")
-    console.print("Type 'image' to include an image in your message.")
+    console.print("Type '\\[e]xit' to end the conversation.")
+    console.print("Type '\\[v]oice' to use voice input for your message.")
+    console.print("Type '\\[i]mage' to include an image in your message.")
     console.print(
-        "Type 'automode [number]' to enter Autonomous mode with a specific number of iterations."
+        "Type 'automode \\[number] \\[v]oice' to enter Autonomous mode with a specific number of iterations and optional voice input."
     )
     console.print(
         "While in automode, press Ctrl+C at any time to exit the automode to return to regular chat."
@@ -661,9 +661,9 @@ def main():
 
     while True:
         console.print("[bold cyan]You:[/bold cyan] ", end="")
-        input_type = console.input().lower()
+        input_type = console.input().lower().strip()
 
-        if input_type == "exit":
+        if input_type in ["e", "exit"]:
             console.print(
                 Panel(
                     "Thank you for chatting. Goodbye!",
@@ -674,11 +674,11 @@ def main():
             )
             break
 
-        if input_type.lower().strip() in ["voice", "v"]:
+        if input_type in ["v", "voice"]:
             console.print("Listening for voice input...")
             user_input = get_voice_input()
             console.print(f"[bold cyan]You (voice):[/bold cyan] {user_input}")
-        elif input_type == "image":
+        elif input_type in ["i", "image"]:
             image_path = (
                 console.input(
                     "[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] "
@@ -704,10 +704,16 @@ def main():
         elif input_type.startswith("automode"):
             try:
                 parts = input_type.split()
-                if len(parts) > 1 and parts[1].isdigit():
-                    max_iterations = int(parts[1])
+                if len(parts) > 1:
+                    if parts[1].isdigit():
+                        max_iterations = int(parts[1])
+                        voice_option = parts[2] if len(parts) > 2 else None
+                    else:
+                        max_iterations = MAX_CONTINUATION_ITERATIONS
+                        voice_option = parts[1]
                 else:
                     max_iterations = MAX_CONTINUATION_ITERATIONS
+                    voice_option = None
 
                 automode = True
                 console.print(
@@ -724,7 +730,13 @@ def main():
                         style="bold yellow",
                     )
                 )
-                user_input = console.input("[bold cyan]You:[/bold cyan] ")
+
+                if voice_option and voice_option.lower().strip() in ["v", "voice"]:
+                    console.print("Listening for voice input...")
+                    user_input = get_voice_input()
+                    console.print(f"[bold cyan]You (voice):[/bold cyan] {user_input}")
+                else:
+                    user_input = console.input("[bold cyan]You:[/bold cyan] ")
 
                 iteration_count = 0
                 try:
