@@ -650,7 +650,7 @@ def main():
         )
     )
     console.print("Type 'exit' to end the conversation.")
-    console.print("Type 'voice' to use voice input for your message.")
+    console.print("Type 'voice' or 'v' to use voice input for your message.")
     console.print("Type 'image' to include an image in your message.")
     console.print(
         "Type 'automode [number]' to enter Autonomous mode with a specific number of iterations."
@@ -674,7 +674,7 @@ def main():
             )
             break
 
-        if input_type == "voice":
+        if input_type.lower().strip() in ["voice", "v"]:
             console.print("Listening for voice input...")
             user_input = get_voice_input()
             console.print(f"[bold cyan]You (voice):[/bold cyan] {user_input}")
