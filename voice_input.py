@@ -7,7 +7,7 @@ from openai import OpenAI
 load_dotenv()
 
 
-def record_audio(duration=5, sample_rate=44100, chunk=1024, channels=1):
+def record_audio(duration=10, sample_rate=44100, chunk=1024, channels=1):
     p = pyaudio.PyAudio()
     stream = p.open(
         format=pyaudio.paInt16,
@@ -17,7 +17,7 @@ def record_audio(duration=5, sample_rate=44100, chunk=1024, channels=1):
         frames_per_buffer=chunk,
     )
 
-    print("Recording...")
+    print("Recording for 10 seconds...")
     frames = []
 
     for _ in range(0, int(sample_rate / chunk * duration)):
