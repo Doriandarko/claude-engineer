@@ -12,6 +12,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
+from dotenv import load_dotenv
+
+load_dotenv()
 
 console = Console()
 
@@ -24,10 +27,16 @@ MAINMODEL = "claude-3-5-sonnet-20240620"
 TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
 
 # Initialize the Anthropic client
-client = Anthropic(api_key="YOUR KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+if not ANTHROPIC_API_KEY:
+    raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
+
+client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # Initialize the Tavily client
-tavily = TavilyClient(api_key="YOUR KEY")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+if not TAVILY_API_KEY:
+    raise ValueError("TAVILY_API_KEY not found in environment variables")
 
 # Set up the conversation memory
 conversation_history = []

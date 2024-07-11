@@ -2,3 +2,4 @@ tavily-python
 Pillow
 anthropic
 rich
+python-dotenv
