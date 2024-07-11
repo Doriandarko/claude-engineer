@@ -13,6 +13,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 from dotenv import load_dotenv
+from voice_input import get_voice_input
 
 load_dotenv()
 
@@ -549,20 +550,26 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
 
 def main():
     global automode, conversation_history
-    console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Image Support!", title="Welcome", style="bold green"))
+    console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Voice and Image Support!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
+    console.print("Type 'voice' to use voice input for your message.")
     console.print("Type 'image' to include an image in your message.")
     console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
     while True:
-        user_input = console.input("[bold cyan]You:[/bold cyan] ")
+        console.print("[bold cyan]You:[/bold cyan] ", end="")
+        input_type = console.input().lower()
 
-        if user_input.lower() == 'exit':
+        if input_type == 'exit':
             console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
             break
 
-        if user_input.lower() == 'image':
+        if input_type == 'voice':
+            console.print("Listening for voice input...")
+            user_input = get_voice_input()
+            console.print(f"[bold cyan]You (voice):[/bold cyan] {user_input}")
+        elif input_type == 'image':
             image_path = console.input("[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] ").strip().replace("'", "")
 
             if os.path.isfile(image_path):
@@ -571,9 +578,9 @@ def main():
             else:
                 console.print(Panel("Invalid image path. Please try again.", title="Error", style="bold red"))
                 continue
-        elif user_input.lower().startswith('automode'):
+        elif input_type.startswith('automode'):
             try:
-                parts = user_input.split()
+                parts = input_type.split()
                 if len(parts) > 1 and parts[1].isdigit():
                     max_iterations = int(parts[1])
                 else:
@@ -613,6 +620,9 @@ def main():
 
             console.print(Panel("Exited automode. Returning to regular chat.", style="green"))
         else:
+            user_input = input_type + console.input()
+
+        if not input_type.startswith('automode'):
             response, _ = chat_with_claude(user_input)
 
 if __name__ == "__main__":

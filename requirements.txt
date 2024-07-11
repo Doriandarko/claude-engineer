@@ -1,5 +1,9 @@
+openai
 tavily-python
 Pillow
 anthropic
 rich
 python-dotenv
+pyaudio
+wave
+requests
