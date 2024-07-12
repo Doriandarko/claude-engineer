@@ -219,9 +219,6 @@ def edit_and_apply(path, new_content):
         with open(path, 'r') as file:
             original_content = file.read()
 
-        if new_content is None:
-            return f"File content of {path}:\n\n{original_content}"
-
         if new_content != original_content:
             diff_result = generate_and_apply_diff(original_content, new_content, path)
             return f"Changes applied to {path}:\n{diff_result}"
