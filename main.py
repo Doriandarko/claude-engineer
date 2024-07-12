@@ -50,7 +50,7 @@ Available tools and their optimal use cases:
 
 1. create_folder: Create new directories in the project structure.
 2. create_file: Generate new files with specified content.
-3. edit_and_apply: Examine and modify existing files.
+3. edit_and_apply: Examine and modify existing files.FULLY.
 4. read_file: View the contents of existing files without making changes.
 5. list_files: Understand the current project structure or locate specific files.
 6. tavily_search: Obtain current information on technologies, libraries, or best practices.
@@ -59,7 +59,6 @@ Available tools and their optimal use cases:
 Tool Usage Guidelines:
 - Always use the most appropriate tool for the task at hand.
 - For file modifications, use edit_and_apply. Read the file first, then apply changes if needed.
-- When editing files, apply changes in chunks for large modifications.
 - After making changes, always review the diff output to ensure accuracy.
 - Proactively use tavily_search when you need up-to-date information or context.
 
@@ -76,9 +75,8 @@ Project Creation and Management:
 Code Editing Best Practices:
 1. Always read the file content before making changes.
 2. Analyze the code and determine necessary modifications.
-3. Make changes incrementally, especially for large files.
-4. Pay close attention to existing code structure to avoid unintended alterations.
-5. Review changes thoroughly after each modification.
+3. Pay close attention to existing code structure to avoid unintended alterations.
+4. Review changes thoroughly after each modification.
 
 Always strive for accuracy, clarity, and efficiency in your responses and actions. If uncertain, use the tavily_search tool or admit your limitations.
 """
@@ -290,7 +288,7 @@ tools = [
     },
     {
     "name": "edit_and_apply",
-    "description": "Apply changes to a file. Use this when you need to edit a file.",
+    "description": "Apply changes to a file. Use this when you need to edit an existing file. YOU ALWAYS PROVIDE THE FULL FILE CONTENT WHEN EDITING. NO PARTIAL CONTENT OR COMMENTS. YOU MUST PROVIDE THE FULL FILE CONTENT.",
     "input_schema": {
         "type": "object",
         "properties": {
