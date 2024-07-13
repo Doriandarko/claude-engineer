@@ -1,4 +1,5 @@
 import os
+from dotenv import load_dotenv
 import json
 from tavily import TavilyClient
 import base64
@@ -12,6 +13,12 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
+import asyncio
+import aiohttp
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+
+# Load environment variables from .env file
+load_dotenv()
 
 console = Console()
 
@@ -19,15 +26,22 @@ console = Console()
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 25
 
+# Available Claude models:
+# Claude 3 Opus     claude-3-opus-20240229
+# Claude 3 Sonnet   claude-3-sonnet-20240229
+# Claude 3 Haiku    claude-3-haiku-20240307
+# Claude 3.5 Sonnet claude-3-5-sonnet-20240620
+
 # Models to use
 MAINMODEL = "claude-3-5-sonnet-20240620"
 TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
+CODEEDITORMODEL = "claude-3-5-sonnet-20240620"
 
 # Initialize the Anthropic client
-client = Anthropic(api_key="YOUR KEY")
+client = Anthropic(api_key="YOURKEY")
 
 # Initialize the Tavily client
-tavily = TavilyClient(api_key="YOUR KEY")
+tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
 
 # Set up the conversation memory
 conversation_history = []
@@ -36,8 +50,9 @@ conversation_history = []
 automode = False
 
 # base prompt
+# base prompt
 base_system_prompt = """
-You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, specializing in software development. Your capabilities include:
+You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, specializied in software development with access to a variety of tool and the ability to instruct and direct a coding agent. Your capabilities include:
 
 1. Creating and managing project structures
 2. Writing, debugging, and improving code across multiple languages
@@ -50,7 +65,10 @@ Available tools and their optimal use cases:
 
 1. create_folder: Create new directories in the project structure.
 2. create_file: Generate new files with specified content.
-3. edit_and_apply: Examine and modify existing files.
+3. edit_and_apply: Examine and modify existing files by instructing a coding agbet. When editing consider the following guidelines:
+   - ALWAYS send the instructions to the coding AI agent in the same message as the file content.
+   - Always adapt based on the file's content, language, and the specific editing task.
+   - Prioritize maintaining code structure and formatting over strictly adhering to batch size guidelines.
 4. read_file: View the contents of existing files without making changes.
 5. list_files: Understand the current project structure or locate specific files.
 6. tavily_search: Obtain current information on technologies, libraries, or best practices.
@@ -58,10 +76,18 @@ Available tools and their optimal use cases:
 
 Tool Usage Guidelines:
 - Always use the most appropriate tool for the task at hand.
-- For file modifications, use edit_and_apply. Read the file first, then apply changes if needed.
-- When editing files, apply changes in chunks for large modifications.
+- For file modifications, use edit_and_apply. This now processes files in batches.
 - After making changes, always review the diff output to ensure accuracy.
 - Proactively use tavily_search when you need up-to-date information or context.
+
+Code Editing Best Practices:
+1. When using edit_and_apply, each batch will be processed for potential improvements.
+2. Analyze the code and determine necessary modifications within each batch.
+3. Pay close attention to maintaining the overall structure, logic, and indentation of the code.
+4. Ensure that your edits do not break the existing code structure or formatting.
+5. If a batch contains the start of a function but not its end, include the entire function in that batch.
+6. Review changes thoroughly after each modification to ensure formatting consistency.
+
 
 Error Handling and Recovery:
 - If a tool operation fails, analyze the error message and attempt to resolve the issue.
@@ -73,12 +99,6 @@ Project Creation and Management:
 2. Create necessary subdirectories and files within the root folder.
 3. Organize the project structure logically, following best practices for the specific project type.
 
-Code Editing Best Practices:
-1. Always read the file content before making changes.
-2. Analyze the code and determine necessary modifications.
-3. Make changes incrementally, especially for large files.
-4. Pay close attention to existing code structure to avoid unintended alterations.
-5. Review changes thoroughly after each modification.
 
 Always strive for accuracy, clarity, and efficiency in your responses and actions. If uncertain, use the tavily_search tool or admit your limitations.
 """
@@ -201,19 +221,112 @@ def generate_and_apply_diff(original_content, new_content, path):
 
 
 
-# Update the edit_file function
-def edit_and_apply(path, new_content):
+async def send_to_ai_for_editing(file_content, batch_content, start_line_number, instructions, conversation):
+    try:
+        lines_to_edit = batch_content.splitlines(keepends=True)
+        lines_with_numbers = [f"Line {i}: {line}" for i, line in enumerate(lines_to_edit, start=start_line_number)]
+        lines_to_edit_str = ''.join(lines_with_numbers)
+
+        # Ensure the conversation ends with an assistant message
+        if not conversation or conversation[-1]["role"] == "user":
+            conversation.append({"role": "assistant", "content": "I'm ready to edit the next batch of lines. Please provide them."})
+
+        # Add the new user message with the lines to edit
+        conversation.append({"role": "user", "content": f"Edit these lines:\n{lines_to_edit_str}"})
+
+        # Make the API call
+        response = client.messages.create(
+            model=CODEEDITORMODEL,
+            max_tokens=4000,
+            messages=conversation,
+            system=(
+                "You are an AI assistant that edits code files. Improve the following lines of code based on the provided instructions and file context. "
+                "Consider the entire file context when making changes to these specific lines. "
+                "CRITICAL: Preserve the exact indentation and formatting of each line. "
+                "You can add or remove lines as necessary to improve the code. "
+                "If adding lines, match the indentation of surrounding lines. "
+                "If moving lines, maintain their original indentation in the new position. "
+                "If no improvements are needed or if the instructions don't apply, return the lines unchanged. "
+                "Consider the file type when formatting the edited lines. "
+                "IMPORTANT: RETURN ONLY THE EDITED LINES, WITH EXACT INDENTATION AND ORIGINAL LINE ENDINGS. NO EXPLANATIONS OR COMMENTS. "
+                "To ensure a successful edit, prefix each line with its line number and a colon, followed by a single space, then the line content with its original indentation and line ending, e.g., '1: def example():\n', '2:     print(\"Hello, World!\")\n'"
+            )
+        )
+
+        # Return the raw response from the AI
+        return response.content[0].text
+
+    except Exception as e:
+        console.print(f"Error in AI editing: {str(e)}", style="bold red")
+        return batch_content  # Return original batch content if any exception occurs
+
+
+
+async def edit_and_apply(path, instructions, batch_size=50, is_automode=False):
     try:
         with open(path, 'r') as file:
             original_content = file.read()
-        
-        if new_content != original_content:
-            diff_result = generate_and_apply_diff(original_content, new_content, path)
+
+        edited_content = await process_code_file(path, instructions, batch_size)
+
+        if edited_content != original_content:
+            # Print the raw AI output for debugging
+            console.print(Panel("Raw AI Output:", title="Debug", style="bold yellow"))
+            console.print(edited_content)
+
+            diff_result = generate_and_apply_diff(original_content, edited_content, path)
+
+            console.print(Panel("The following changes have been suggested:", title="File Changes", style="cyan"))
+            console.print(diff_result)
+
+            if not is_automode:
+                confirm = console.input("[bold yellow]Do you want to apply these changes? (yes/no): [/bold yellow]")
+                if confirm.lower() != 'yes':
+                    return "Changes were not applied."
+
+            with open(path, 'w') as file:
+                file.write(edited_content)
             return f"Changes applied to {path}:\n{diff_result}"
         else:
             return f"No changes needed for {path}"
     except Exception as e:
         return f"Error editing/applying to file: {str(e)}"
+
+
+async def process_code_file(file_path, instructions, batch_size=50):
+    with open(file_path, 'r') as f:
+        file_content = f.read()
+
+    lines = file_content.splitlines(keepends=True)
+    edited_content = []
+    total_lines = len(lines)
+    conversation = [
+        {"role": "user", "content": f"File content:\n{file_content}\n\nInstructions: {instructions}"},
+        {"role": "assistant", "content": "Understood. I'm ready to edit the file based on your instructions. Please provide the first batch of lines to edit."}
+    ]
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        console=console
+    ) as progress:
+        task = progress.add_task("[cyan]Editing file...", total=total_lines)
+
+        for i in range(0, total_lines, batch_size):
+            batch = lines[i:i+batch_size]
+            batch_content = ''.join(batch)
+            edited_batch = await send_to_ai_for_editing(file_content, batch_content, i+1, instructions, conversation)
+            
+            edited_content.append(edited_batch)
+
+            progress.update(task, advance=len(batch))
+            await asyncio.sleep(0.01)
+
+    progress.update(task, completed=total_lines)
+
+    return ''.join(edited_content)
 
 def read_file(path):
     try:
@@ -289,23 +402,28 @@ tools = [
         }
     },
     {
-    "name": "edit_and_apply",
-    "description": "Apply changes to a file. Use this when you need to edit a file.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "path": {
-                "type": "string",
-                "description": "The path of the file to edit"
+        "name": "edit_and_apply",
+        "description": "Apply AI-powered improvements to a file based on specific instructions. This function reads the file, processes it in batches using AI with conversation history, generates a diff, and allows the user to confirm changes before applying them.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The path of the file to edit"
+                },
+                "instructions": {
+                    "type": "string",
+                    "description": "Specific instructions for code changes"
+                },
+                "batch_size": {
+                    "type": "integer",
+                    "description": "Number of lines to process in each batch (default is 50)",
+                    "default": 50
+                }
             },
-            "new_content": {
-                "type": "string",
-                "description": "The new content to apply to the file"
-            }
-        },
-        "required": ["path", "new_content"]
-    }
-},
+            "required": ["path", "instructions"]
+        }
+    },
     {
         "name": "read_file",
         "description": "Read the contents of a file at the specified path. Use this when you need to examine the contents of an existing file.",
@@ -350,26 +468,31 @@ tools = [
 ]
 
 # Update the execute_tool function
-def execute_tool(tool_name, tool_input):
-    try:
-        if tool_name == "create_folder":
-            return create_folder(tool_input["path"])
-        elif tool_name == "create_file":
-            return create_file(tool_input["path"], tool_input.get("content", ""))
-        elif tool_name == "edit_and_apply":
-            return edit_and_apply(tool_input["path"], tool_input.get("new_content"))
-        elif tool_name == "read_file":
-            return read_file(tool_input["path"])
-        elif tool_name == "list_files":
-            return list_files(tool_input.get("path", "."))
-        elif tool_name == "tavily_search":
-            return tavily_search(tool_input["query"])
-        else:
-            return f"Unknown tool: {tool_name}"
-    except KeyError as e:
-        return f"Error: Missing required parameter {str(e)} for tool {tool_name}"
-    except Exception as e:
-        return f"Error executing tool {tool_name}: {str(e)}"
+async def execute_tool(tool_name, tool_input):
+            try:
+                if tool_name == "create_folder":
+                    return create_folder(tool_input["path"])
+                elif tool_name == "create_file":
+                    return create_file(tool_input["path"], tool_input.get("content", ""))
+                elif tool_name == "edit_and_apply":
+                    return await edit_and_apply(
+                        tool_input["path"],
+                        tool_input["instructions"],
+                        batch_size=tool_input.get("batch_size", 10),
+                        is_automode=automode
+                    )
+                elif tool_name == "read_file":
+                    return read_file(tool_input["path"])
+                elif tool_name == "list_files":
+                    return list_files(tool_input.get("path", "."))
+                elif tool_name == "tavily_search":
+                    return tavily_search(tool_input["query"])
+                else:
+                    return f"Unknown tool: {tool_name}"
+            except KeyError as e:
+                return f"Error: Missing required parameter {str(e)} for tool {tool_name}"
+            except Exception as e:
+                return f"Error executing tool {tool_name}: {str(e)}"
 
 def encode_image_to_base64(image_path):
     try:
@@ -398,7 +521,7 @@ def execute_goals(goals):
             console.print(Panel("Exiting automode.", title="Automode", style="bold green"))
             break
 
-def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
+async def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
     global conversation_history, automode
 
     current_conversation = []
@@ -448,7 +571,7 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
         if e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
             time.sleep(5)
-            return chat_with_claude(user_input, image_path, current_iteration, max_iterations)
+            return await chat_with_claude(user_input, image_path, current_iteration, max_iterations)
         else:
             console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
             return "I'm sorry, there was an error communicating with the AI. Please try again.", False
@@ -479,12 +602,12 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
         console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
 
         try:
-            result = execute_tool(tool_name, tool_input)
+            result = await execute_tool(tool_name, tool_input)
             console.print(Panel(result, title_align="left", title="Tool Result", style="green"))
         except Exception as e:
             result = f"Error executing tool: {str(e)}"
             console.print(Panel(result, title="Tool Execution Error", style="bold red"))
-        
+
         current_conversation.append({
             "role": "assistant",
             "content": [
@@ -538,7 +661,7 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
 
     return assistant_response, exit_continuation
 
-def main():
+async def main():
     global automode, conversation_history
     console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Image Support!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
@@ -558,7 +681,7 @@ def main():
 
             if os.path.isfile(image_path):
                 user_input = console.input("[bold cyan]You (prompt for image):[/bold cyan] ")
-                response, _ = chat_with_claude(user_input, image_path)
+                response, _ = await chat_with_claude(user_input, image_path)
             else:
                 console.print(Panel("Invalid image path. Please try again.", title="Error", style="bold red"))
                 continue
@@ -578,7 +701,7 @@ def main():
                 iteration_count = 0
                 try:
                     while automode and iteration_count < max_iterations:
-                        response, exit_continuation = chat_with_claude(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
+                        response, exit_continuation = await chat_with_claude(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
 
                         if exit_continuation or CONTINUATION_EXIT_PHRASE in response:
                             console.print(Panel("Automode completed.", title_align="left", title="Automode", style="green"))
@@ -604,7 +727,7 @@ def main():
 
             console.print(Panel("Exited automode. Returning to regular chat.", style="green"))
         else:
-            response, _ = chat_with_claude(user_input)
+            response, _ = await chat_with_claude(user_input)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
