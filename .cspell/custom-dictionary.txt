@@ -1,0 +1,10 @@
+automode
+autouse
+dotenv
+keepends
+MAINMODEL
+monokai
+tavily
+Tavily
+tofile
+TOOLCHECKERMODEL

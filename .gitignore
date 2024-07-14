@@ -1,0 +1,37 @@
+# .gitignore
+
+# SQLite database
+conversation_state.db
+
+# Python-related files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyc
+
+# Virtual environment
+venv/
+env/
+*.env
+.flox
+
+# IDE-specific files
+.vscode/
+.idea/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Other files you might want to ignore
+*.bak
+*.swp
+*.swo
+
+.env
+
+*.db
