@@ -14,9 +14,9 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from tavily import TavilyClient
 
-console = Console()
-
 import config as cfg
+
+console = Console()
 
 # Add these constants at the top of the file
 CONTINUATION_EXIT_PHRASE = cfg.CONTINUATION_EXIT_PHRASE

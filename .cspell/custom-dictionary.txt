@@ -1,9 +1,12 @@
 automode
 autouse
+delenv
 dotenv
+excinfo
 keepends
 MAINMODEL
 monokai
+setenv
 tavily
 Tavily
 tofile

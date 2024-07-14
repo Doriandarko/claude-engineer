@@ -23,7 +23,8 @@ def load_config():
             del sys.modules["config"]
         import config
 
-        return importlib.reload(config)
+        config.load_env()  # Explicitly call load_env() after import
+        return config
 
     return _load_config
 
@@ -36,9 +37,11 @@ def mock_dotenv_load(monkeypatch):
 def test_env_variables_loaded(monkeypatch, load_config):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test_anthropic_key")
     monkeypatch.setenv("TAVILY_API_KEY", "test_tavily_key")
+    monkeypatch.setenv("CONTINUATION_EXIT_PHRASE", "CUSTOM_EXIT_PHRASE")
     config = load_config()
     assert config.ANTHROPIC_API_KEY == "test_anthropic_key"
     assert config.TAVILY_API_KEY == "test_tavily_key"
+    assert config.CONTINUATION_EXIT_PHRASE == "CUSTOM_EXIT_PHRASE"
 
 
 def test_tavily_api_key_missing(monkeypatch, load_config):
@@ -70,7 +73,6 @@ def test_load_dotenv_file(monkeypatch, load_config):
     )
     monkeypatch.setattr("builtins.open", mock_open(read_data=mock_env_content))
     monkeypatch.setattr("os.path.exists", lambda x: True)
-    monkeypatch.setattr("dotenv.load_dotenv", lambda: None)
 
     def mock_getenv(key, default=None):
         if key == "ANTHROPIC_API_KEY":
