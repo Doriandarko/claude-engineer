@@ -425,7 +425,11 @@ def execute_goals(goals):
 
 
 def chat_with_claude(
-    user_input, image_path=None, current_iteration=None, max_iterations=None
+    user_input,
+    image_path=None,
+    current_iteration=None,
+    max_iterations=None,
+    save_after_interaction=True,
 ):
     global conversation_history, automode
 
@@ -627,6 +631,9 @@ def chat_with_claude(
     conversation_history = messages + [
         {"role": "assistant", "content": assistant_response}
     ]
+
+    if save_after_interaction:
+        save_state()  # Only save state if save_after_interaction is True
 
     return assistant_response, exit_continuation
 

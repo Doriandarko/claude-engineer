@@ -1,6 +1,9 @@
 # database.py
+import datetime as dt
+import json
 import sqlite3
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 from config import DB_FILE
@@ -63,11 +66,14 @@ def ensure_table_exists(table_name: str) -> List[List[Tuple]]:
         return execute_transaction(
             [
                 (
-                    f"""
-            CREATE TABLE IF NOT EXISTS {table_name} (
+                    """
+            CREATE TABLE IF NOT EXISTS conversation_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
                 role TEXT NOT NULL,
-                content TEXT NOT NULL
+                content TEXT NOT NULL,
+                metadata TEXT
             )
             """,
                     (),
@@ -82,11 +88,19 @@ def init_db():
     ensure_table_exists("conversation_history")
 
 
-def load_state():
+def load_state(session_id: str = None):
     global conversation_history
     ensure_table_exists("conversation_history")
+    where_clause = ""
+    if session_id is not None:
+        where_clause = "WHERE session_id = ?"
     results = execute_transaction(
-        [("SELECT role, content FROM conversation_history ORDER BY id", ())]
+        [
+            (
+                f"SELECT role, content FROM conversation_history {where_clause} ORDER BY id",
+                (session_id,) if session_id is not None else (),
+            )
+        ]
     )
     conversation_history = [
         {"role": role, "content": content} for role, content in results[0]
@@ -94,22 +108,46 @@ def load_state():
     return conversation_history
 
 
-def save_state():
+def save_state(session_id: str):
     global conversation_history
     ensure_table_exists("conversation_history")
 
-    queries = [("DELETE FROM conversation_history", ())]
+    queries = [("DELETE FROM conversation_history WHERE session_id = ?", (session_id,))]
     queries.extend(
         [
             (
-                "INSERT INTO conversation_history (role, content) VALUES (?, ?)",
-                (entry["role"], entry["content"]),
+                "INSERT INTO conversation_history (session_id, timestamp, role, content, metadata) VALUES (?, ?, ?, ?, ?)",
+                (
+                    session_id,
+                    dt.datetime.now(dt.UTC).isoformat(),
+                    entry["role"],
+                    entry["content"],
+                    json.dumps(entry.get("metadata", {})),
+                ),
             )
             for entry in conversation_history
         ]
     )
 
     execute_transaction(queries)
+
+
+def save_message(
+    session_id: str, role: str, content: str, metadata: Dict[str, Any] = None
+):
+    ensure_table_exists("conversation_history")
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    metadata_json = json.dumps(metadata) if metadata else None
+
+    execute_transaction(
+        [
+            (
+                "INSERT INTO conversation_history (session_id, timestamp, role, content, metadata) VALUES (?, ?, ?, ?, ?)",
+                (session_id, timestamp, role, content, metadata_json),
+            )
+        ]
+    )
 
 
 # Initialize the database

@@ -1,6 +1,8 @@
 # tests/test_database.py
+import datetime
 import os
 import sqlite3
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,6 +16,7 @@ from database import (
     execute_transaction,
     init_db,
     load_state,
+    save_message,
     save_state,
 )
 
@@ -30,6 +33,11 @@ def use_in_memory_database():
     database.close_db_connection()  # Close the connection after the test
     database.conversation_history = []  # Reset conversation_history after test
     database.DB_FILE = original_db_file
+
+
+@pytest.fixture
+def session_id():
+    return str(uuid.uuid4())
 
 
 def test_execute_transaction():
@@ -66,22 +74,23 @@ def test_init_db():
         assert cursor.fetchone() is not None
 
 
-def test_load_state():
+def test_load_state(session_id):
     ensure_table_exists("conversation_history")
+    current_time = datetime.datetime.now(datetime.UTC).isoformat()
     execute_transaction(
         [
             (
-                "INSERT INTO conversation_history (role, content) VALUES (?, ?)",
-                ("user", "Hello"),
+                "INSERT INTO conversation_history (session_id, timestamp, role, content) VALUES (?, ?, ?, ?)",
+                (session_id, current_time, "user", "Hello"),
             ),
             (
-                "INSERT INTO conversation_history (role, content) VALUES (?, ?)",
-                ("assistant", "Hi there!"),
+                "INSERT INTO conversation_history (session_id, timestamp, role, content) VALUES (?, ?, ?, ?)",
+                (session_id, current_time, "assistant", "Hi there!"),
             ),
         ]
     )
 
-    loaded_history = load_state()
+    loaded_history = load_state(session_id)
     assert loaded_history == [
         {"role": "user", "content": "Hello"},
         {"role": "assistant", "content": "Hi there!"},
@@ -89,18 +98,46 @@ def test_load_state():
     assert database.conversation_history == loaded_history
 
 
-def test_save_state():
+def test_save_state(session_id):
     database.conversation_history = [
         {"role": "user", "content": "Hello"},
         {"role": "assistant", "content": "Hi there!"},
     ]
 
-    save_state()
+    save_state(session_id)
 
     result = execute_transaction(
-        [("SELECT role, content FROM conversation_history", ())]
+        [
+            (
+                "SELECT role, content FROM conversation_history WHERE session_id = ?",
+                (session_id,),
+            )
+        ]
     )
     assert result == [[("user", "Hello"), ("assistant", "Hi there!")]]
+
+
+def test_save_message(session_id):
+    save_message(session_id, "user", "Hello", {"timestamp": "2023-01-01T00:00:00"})
+    save_message(
+        session_id, "assistant", "Hi there!", {"timestamp": "2023-01-01T00:00:01"}
+    )
+
+    result = execute_transaction(
+        [
+            (
+                "SELECT role, content, metadata FROM conversation_history WHERE session_id = ? ORDER BY id",
+                (session_id,),
+            )
+        ]
+    )
+    assert len(result[0]) == 2
+    assert result[0][0] == ("user", "Hello", '{"timestamp": "2023-01-01T00:00:00"}')
+    assert result[0][1] == (
+        "assistant",
+        "Hi there!",
+        '{"timestamp": "2023-01-01T00:00:01"}',
+    )
 
 
 @patch("database.get_db_connection")
