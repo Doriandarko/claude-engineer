@@ -1,3 +1,4 @@
+# region: Initialization
 import os
 import json
 from tavily import TavilyClient
@@ -12,6 +13,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
+from dataclasses import dataclass
 
 console = Console()
 
@@ -48,7 +50,9 @@ conversation_history = []
 
 # automode flag
 automode = False
+# endregion: Initialization
 
+# region: Native prompts
 # Base system prompt
 base_system_prompt = """
 You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model. You are an exceptional software developer with vast knowledge across multiple programming languages, frameworks, and best practices. Your capabilities include:
@@ -133,7 +137,435 @@ When in automode:
 
 YOU NEVER ASK "Is there anything else you'd like to add or modify in the project or code?" or "Is there anything else you'd like to add or modify in the project?" or anything like that once you feel the request is complete. just say "AUTOMODE_COMPLETE" in your response to exit the loop!
 """
+# endregion: Native prompts
 
+# region: Sonar prompts
+
+@dataclass
+class SonarPrompts:
+    what_is_sonar: str
+    sonar_folder_structure: str
+
+def get_sonar_prompts() -> SonarPrompts:
+    what_is_sonar = """
+      Sonar is a multi-tenant, multi-app platform that allows you to build and deploy your own frontend web apps. It provides an automated API that manages communication between the frontend and backend systems. The backend is a relational database off which the automated API is built.
+
+      Here are the key concepts you need to know about Sonar:
+      - Apps: An App is a frontend system definition. An App is mostly or completely defined in a folder of shape `src/apps/<app_name>`.
+      - LocalEntity: A LocalEntity is a TypeScript object that represents a table in the database. It is used to define the structure of the table and the data that is displayed in the app.
+      - RemoteEntity: A RemoteEntity is a SQL query that represents a table in the database. It is used to define the structure of the table and the data that is displayed in the app.
+
+      Your help may be requested for the following tasks:
+      1. Creating new Apps
+      2. Developing LocalEntity and RemoteEntity definitions
+      3. Defining the menu structure for an App
+      4. Connecting an App to the Sonar platform
+    """
+    
+    how_to_create_app = """
+
+    """
+
+    sonar_prompt = """
+        Currently, you are working with Sonar. Sonar is multi-tenant multi-app platform. It has nothing to do with epynomous code quality tool.
+        It is a platform that allows you to build and deploy your own frontent web apps (Apps), using automated API that manages communication between the frontend and backend systems.
+        Backend is relational database off which the automated API is built.
+
+        Here are the concepts you need to know:
+        **Apps**: An App is a frontend system definition. An App mostly or completely defined in a folder of shape src/apps/<app_name>.
+        **LocalEntity**: LocalEntity is a TypeScript object that represents a table in the database. It is used to define the structure of the table and the data that is displayed in the app.
+        **RemoteEntity**: RemoteEntity is a SQL query that represents a table in the database. It is used to define the structure of the table and the data that is displayed in the app.
+
+        Your help may be asked for the following tasks:
+        ** Creating new Apps **
+        1. ask user for the name of the App folder to create, then use tool copy_folder_with_content to copy src/apps/_template to src/apps/<app_name>
+        2. ask user for display name of the App, then use tool replace_string_in_file to replace 'Example title' with the display name in src/apps/<app_name>/index.ts
+        3. ask user whether she has a text file with a description of what the App should do.
+            3a. If yes, ask them to place the file in the folder /specs.
+            3b. If no, engage them in the chat to get a sense of what the App should do. Then, create a file in /specs with the description; name it generated_from_chat_[YYYYMMDD_HHMM].txt
+        4. Read the file in /specs and develop it further:
+            4a. Construct entity relationship diagram (ERD) for the App. Save its mermaidjs representation in /specs/erd.md
+            Example:
+            ~~~mermaid
+                %%{init: {'theme':'neutral'}}%%
+                erDiagram
+                    EVENT ||--o{ SIGNAL : has
+                    EVENT {
+                    int ID
+                    timestamp CreatedAt
+                    int CreatedBy
+                    int EventStatus
+                    int Building
+                    int Area
+                    int IOPSStage
+                    int ProcessStep
+                    int Product
+                    string DetectedAt
+                    string OccurredAt
+                    int DetectedBy
+                    string QCTestingRequiredFlag
+                    int SampleSubmittedToQCLabBy
+                    int QCTestingSubmittedBy
+                    int TriageLead
+                    }
+                    EVENT ||--o{ TRIAGE_PARTICIPANT : has
+                    SIGNAL ||--|{ SIGNAL_TYPE : has
+                    SIGNAL {
+                    int ID
+                    timestamp CreatedAt
+                    int CreatedBy
+                    int EventID
+                    int SignalTypeID
+                    }
+                    TRIAGE_PARTICIPANT ||--|{ USER : has
+                    TRIAGE_PARTICIPANT {
+                    int ID
+                    timestamp CreatedAt
+                    int CreatedBy
+                    int EventID
+                    int UserID
+                    int OrgFunction
+                    }
+                    TRIAGE_PARTICIPANT ||--|{ ORG_FUNCTION : has
+                    EVENT ||--|{ BUILDING : has
+                    EVENT ||--|{ AREA : has
+                    EVENT ||--|{ IOPS_STAGE : has
+                    EVENT ||--|{ PROCESS_STEP : has
+                    EVENT ||--|{ PRODUCT : has
+                    EVENT ||--|{ EVENT_STATUS : has
+                    EVENT ||--|{ USER : has
+                    SIGNAL_TYPE ||--|{ SIGNAL_CATEGORY_LEVEL_1 : has
+                    SIGNAL_TYPE {
+                    int ID
+                    int ProductID
+                    int ProcessStepID
+                    int IOPStageID
+                    int AreaID
+                    int OrgID
+                    int PostSignalCaptureActionID
+                    int RiskLevelID
+                    int SignalCategoryLevel1ID
+                    int SignalCategoryLevel2ID
+                    int SignalCategoryLevel3ID
+                    int SignalCategoryLevel4ID
+                    int SignalCategoryLevel5ID
+                    string SignalTypeName
+                    string SignalTypeDescription
+                    }
+                    SIGNAL_TYPE ||--|{ SIGNAL_CATEGORY_LEVEL_2 : has
+                    SIGNAL_TYPE ||--|{ SIGNAL_CATEGORY_LEVEL_3 : has
+                    SIGNAL_TYPE ||--|{ SIGNAL_CATEGORY_LEVEL_4 : has
+                    SIGNAL_TYPE ||--|{ SIGNAL_CATEGORY_LEVEL_5 : has
+                    SIGNAL_TYPE ||--|{ RISK_LEVEL : has
+                    SIGNAL_TYPE ||--|{ POST_SIGNAL_CAPTURE_ACTION : has
+                    SIGNAL_TYPE ||--|{ ORG : has
+                    SIGNAL_TYPE ||--|{ AREA : has
+                    SIGNAL_TYPE ||--|{ PROCESS_STEP : has
+                    SIGNAL_TYPE ||--|{ IOPS_STAGE : has
+                    SIGNAL_TYPE ||--|{ PRODUCT : has
+                ~~~
+            4b. Construct a list of entities and their relationships. Save it in /specs/entities.md
+            4c. Construct our best shot view of the App's menu. Save it in /specs/menu.md
+                Example:
+                    # Application Menu Structure
+
+                    ## Submit Event
+                    - Create new Event
+                    - Drafts
+
+                    ## Events by Status
+                    - Awaiting sample submission
+                    - Awaiting test results
+                    - Processing stage
+                    - Resulted in Minor Deviation
+                    - Resulted in Deviation with additional investigation
+                    - Track & Trend
+                    - Deleted
+
+                    ## Events' Signals
+                    - Signals
+
+                    ## Master data
+                    - Event statuses
+                    - Event localization dimensions
+                    - Products
+                    - DMS Stages
+                    - Areas
+                    - Process Steps
+                    - Buildings
+                    - Org Functions
+
+                    ## Signal types
+                    - Signal categories
+                    - Signal categories, level 1
+                    - Signal categories, level 2
+                    - Signal categories, level 3
+                    - Signal categories, level 4
+                    - Signal categories, level 5
+                    - Signal attributes
+                    - Risk levels
+                    - Post signal capture actions
+                    - Deviation categories
+                    - Post deviation determination actions
+
+                    ## Documentation
+                    - Event state transition diagram
+                    - FRD
+
+                    ## User management
+                    - Create user
+                    - User list
+                    - Login attempts
+                    - Roles
+                    - Impersonate user
+        5. Add new LocalEntityNames (from 4b) to src/types/localEntityNames.ts by using replace_string_in_file tool.
+            Example:
+                to-be-replaced string:
+                `export type LocalEntityName =`
+                new string:
+                `export type LocalEntityName =
+                'app31.statuses' |
+                'app31.risks' |`
+        6. Add new RemoteEntityNames (from 4b) to src/types/remoteEntityNames.ts by using replace_string_in_file tool.
+            For now assume that RemoteEntityNames are 1-to-1 with LocalEntityNames.
+            Example:
+                to-be-replaced string:
+                `export type RemoteEntityName =`
+                new string:
+                `export type RemoteEntityName =
+                'app31.statuses' |
+                'app31.risks' |`
+        7. Create LocalEntity definitions in src/apps/<app_name>/entities folder. Use create_file tool to create a new file for each entity.
+            Read src/types/index.ts to understand the meaning of the flags and functions used in the file.
+            Example:
+                src/apps/app29/entities/incoming_invoices.ts
+                    /* eslint-disable camelcase */
+                    import { Id, Column, MenuItem, singleControlledAction } from 'src/types'
+                    import VuexModuleConstructor from 'src/utils/vuexModuleConstructor/VuexModuleConstructor'
+                    import { isInteger, inlineEdit, hideWhenCreatingAndEditing } from 'src/types/columnFlags'
+                    import localEntityListInMenuItem from 'src/utils/mainMenuOperations/localEntityListInMenuItem'
+                    import { RemoteEntityName } from 'src/types/remoteEntityNames'
+                    import { LocalEntityName } from 'src/types/localEntityNames'
+                    import showGrandTotalsForSummableColumns from 'src/utils/entityOperations/columns/showGrandTotalsForSummableColumns'
+                    import { Vendor } from '../vendors/vendors'
+
+                    export interface IncomingInvoice {
+                    id: Id
+                    vendor_id: Vendor['id']
+                    invoice_date: Date
+                    received_on: Date
+                    amount: number
+                    description: string
+                    }
+
+                    type T = IncomingInvoice
+
+                    const controlledActions = singleControlledAction(860)
+
+                    const columns = (): Column<T>[] => {
+                    return [
+                        { name: 'row_menu', style: 'width:20px', hideWhenCreatingAndEditing, type: 'row_menu', menuItemShortcuts: ['del', 'copy'] },
+                        { name: 'id', style: 'width:30px', isInteger, hideWhenCreatingAndEditing },
+                        { name: 'vendor_id', style: 'width:30px', references: 'app29.vendors', editable: true },
+                        { name: 'invoice_date', style: 'width:30px', inlineEdit },
+                        { name: 'received_on', style: 'width:30px', inlineEdit },
+                        { name: 'amount', style: 'width:30px', isInteger, inlineEdit },
+                        { name: 'description', style: 'width:30px', inlineEdit }
+                    ]
+                    }
+
+                    const remoteEntityName: RemoteEntityName = 'app29.incoming_invoices'
+                    const localEntityName: LocalEntityName = remoteEntityName
+
+                    const localEntity = VuexModuleConstructor({
+                    columns,
+                    remoteEntityName,
+                    apiVersion: 1,
+                    controlledActions,
+                    pageTitle: 'Incoming invoices'
+                    })
+
+                    export default localEntity
+
+                    export const incoming_invoices__menuItem = (): MenuItem => ({
+                    label: 'Incoming invoices',
+                    icon: { name: 'mdi-keyboard-outline' },
+                    prefetch: true,
+                    ...localEntityListInMenuItem<T>({
+                        localEntityNameProp: localEntityName,
+                        ...showGrandTotalsForSummableColumns({ cols: columns() })
+                    })
+                    })
+
+        8. Create RemoteEntity definitions in src/apps/<app_name>/entities folder. Use create_file tool to create a new file for each entity.
+            Ask user schema name of the app. It must start with 'app' and be followed by a number. E.g., `app29`.
+            Example:
+                src/apps/app29/entities/incoming_invoices.pgsql
+                create or replace procedure app29.incoming_invoices__init ()
+                language plpgsql
+                as $$
+                begin
+
+                if not relation_exists('app29.incoming_invoices') then
+                    create table app29.incoming_invoices (
+                        id int primary key generated always as identity
+                        , vendor_id int references app29.vendors(id)
+                        , invoice_date date
+                        , received_on date
+                        , amount numeric
+                        , description text
+                    );
+                end if;
+
+
+                insert into meta.entities ( name )
+                select 'app29.incoming_invoices'
+                where not exists ( select 1 from meta.entities where name = 'app29.incoming_invoices' );
+
+                end;
+                $$;
+
+                call app29.incoming_invoices__init();
+
+        9. Write to src/apps/<app_name>/config/mastersToFetch.ts the names of the entities that should be fetched from the backend as master data.
+            Example:
+            src/apps/app29/config/mastersToFetch.ts
+
+            import { LocalEntityName } from 'src/types/localEntityNames'
+
+            const mastersToFetch: LocalEntityName[] = [
+                'app29.vendors',
+                'app29.customers',
+                'app29.vendor_contracts',
+                'app29.customer_contracts',
+                'app29.incoming_invoices',
+                'app29.outgoing_invoices',
+                'app29.incoming_payments',
+                'app29.outgoing_payments'
+            ]
+
+            export default mastersToFetch
+
+        10. Write to src/apps/<app_name>/config/entitiesToRegister.ts the names of the entities that should be registered in the app.
+            Example:
+            src/apps/app29/config/entitiesToRegister.ts
+            /* eslint-disable camelcase */
+            import vendors from '../entities/vendors/vendors'
+            import vendor_contracts from '../entities/vendor_contracts/vendor_contracts'
+            import incoming_invoices from '../entities/incoming_invoices/incoming_invoices'
+            import outgoing_invoices from '../entities/outgoing_invoices/outgoing_invoices'
+            import outgoing_invoice_lines from '../entities/outgoing_invoices/outgoing_invoice_lines'
+            import incoming_payments from '../entities/incoming_payments/incoming_payments'
+            import outgoing_payments from '../entities/outgoing_payments/outgoing_payments'
+            import incoming_paymanets_rel_outgoing_invoices from '../entities/incoming_paymanets_rel_outgoing_invoices/incoming_paymanets_rel_outgoing_invoices'
+            import customers from '../entities/customers/customers'
+            import { LocalEntityNameToLocalEntityMap } from 'src/types'
+
+            const vuexModulesToRegister: LocalEntityNameToLocalEntityMap = {
+                'app29.vendors': vendors,
+                'app29.vendor_contracts': vendor_contracts,
+                'app29.incoming_invoices': incoming_invoices,
+                'app29.outgoing_invoices': outgoing_invoices,
+                'app29.outgoing_invoices__open': outgoing_invoices,
+                'app29.outgoing_invoice_lines': outgoing_invoice_lines,
+                'app29.incoming_payments': incoming_payments,
+                'app29.incoming_payments__unallocated': incoming_payments,
+                'app29.outgoing_payments': outgoing_payments,
+                'app29.incoming_paymanets_rel_outgoing_invoices': incoming_paymanets_rel_outgoing_invoices,
+                'app29.customers': customers
+            }
+
+            export default vuexModulesToRegister
+
+        11. Populate src/menus/default.ts with the menu structure, using menu items exported from the entities and menus files.
+            Example:
+            src/apps/app29/menus/default.ts
+            /* eslint-disable camelcase */
+            import { MenuItem } from 'src/types'
+            import { customers__menuItem } from '../entities/customers/customers'
+            import { incoming_invoices__menuItem } from '../entities/incoming_invoices/incoming_invoices'
+            import { incoming_paymanets_rel_outgoing_invoices__menuItem } from '../entities/incoming_paymanets_rel_outgoing_invoices/incoming_paymanets_rel_outgoing_invoices'
+            import { incoming_payments__menuItem, incoming_payments__unsettled__menuItem } from '../entities/incoming_payments/incoming_payments'
+            import { outgoing_invoices__menuItem, outgoing_invoices__open__menuItem } from '../entities/outgoing_invoices/outgoing_invoices'
+            import { outgoing_payments__menuItem } from '../entities/outgoing_payments/outgoing_payments'
+            import { vendors__menuItem } from '../entities/vendors/vendors'
+            import { vendor_contracts__menuItem } from '../entities/vendor_contracts/vendor_contracts'
+
+            const menuItems = (ctx: any): MenuItem[] => {
+                return [
+                { label: 'Customers', isHeader: true },
+                outgoing_invoices__menuItem(),
+                outgoing_invoices__open__menuItem(),
+                incoming_payments__menuItem(),
+                incoming_payments__unsettled__menuItem(),
+                incoming_paymanets_rel_outgoing_invoices__menuItem(),
+                customers__menuItem(),
+
+                { label: 'Vendors', isHeader: true },
+                incoming_invoices__menuItem(),
+                outgoing_payments__menuItem(),
+                vendor_contracts__menuItem(),
+                vendors__menuItem(),
+
+                { label: 'Exceptions', isHeader: true },
+                incoming_payments__unsettled__menuItem()
+                ]
+            }
+
+            export default menuItems
+
+        12. Connect the app to the platform by using sonar_connect_app_to_platform tool.
+        """
+
+    sonar_folder_structure = """
+      Typical structure of App folder.
+      |-- index.ts
+      |-- Index.vue
+      |-- config <-- config folder contains the configuration files for the app
+        |-- mastersToFetch.ts <-- mastersToFetch is used to define the master data that needs to be fetched from the backend. Master data is master in this case because it has special treatment: It is loaded at the beginning in full and is always availabe in the app. It is used to populate dropdowns, etc.
+        |-- entitiesToRegister.ts <-- connects the entities to the app. It is used to define which entities are available in the app. Usually, entities defined in folder entities are listed here
+      |-- menus <-- menus are used to define the structure of the sidebar. This is the main and only navigation in the app
+        |-- default.ts <-- default menu is the main menu of the app. It is used to define the structure of the sidebar
+      |-- pages <-- rarely used, because content is mostly displayed in one single big GenericTable component
+        |-- Hello.vue
+      |-- entities <-- entities are the main building blocks of the app. They are the main data structures that are displayed in the app via the GenericTable component
+        |-- customers <-- folder for Entity definition
+          |-- customers.pgsql <-- RemoteEntity definition as a SQL query
+          |-- customers.ts <-- LocalEntity definition as a strongly types TypeScript object
+        |-- customer_contracts
+          |-- customer_contracts.pgsql
+          |-- customer_contracts.ts
+        |-- incoming_invoices
+          |-- incoming_invoices.pgsql
+          |-- incoming_invoices.ts
+        |-- incoming_paymanets_rel_outgoing_invoices
+          |-- incoming_paymanets_rel_outgoing_invoices.pgsql
+          |-- incoming_paymanets_rel_outgoing_invoices.ts
+        |-- incoming_payments
+          |-- incoming_payments.pgsql
+          |-- incoming_payments.ts
+        |-- outgoing_invoices
+          |-- OutgoingInvoiceCard.vue <-- Component used for custom editing or viewing card of the entity. It is used in the GenericTable component, and routed from LocalEntity definition
+          |-- outgoing_invoices.pgsql
+          |-- outgoing_invoices.ts
+          |-- outgoing_invoice_lines.ts <-- also LocalEntity definition. Closely related entities, like lines of an invoice, are usually defined in the same
+        |-- outgoing_payments
+          |-- outgoing_payments.pgsql
+          |-- outgoing_payments.ts
+        |-- vendors
+          |-- vendors.pgsql
+          |-- vendors.ts
+        |-- vendor_contracts
+          |-- vendor_contracts.pgsql
+          |-- vendor_contracts.ts
+    """  
+    
+    return SonarPrompts(what_is_sonar=what_is_sonar, sonar_folder_structure=sonar_folder_structure)
+  
+
+# endregion: Sonar prompts
+
+# region: Tools
 def update_system_prompt(current_iteration=None, max_iterations=None):
     global base_system_prompt, automode_system_prompt
     chain_of_thought_prompt = """
@@ -295,14 +727,59 @@ def list_files_recursively(path=".", depth=0, max_depth=5, exclude_dirs=['dist',
     except Exception as e:
         return f"Error listing files: {str(e)}"
 
+def copy_folder_with_content(src, dest):
+    try:
+        shutil.copytree(src, dest)
+        return f"Folder copied: {src} to {dest}"
+    except Exception as e:
+        return f"Error copying folder: {str(e)}"
+
+def replace_string_in_file(file_path, old_string, new_string):
+    try:
+        with open(file_path, 'r') as file:
+            filedata = file.read()
+
+        new_filedata = filedata.replace(old_string, new_string)
+
+        with open(file_path, 'w') as file:
+            file.write(new_filedata)
+
+        return f"Replaced '{old_string}' with '{new_string}' in {file_path}"
+    except Exception as e:
+        return f"Error replacing string in file: {str(e)}"
+
+def sonar_connect_app_to_platform(app_id, app_folder):
+    ldm_import_location = "src/components/LeftDrawerMenu/index.vue"
+    anchor = '// <-- new-ldm-import-goes-here'
+    ldm_import_line = f"import ldm{app_id} from 'src/apps/{app_folder}/menus/default'"
+    replacement = f"{ldm_import_line}\n{anchor}"
+    replace_string_in_file(ldm_import_location, anchor, replacement)
+
+    anchor2 = '// <-- new-ldm-mapping-goes-here'
+    replacement2 = f",\n{app_id}: ldm{app_id}{anchor2}"
+    replace_string_in_file(ldm_import_location, anchor2, replacement2)
+
+    app_page = "src/components/AppPage/AppPage.vue"
+    anchor3 = '// <-- new-app-page-import-goes-here'
+    import_line3 = f"import appPage{app_id} from 'src/apps/{app_folder}/Index.vue'"
+    replacement3 = f"{import_line3}\n{anchor3}"
+    replace_string_in_file(app_page, anchor3, replacement3)
+
+    anchor4 = '// <-- new-app-page-component-goes-here'
+    replacement4 = f",\nappPage{app_id}{anchor4}"
+    replace_string_in_file(app_page, anchor4, replacement4)
+
 def tavily_search(query):
     try:
         response = tavily.qna_search(query=query, search_depth="advanced")
         return response
     except Exception as e:
         return f"Error performing search: {str(e)}"
+# endregion: Tools
 
-tools = [
+sonar_tools = []
+
+tools = sonar_tools + [
     {
         "name": "create_folder",
         "description": "Create a new folder at the specified path. Use this when you need to create a new directory in the project structure.",
@@ -419,6 +896,62 @@ tools = [
             }
         }
     },
+    { "name": "copy_folder_with_content",
+        "description": "Copy the contents of a folder to a new location. Use this when you need to duplicate a folder and its contents.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "src": {
+                    "type": "string",
+                    "description": "The path of the source folder to copy"
+                },
+                "dest": {
+                    "type": "string",
+                    "description": "The path of the destination folder where the contents will be copied"
+                }
+            },
+            "required": ["src", "dest"]
+        }
+    },
+    { "name": "replace_string_in_file",
+        "description": "Replace a specific string with another string in a file. Use this when you need to update specific content in a file.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "The path of the file to modify"
+                },
+                "old_string": {
+                    "type": "string",
+                    "description": "The string to replace"
+                },
+                "new_string": {
+                    "type": "string",
+                    "description": "The new string to insert"
+                }
+            },
+            "required": ["file_path", "old_string", "new_string"]
+        }
+    },
+    {
+        "name": "sonar_connect_app_to_platform",
+        "description": "Connect the App to the Sonar platform by updating the necessary files.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "app_id": {
+                    "type": "string",
+                    "description": "The ID of the App"
+                },
+                "app_folder": {
+                    "type": "string",
+                    "description": "The folder name of the App"
+                }
+            },
+            "required": ["app_id", "app_folder"]
+        }
+    },
     {
         "name": "tavily_search",
         "description": "Perform a web search using Tavily API to get up-to-date information or additional context. Use this when you need current information or feel a search could provide a better answer.",
@@ -453,6 +986,12 @@ def execute_tool(tool_name, tool_input):
             return list_files_recursively(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
             return tavily_search(tool_input["query"])
+        elif tool_name == "copy_folder_with_content":
+            return copy_folder_with_content(tool_input["src"], tool_input["dest"])
+        elif tool_name == "replace_string_in_file":
+            return replace_string_in_file(tool_input["file_path"], tool_input["old_string"], tool_input["new_string"])
+        elif tool_name == "sonar_connect_app_to_platform":
+            return sonar_connect_app_to_platform(tool_input["app_id"], tool_input["app_folder"])
         else:
             return f"Unknown tool: {tool_name}"
     except KeyError as e:
