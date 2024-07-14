@@ -1,0 +1,2022 @@
+diff --git a/.cspell/custom-dictionary.txt b/.cspell/custom-dictionary.txt
+index 6e631c3..43543b3 100644
+--- a/.cspell/custom-dictionary.txt
++++ b/.cspell/custom-dictionary.txt
+@@ -1,5 +1,11 @@
+ automode
+ autouse
++<<<<<<< HEAD
++dotenv
++keepends
++MAINMODEL
++monokai
++=======
+ delenv
+ dotenv
+ excinfo
+@@ -7,6 +13,7 @@ keepends
+ MAINMODEL
+ monokai
+ setenv
++>>>>>>> adding-sqlite-and-tests
+ tavily
+ Tavily
+ tofile
+diff --git a/.gitignore b/.gitignore
+index 1e8752d..7ae3273 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -34,4 +34,4 @@ Thumbs.db
+ 
+ .env
+ 
+-*.db
+\ No newline at end of file
++*.db
+diff --git a/chat.py b/chat.py
+new file mode 100644
+index 0000000..b67b03d
+--- /dev/null
++++ b/chat.py
+@@ -0,0 +1,135 @@
++from anthropic import Anthropic
++from rich.console import Console
++from rich.markdown import Markdown
++from rich.panel import Panel
++
++from config import ANTHROPIC_API_KEY, MAINMODEL, MAX_TOKENS
++from database import (
++    conversation_history,
++    get_total_tokens,
++    save_state,
++    save_total_tokens,
++)
++from prompts import update_system_prompt
++from tools import execute_tool, tools
++
++console = Console()
++
++
++def get_client():
++    Anthropic(api_key=ANTHROPIC_API_KEY)
++
++
++def chat_with_claude(
++    user_input, image_path=None, current_iteration=None, max_iterations=None
++):
++    global conversation_history
++    client = get_client()
++
++    total_tokens = get_total_tokens()
++    if total_tokens >= MAX_TOKENS:
++        console.print(
++            Panel(
++                "Token limit reached. Please start a new session.",
++                title="Token Limit",
++                style="bold red",
++            )
++        )
++        return "Token limit reached. Please start a new session.", False
++
++    current_conversation = []
++
++    if image_path:
++        # Handle image processing here (not implemented in this example)
++        pass
++    else:
++        current_conversation.append({"role": "user", "content": user_input})
++
++    messages = conversation_history + current_conversation
++
++    try:
++        response = client.messages.create(
++            model=MAINMODEL,
++            max_tokens=4000,
++            system=update_system_prompt(current_iteration, max_iterations),
++            messages=messages,
++            tools=tools,
++            tool_choice={"type": "auto"},
++        )
++    except Exception as e:
++        console.print(
++            Panel(f"API Error: {str(e)}", title="API Error", style="bold red")
++        )
++        return (
++            "I'm sorry, there was an error communicating with the AI. Please try again.",
++            False,
++        )
++
++    assistant_response = ""
++    exit_continuation = False
++    tool_uses = []
++
++    for content_block in response.content:
++        if content_block.type == "text":
++            assistant_response += content_block.text
++        elif content_block.type == "tool_use":
++            tool_uses.append(content_block)
++
++    console.print(
++        Panel(
++            Markdown(assistant_response),
++            title="Claude's Response",
++            title_align="left",
++            expand=False,
++        )
++    )
++
++    for tool_use in tool_uses:
++        tool_name = tool_use.name
++        tool_input = tool_use.input
++        tool_use_id = tool_use.id
++
++        console.print(Panel(f"Tool Used: {tool_name}", style="green"))
++        console.print(Panel(f"Tool Input: {tool_input}", style="green"))
++
++        result = execute_tool(tool_name, tool_input)
++        console.print(
++            Panel(result, title_align="left", title="Tool Result", style="green")
++        )
++
++        current_conversation.append(
++            {
++                "role": "assistant",
++                "content": [
++                    {
++                        "type": "tool_use",
++                        "id": tool_use_id,
++                        "name": tool_name,
++                        "input": tool_input,
++                    }
++                ],
++            }
++        )
++        current_conversation.append(
++            {
++                "role": "user",
++                "content": [
++                    {
++                        "type": "tool_result",
++                        "tool_use_id": tool_use_id,
++                        "content": result,
++                    }
++                ],
++            }
++        )
++
++    conversation_history = messages + [
++        {"role": "assistant", "content": assistant_response}
++    ]
++
++    new_tokens = response.usage.input_tokens + response.usage.output_tokens
++    save_total_tokens(total_tokens + new_tokens)
++
++    save_state()
++
++    return assistant_response, exit_continuation
+diff --git a/config.py b/config.py
+index 6653043..6c65411 100644
+--- a/config.py
++++ b/config.py
+@@ -12,23 +12,30 @@ DB_FILE = "conversation_state.db"
+ MAINMODEL = "claude-3-5-sonnet-20240620"
+ TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
+ 
++# API Keys
++ANTHROPIC_API_KEY = None
++TAVILY_API_KEY = None
+ 
+-def load_env():
+-    # Load environment variables from .env file
+-    load_dotenv()
+ 
+-    # Override constants if set in environment
++def load_env():
+     global CONTINUATION_EXIT_PHRASE, MAX_CONTINUATION_ITERATIONS, MAX_TOKENS, DB_FILE
+     global MAINMODEL, TOOLCHECKERMODEL
+     global ANTHROPIC_API_KEY, TAVILY_API_KEY
+ 
++    # Load environment variables from .env file
++    load_dotenv()
++
++    # Check if we're in testing mode
++    TESTING = os.getenv("TESTING", "false").lower() == "true"
++
++    # Override constants if set in environment
+     CONTINUATION_EXIT_PHRASE = os.getenv(
+         "CONTINUATION_EXIT_PHRASE", CONTINUATION_EXIT_PHRASE
+     )
+     MAX_CONTINUATION_ITERATIONS = int(
+-        os.getenv("MAX_CONTINUATION_ITERATIONS", MAX_CONTINUATION_ITERATIONS)
++        os.getenv("MAX_CONTINUATION_ITERATIONS", str(MAX_CONTINUATION_ITERATIONS))
+     )
+-    MAX_TOKENS = int(os.getenv("MAX_TOKENS", MAX_TOKENS))
++    MAX_TOKENS = int(os.getenv("MAX_TOKENS", str(MAX_TOKENS)))
+     DB_FILE = os.getenv("DB_FILE", DB_FILE)
+ 
+     MAINMODEL = os.getenv("MAINMODEL", MAINMODEL)
+@@ -39,10 +46,18 @@ def load_env():
+     TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+ 
+     # Validate that API keys are set
+-    if not ANTHROPIC_API_KEY:
+-        raise ValueError("ANTHROPIC_API_KEY is not set in the environment variables")
+-    if not TAVILY_API_KEY:
+-        raise ValueError("TAVILY_API_KEY is not set in the environment variables")
+-
+-
++    if not TESTING:
++        if not ANTHROPIC_API_KEY:
++            raise ValueError(
++                "ANTHROPIC_API_KEY is not set in the environment variables"
++            )
++        if not TAVILY_API_KEY:
++            raise ValueError("TAVILY_API_KEY is not set in the environment variables")
++    else:
++        # Use default values for testing if not set
++        ANTHROPIC_API_KEY = ANTHROPIC_API_KEY or "test_anthropic_key"
++        TAVILY_API_KEY = TAVILY_API_KEY or "test_tavily_key"
++
++
++# Load environment variables when the module is imported
+ load_env()
+diff --git a/database.py b/database.py
+new file mode 100644
+index 0000000..55e175e
+--- /dev/null
++++ b/database.py
+@@ -0,0 +1,169 @@
++import sqlite3
++from contextlib import contextmanager
++from typing import Any, Dict, List, Tuple
++
++from config import DB_FILE
++
++conversation_history: List[Dict[str, Any]] = []
++
++
++_connection = None
++
++
++@contextmanager
++def get_db_connection():
++    global _connection
++    if DB_FILE == ":memory:":
++        if _connection is None:
++            _connection = sqlite3.connect(DB_FILE)
++        conn = _connection
++    else:
++        conn = sqlite3.connect(DB_FILE)
++
++    try:
++        yield conn
++    finally:
++        if DB_FILE != ":memory:":
++            conn.close()
++
++
++def close_db_connection():
++    global _connection
++    if _connection:
++        _connection.close()
++        _connection = None
++
++
++@contextmanager
++def get_db_cursor(conn):
++    cursor = conn.cursor()
++    try:
++        yield cursor
++    finally:
++        cursor.close()
++
++
++def execute_transaction(queries: List[Tuple[str, tuple]]) -> List[List[Tuple]]:
++    results = []
++    with get_db_connection() as conn:
++        with get_db_cursor(conn) as cursor:
++            for query, params in queries:
++                print(f"Executing query: {query}")
++                cursor.execute(query, params)
++                if query.strip().upper().startswith("SELECT"):
++                    results.append(cursor.fetchall())
++                else:
++                    results.append([])
++        conn.commit()
++    return results
++
++
++def ensure_table_exists(table_name: str) -> List[List[Tuple]]:
++    if table_name == "conversation_history":
++        return execute_transaction(
++            [
++                (
++                    """
++            CREATE TABLE IF NOT EXISTS conversation_history (
++                id INTEGER PRIMARY KEY AUTOINCREMENT,
++                role TEXT NOT NULL,
++                content TEXT NOT NULL
++            )
++            """,
++                    (),
++                )
++            ]
++        )
++    elif table_name == "token_count":
++        return execute_transaction(
++            [
++                (
++                    """
++            CREATE TABLE IF NOT EXISTS token_count (
++                id INTEGER PRIMARY KEY CHECK (id = 1),
++                total_tokens INTEGER
++            )
++            """,
++                    (),
++                )
++            ]
++        )
++    else:
++        raise ValueError(f"Unknown table name: {table_name}")
++
++
++def init_db():
++    ensure_table_exists("conversation_history")
++    ensure_table_exists("token_count")
++
++
++def load_state():
++    global conversation_history
++    ensure_table_exists("conversation_history")
++    results = execute_transaction(
++        [("SELECT role, content FROM conversation_history ORDER BY id", ())]
++    )
++    conversation_history = [
++        {"role": role, "content": content} for role, content in results[0]
++    ]
++    print(f"Loaded conversation history: {conversation_history}")
++    return conversation_history
++
++
++def get_total_tokens() -> int:
++    ensure_table_exists("token_count")
++    results = execute_transaction(
++        [("SELECT total_tokens FROM token_count WHERE id = 1", ())]
++    )
++    return results[0][0][0] if results[0] else 0
++
++
++def save_total_tokens(tokens: int):
++    ensure_table_exists("token_count")
++    execute_transaction(
++        [
++            (
++                "INSERT OR REPLACE INTO token_count (id, total_tokens) VALUES (1, ?)",
++                (tokens,),
++            )
++        ]
++    )
++
++
++def save_state():
++    global conversation_history
++    ensure_table_exists("conversation_history")
++
++    queries = [("DELETE FROM conversation_history", ())]
++    queries.extend(
++        [
++            (
++                "INSERT INTO conversation_history (role, content) VALUES (?, ?)",
++                (entry["role"], entry["content"]),
++            )
++            for entry in conversation_history
++        ]
++    )
++
++    execute_transaction(queries)
++
++
++def save_conversation_history(history):
++    queries = [("DELETE FROM conversation_history", ())]
++    queries.extend(
++        [
++            (
++                "INSERT INTO conversation_history (role, content) VALUES (?, ?)",
++                (entry["role"], entry["content"]),
++            )
++            for entry in history
++        ]
++    )
++    execute_transaction(queries)
++
++
++# Initialize the database
++init_db()
++
++# Load the state at the start of the session
++load_state()
+diff --git a/main.py b/main.py
+index 676d309..1acd815 100644
+--- a/main.py
++++ b/main.py
+@@ -1,20 +1,11 @@
+-import base64
+-import difflib
+-import io
+-import json
+-import os
+-import re
+-import time
+-
+-from anthropic import Anthropic, APIError, APIStatusError
+-from PIL import Image
++from anthropic import Anthropic
+ from rich.console import Console
+-from rich.markdown import Markdown
+ from rich.panel import Panel
+-from rich.syntax import Syntax
+ from tavily import TavilyClient
+ 
+ import config as cfg
++from chat import chat_with_claude
++from database import save_state
+ 
+ console = Console()
+ 
+@@ -38,598 +29,6 @@ conversation_history = []
+ # automode flag
+ automode = False
+ 
+-# base prompt
+-base_system_prompt = """
+-You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, specializing in software development. Your capabilities include:
+-
+-1. Creating and managing project structures
+-2. Writing, debugging, and improving code across multiple languages
+-3. Providing architectural insights and applying design patterns
+-4. Staying current with the latest technologies and best practices
+-5. Analyzing and manipulating files within the project directory
+-6. Performing web searches for up-to-date information
+-
+-Available tools and their optimal use cases:
+-
+-1. create_folder: Create new directories in the project structure.
+-2. create_file: Generate new files with specified content.
+-3. edit_and_apply: Examine and modify existing files.FULLY.
+-4. read_file: View the contents of existing files without making changes.
+-5. list_files: Understand the current project structure or locate specific files.
+-6. tavily_search: Obtain current information on technologies, libraries, or best practices.
+-7. Analyzing images provided by the user
+-
+-Tool Usage Guidelines:
+-- Always use the most appropriate tool for the task at hand.
+-- For file modifications, use edit_and_apply. Read the file first, then apply changes if needed.
+-- After making changes, always review the diff output to ensure accuracy.
+-- Proactively use tavily_search when you need up-to-date information or context.
+-
+-Error Handling and Recovery:
+-- If a tool operation fails, analyze the error message and attempt to resolve the issue.
+-- For file-related errors, check file paths and permissions before retrying.
+-- If a search fails, try rephrasing the query or breaking it into smaller, more specific searches.
+-
+-Project Creation and Management:
+-1. Start by creating a root folder for new projects.
+-2. Create necessary subdirectories and files within the root folder.
+-3. Organize the project structure logically, following best practices for the specific project type.
+-
+-Code Editing Best Practices:
+-1. Always read the file content before making changes.
+-2. Analyze the code and determine necessary modifications.
+-3. Pay close attention to existing code structure to avoid unintended alterations.
+-4. Review changes thoroughly after each modification.
+-
+-Always strive for accuracy, clarity, and efficiency in your responses and actions. If uncertain, use the tavily_search tool or admit your limitations.
+-"""
+-
+-# Auto mode-specific system prompt
+-automode_system_prompt = """
+-You are currently in automode. Follow these guidelines:
+-
+-1. Goal Setting:
+-   - Set clear, achievable goals based on the user's request.
+-   - Break down complex tasks into smaller, manageable goals.
+-
+-2. Goal Execution:
+-   - Work through goals systematically, using appropriate tools for each task.
+-   - Utilize file operations, code writing, and web searches as needed.
+-   - Always read a file before editing and review changes after editing.
+-
+-3. Progress Tracking:
+-   - Provide regular updates on goal completion and overall progress.
+-   - Use the iteration information to pace your work effectively.
+-
+-4. Tool Usage:
+-   - Leverage all available tools to accomplish your goals efficiently.
+-   - Prefer edit_and_apply for file modifications, applying changes in chunks for large edits.
+-   - Use tavily_search proactively for up-to-date information.
+-
+-5. Error Handling:
+-   - If a tool operation fails, analyze the error and attempt to resolve the issue.
+-   - For persistent errors, consider alternative approaches to achieve the goal.
+-
+-6. Automode Completion:
+-   - When all goals are completed, respond with "AUTOMODE_COMPLETE" to exit automode.
+-   - Do not ask for additional tasks or modifications once goals are achieved.
+-
+-7. Iteration Awareness:
+-   - You have access to this {iteration_info}.
+-   - Use this information to prioritize tasks and manage time effectively.
+-
+-Remember: Focus on completing the established goals efficiently and effectively. Avoid unnecessary conversations or requests for additional tasks.
+-"""
+-
+-
+-def update_system_prompt(current_iteration=None, max_iterations=None):
+-    global base_system_prompt, automode_system_prompt
+-    chain_of_thought_prompt = """
+-    Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
+-
+-    Do not reflect on the quality of the returned search results in your response.
+-    """
+-    if automode:
+-        iteration_info = ""
+-        if current_iteration is not None and max_iterations is not None:
+-            iteration_info = f"You are currently on iteration {current_iteration} out of {max_iterations} in automode."
+-        return (
+-            base_system_prompt
+-            + "\n\n"
+-            + automode_system_prompt.format(iteration_info=iteration_info)
+-            + "\n\n"
+-            + chain_of_thought_prompt
+-        )
+-    else:
+-        return base_system_prompt + "\n\n" + chain_of_thought_prompt
+-
+-
+-def create_folder(path):
+-    try:
+-        os.makedirs(path, exist_ok=True)
+-        return f"Folder created: {path}"
+-    except Exception as e:
+-        return f"Error creating folder: {str(e)}"
+-
+-
+-def create_file(path, content=""):
+-    try:
+-        with open(path, "w") as f:
+-            f.write(content)
+-        return f"File created: {path}"
+-    except Exception as e:
+-        return f"Error creating file: {str(e)}"
+-
+-
+-def highlight_diff(diff_text):
+-    return Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
+-
+-
+-def generate_and_apply_diff(original_content, new_content, path):
+-    diff = list(
+-        difflib.unified_diff(
+-            original_content.splitlines(keepends=True),
+-            new_content.splitlines(keepends=True),
+-            fromfile=f"a/{path}",
+-            tofile=f"b/{path}",
+-            n=3,
+-        )
+-    )
+-
+-    if not diff:
+-        return "No changes detected."
+-
+-    try:
+-        with open(path, "w") as f:
+-            f.writelines(new_content)
+-
+-        diff_text = "".join(diff)
+-        highlighted_diff = highlight_diff(diff_text)
+-
+-        diff_panel = Panel(
+-            highlighted_diff,
+-            title=f"Changes in {path}",
+-            expand=False,
+-            border_style="cyan",
+-        )
+-
+-        console.print(diff_panel)
+-
+-        added_lines = sum(
+-            1 for line in diff if line.startswith("+") and not line.startswith("+++")
+-        )
+-        removed_lines = sum(
+-            1 for line in diff if line.startswith("-") and not line.startswith("---")
+-        )
+-
+-        summary = f"Changes applied to {path}:\n"
+-        summary += f"  Lines added: {added_lines}\n"
+-        summary += f"  Lines removed: {removed_lines}\n"
+-
+-        return summary
+-
+-    except Exception as e:
+-        error_panel = Panel(
+-            f"Error: {str(e)}", title="Error Applying Changes", style="bold red"
+-        )
+-        console.print(error_panel)
+-        return f"Error applying changes: {str(e)}"
+-
+-
+-# Update the edit_file function
+-def edit_and_apply(path, new_content):
+-    try:
+-        with open(path, "r") as file:
+-            original_content = file.read()
+-
+-        if new_content != original_content:
+-            diff_result = generate_and_apply_diff(original_content, new_content, path)
+-            return f"Changes applied to {path}:\n{diff_result}"
+-        else:
+-            return f"No changes needed for {path}"
+-    except Exception as e:
+-        return f"Error editing/applying to file: {str(e)}"
+-
+-
+-def read_file(path):
+-    try:
+-        with open(path, "r") as f:
+-            content = f.read()
+-        return content
+-    except Exception as e:
+-        return f"Error reading file: {str(e)}"
+-
+-
+-def list_files(path="."):
+-    try:
+-        files = os.listdir(path)
+-        return "\n".join(files)
+-    except Exception as e:
+-        return f"Error listing files: {str(e)}"
+-
+-
+-def tavily_search(query):
+-    try:
+-        response = tavily.qna_search(query=query, search_depth="advanced")
+-        return response
+-    except Exception as e:
+-        return f"Error performing search: {str(e)}"
+-
+-
+-tools = [
+-    {
+-        "name": "create_folder",
+-        "description": "Create a new folder at the specified path. Use this when you need to create a new directory in the project structure.",
+-        "input_schema": {
+-            "type": "object",
+-            "properties": {
+-                "path": {
+-                    "type": "string",
+-                    "description": "The path where the folder should be created",
+-                }
+-            },
+-            "required": ["path"],
+-        },
+-    },
+-    {
+-        "name": "create_file",
+-        "description": "Create a new file at the specified path with content. Use this when you need to create a new file in the project structure.",
+-        "input_schema": {
+-            "type": "object",
+-            "properties": {
+-                "path": {
+-                    "type": "string",
+-                    "description": "The path where the file should be created",
+-                },
+-                "content": {"type": "string", "description": "The content of the file"},
+-            },
+-            "required": ["path", "content"],
+-        },
+-    },
+-    {
+-        "name": "search_file",
+-        "description": "Search for a specific pattern in a file and return the line numbers where the pattern is found. Use this to locate specific code or text within a file.",
+-        "input_schema": {
+-            "type": "object",
+-            "properties": {
+-                "path": {
+-                    "type": "string",
+-                    "description": "The path of the file to search",
+-                },
+-                "search_pattern": {
+-                    "type": "string",
+-                    "description": "The pattern to search for in the file",
+-                },
+-            },
+-            "required": ["path", "search_pattern"],
+-        },
+-    },
+-    {
+-        "name": "edit_and_apply",
+-        "description": "Apply changes to a file. Use this when you need to edit an existing file. YOU ALWAYS PROVIDE THE FULL FILE CONTENT WHEN EDITING. NO PARTIAL CONTENT OR COMMENTS. YOU MUST PROVIDE THE FULL FILE CONTENT.",
+-        "input_schema": {
+-            "type": "object",
+-            "properties": {
+-                "path": {
+-                    "type": "string",
+-                    "description": "The path of the file to edit",
+-                },
+-                "new_content": {
+-                    "type": "string",
+-                    "description": "The new content to apply to the file",
+-                },
+-            },
+-            "required": ["path", "new_content"],
+-        },
+-    },
+-    {
+-        "name": "read_file",
+-        "description": "Read the contents of a file at the specified path. Use this when you need to examine the contents of an existing file.",
+-        "input_schema": {
+-            "type": "object",
+-            "properties": {
+-                "path": {
+-                    "type": "string",
+-                    "description": "The path of the file to read",
+-                }
+-            },
+-            "required": ["path"],
+-        },
+-    },
+-    {
+-        "name": "list_files",
+-        "description": "List all files and directories in the specified folder. Use this when you need to see the contents of a directory.",
+-        "input_schema": {
+-            "type": "object",
+-            "properties": {
+-                "path": {
+-                    "type": "string",
+-                    "description": "The path of the folder to list (default: current directory)",
+-                }
+-            },
+-        },
+-    },
+-    {
+-        "name": "tavily_search",
+-        "description": "Perform a web search using Tavily API to get up-to-date information or additional context. Use this when you need current information or feel a search could provide a better answer.",
+-        "input_schema": {
+-            "type": "object",
+-            "properties": {
+-                "query": {"type": "string", "description": "The search query"}
+-            },
+-            "required": ["query"],
+-        },
+-    },
+-]
+-
+-
+-# Update the execute_tool function
+-def execute_tool(tool_name, tool_input):
+-    try:
+-        if tool_name == "create_folder":
+-            return create_folder(tool_input["path"])
+-        elif tool_name == "create_file":
+-            return create_file(tool_input["path"], tool_input.get("content", ""))
+-        elif tool_name == "edit_and_apply":
+-            return edit_and_apply(tool_input["path"], tool_input.get("new_content"))
+-        elif tool_name == "read_file":
+-            return read_file(tool_input["path"])
+-        elif tool_name == "list_files":
+-            return list_files(tool_input.get("path", "."))
+-        elif tool_name == "tavily_search":
+-            return tavily_search(tool_input["query"])
+-        else:
+-            return f"Unknown tool: {tool_name}"
+-    except KeyError as e:
+-        return f"Error: Missing required parameter {str(e)} for tool {tool_name}"
+-    except Exception as e:
+-        return f"Error executing tool {tool_name}: {str(e)}"
+-
+-
+-def encode_image_to_base64(image_path):
+-    try:
+-        with Image.open(image_path) as img:
+-            max_size = (1024, 1024)
+-            img.thumbnail(max_size, Image.DEFAULT_STRATEGY)
+-            if img.mode != "RGB":
+-                img = img.convert("RGB")
+-            img_byte_arr = io.BytesIO()
+-            img.save(img_byte_arr, format="JPEG")
+-            return base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
+-    except Exception as e:
+-        return f"Error encoding image: {str(e)}"
+-
+-
+-def parse_goals(response):
+-    goals = re.findall(r"Goal \d+: (.+)", response)
+-    return goals
+-
+-
+-def execute_goals(goals):
+-    global automode
+-    for i, goal in enumerate(goals, 1):
+-        console.print(
+-            Panel(
+-                f"Executing Goal {i}: {goal}",
+-                title="Goal Execution",
+-                style="bold yellow",
+-            )
+-        )
+-        response, _ = chat_with_claude(f"Continue working on goal: {goal}")
+-        if CONTINUATION_EXIT_PHRASE in response:
+-            automode = False
+-            console.print(
+-                Panel("Exiting automode.", title="Automode", style="bold green")
+-            )
+-            break
+-
+-
+-def chat_with_claude(
+-    user_input, image_path=None, current_iteration=None, max_iterations=None
+-):
+-    global conversation_history, automode
+-
+-    current_conversation = []
+-
+-    if image_path:
+-        console.print(
+-            Panel(
+-                f"Processing image at path: {image_path}",
+-                title_align="left",
+-                title="Image Processing",
+-                expand=False,
+-                style="yellow",
+-            )
+-        )
+-        image_base64 = encode_image_to_base64(image_path)
+-
+-        if image_base64.startswith("Error"):
+-            console.print(
+-                Panel(
+-                    f"Error encoding image: {image_base64}",
+-                    title="Error",
+-                    style="bold red",
+-                )
+-            )
+-            return (
+-                "I'm sorry, there was an error processing the image. Please try again.",
+-                False,
+-            )
+-
+-        image_message = {
+-            "role": "user",
+-            "content": [
+-                {
+-                    "type": "image",
+-                    "source": {
+-                        "type": "base64",
+-                        "media_type": "image/jpeg",
+-                        "data": image_base64,
+-                    },
+-                },
+-                {"type": "text", "text": f"User input for image: {user_input}"},
+-            ],
+-        }
+-        current_conversation.append(image_message)
+-        console.print(
+-            Panel(
+-                "Image message added to conversation history",
+-                title_align="left",
+-                title="Image Added",
+-                style="green",
+-            )
+-        )
+-    else:
+-        current_conversation.append({"role": "user", "content": user_input})
+-
+-    messages = conversation_history + current_conversation
+-
+-    try:
+-        response = client.messages.create(
+-            model=MAINMODEL,
+-            max_tokens=4000,
+-            system=update_system_prompt(current_iteration, max_iterations),
+-            messages=messages,
+-            tools=tools,
+-            tool_choice={"type": "auto"},
+-        )
+-    except APIStatusError as e:
+-        if e.status_code == 429:
+-            console.print(
+-                Panel(
+-                    "Rate limit exceeded. Retrying after a short delay...",
+-                    title="API Error",
+-                    style="bold yellow",
+-                )
+-            )
+-            time.sleep(5)
+-            return chat_with_claude(
+-                user_input, image_path, current_iteration, max_iterations
+-            )
+-        else:
+-            console.print(
+-                Panel(f"API Error: {str(e)}", title="API Error", style="bold red")
+-            )
+-            return (
+-                "I'm sorry, there was an error communicating with the AI. Please try again.",
+-                False,
+-            )
+-    except APIError as e:
+-        console.print(
+-            Panel(f"API Error: {str(e)}", title="API Error", style="bold red")
+-        )
+-        return (
+-            "I'm sorry, there was an error communicating with the AI. Please try again.",
+-            False,
+-        )
+-
+-    assistant_response = ""
+-    exit_continuation = False
+-    tool_uses = []
+-
+-    for content_block in response.content:
+-        if content_block.type == "text":
+-            assistant_response += content_block.text
+-            if CONTINUATION_EXIT_PHRASE in content_block.text:
+-                exit_continuation = True
+-        elif content_block.type == "tool_use":
+-            tool_uses.append(content_block)
+-
+-    console.print(
+-        Panel(
+-            Markdown(assistant_response),
+-            title="Claude's Response",
+-            title_align="left",
+-            expand=False,
+-        )
+-    )
+-
+-    for tool_use in tool_uses:
+-        tool_name = tool_use.name
+-        tool_input = tool_use.input
+-        tool_use_id = tool_use.id
+-
+-        console.print(Panel(f"Tool Used: {tool_name}", style="green"))
+-        console.print(
+-            Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green")
+-        )
+-
+-        try:
+-            result = execute_tool(tool_name, tool_input)
+-            console.print(
+-                Panel(result, title_align="left", title="Tool Result", style="green")
+-            )
+-        except Exception as e:
+-            result = f"Error executing tool: {str(e)}"
+-            console.print(Panel(result, title="Tool Execution Error", style="bold red"))
+-
+-        current_conversation.append(
+-            {
+-                "role": "assistant",
+-                "content": [
+-                    {
+-                        "type": "tool_use",
+-                        "id": tool_use_id,
+-                        "name": tool_name,
+-                        "input": tool_input,
+-                    }
+-                ],
+-            }
+-        )
+-
+-        current_conversation.append(
+-            {
+-                "role": "user",
+-                "content": [
+-                    {
+-                        "type": "tool_result",
+-                        "tool_use_id": tool_use_id,
+-                        "content": result,
+-                    }
+-                ],
+-            }
+-        )
+-
+-        messages = conversation_history + current_conversation
+-
+-        try:
+-            tool_response = client.messages.create(
+-                model=TOOLCHECKERMODEL,
+-                max_tokens=4000,
+-                system=update_system_prompt(current_iteration, max_iterations),
+-                messages=messages,
+-                tools=tools,
+-                tool_choice={"type": "auto"},
+-            )
+-
+-            tool_checker_response = ""
+-            for tool_content_block in tool_response.content:
+-                if tool_content_block.type == "text":
+-                    tool_checker_response += tool_content_block.text
+-            console.print(
+-                Panel(
+-                    Markdown(tool_checker_response),
+-                    title="Claude's Response to Tool Result",
+-                    title_align="left",
+-                )
+-            )
+-            assistant_response += "\n\n" + tool_checker_response
+-        except APIError as e:
+-            error_message = f"Error in tool response: {str(e)}"
+-            console.print(Panel(error_message, title="Error", style="bold red"))
+-            assistant_response += f"\n\n{error_message}"
+-
+-    if assistant_response:
+-        current_conversation.append(
+-            {"role": "assistant", "content": assistant_response}
+-        )
+-
+-    conversation_history = messages + [
+-        {"role": "assistant", "content": assistant_response}
+-    ]
+-
+-    return assistant_response, exit_continuation
+-
+ 
+ def main():
+     global automode, conversation_history
+@@ -649,70 +48,51 @@ def main():
+         "While in automode, press Ctrl+C at any time to exit the automode to return to regular chat."
+     )
+ 
+-    while True:
+-        user_input = console.input("[bold cyan]You:[/bold cyan] ")
+-
+-        if user_input.lower() == "exit":
+-            console.print(
+-                Panel(
+-                    "Thank you for chatting. Goodbye!",
+-                    title_align="left",
+-                    title="Goodbye",
+-                    style="bold green",
+-                )
+-            )
+-            break
+-
+-        if user_input.lower() == "image":
+-            image_path = (
+-                console.input(
+-                    "[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] "
+-                )
+-                .strip()
+-                .replace("'", "")
+-            )
++    try:
++        while True:
++            user_input = console.input("[bold cyan]You:[/bold cyan] ")
+ 
+-            if os.path.isfile(image_path):
+-                user_input = console.input(
+-                    "[bold cyan]You (prompt for image):[/bold cyan] "
+-                )
+-                response, _ = chat_with_claude(user_input, image_path)
+-            else:
++            if user_input.lower() == "exit":
+                 console.print(
+                     Panel(
+-                        "Invalid image path. Please try again.",
+-                        title="Error",
+-                        style="bold red",
++                        "Thank you for chatting. Goodbye!",
++                        title_align="left",
++                        title="Goodbye",
++                        style="bold green",
+                     )
+                 )
+-                continue
+-        elif user_input.lower().startswith("automode"):
+-            try:
+-                parts = user_input.split()
+-                if len(parts) > 1 and parts[1].isdigit():
+-                    max_iterations = int(parts[1])
+-                else:
+-                    max_iterations = MAX_CONTINUATION_ITERATIONS
++                break
+ 
+-                automode = True
+-                console.print(
+-                    Panel(
+-                        f"Entering automode with {max_iterations} iterations. Please provide the goal of the automode.",
+-                        title_align="left",
+-                        title="Automode",
+-                        style="bold yellow",
++            if user_input.lower() == "image":
++                image_path = console.input("Enter the path to your image: ")
++                user_input = console.input("Enter your question about the image: ")
++                response, _ = chat_with_claude(user_input, image_path)
++            elif user_input.lower().startswith("automode"):
++                try:
++                    parts = user_input.split()
++                    if len(parts) > 1 and parts[1].isdigit():
++                        max_iterations = int(parts[1])
++                    else:
++                        max_iterations = MAX_CONTINUATION_ITERATIONS
++
++                    automode = True
++                    console.print(
++                        Panel(
++                            f"Entering automode with {max_iterations} iterations. Please provide the goal of the automode.",
++                            title_align="left",
++                            title="Automode",
++                            style="bold yellow",
++                        )
+                     )
+-                )
+-                console.print(
+-                    Panel(
+-                        "Press Ctrl+C at any time to exit the automode loop.",
+-                        style="bold yellow",
++                    console.print(
++                        Panel(
++                            "Press Ctrl+C at any time to exit the automode loop.",
++                            style="bold yellow",
++                        )
+                     )
+-                )
+-                user_input = console.input("[bold cyan]You:[/bold cyan] ")
++                    user_input = console.input("[bold cyan]You:[/bold cyan] ")
+ 
+-                iteration_count = 0
+-                try:
++                    iteration_count = 0
+                     while automode and iteration_count < max_iterations:
+                         response, exit_continuation = chat_with_claude(
+                             user_input,
+@@ -772,29 +152,17 @@ def main():
+                                 "content": "Automode interrupted. How can I assist you further?",
+                             }
+                         )
+-            except KeyboardInterrupt:
++
+                 console.print(
+-                    Panel(
+-                        "\nAutomode interrupted by user. Exiting automode.",
+-                        title_align="left",
+-                        title="Automode",
+-                        style="bold red",
+-                    )
++                    Panel("Exited automode. Returning to regular chat.", style="green")
+                 )
+-                automode = False
+-                if conversation_history and conversation_history[-1]["role"] == "user":
+-                    conversation_history.append(
+-                        {
+-                            "role": "assistant",
+-                            "content": "Automode interrupted. How can I assist you further?",
+-                        }
+-                    )
+-
+-            console.print(
+-                Panel("Exited automode. Returning to regular chat.", style="green")
+-            )
+-        else:
+-            response, _ = chat_with_claude(user_input)
++            else:
++                response, _ = chat_with_claude(user_input)
++    except KeyboardInterrupt:
++        console.print("\nKeyboard interrupt detected. Exiting the program.")
++        automode = False
++    finally:
++        save_state()
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/prompts.py b/prompts.py
+new file mode 100644
+index 0000000..00fbd42
+--- /dev/null
++++ b/prompts.py
+@@ -0,0 +1,100 @@
++base_system_prompt = """
++You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, specializing in software development. Your capabilities include:
++
++1. Creating and managing project structures
++2. Writing, debugging, and improving code across multiple languages
++3. Providing architectural insights and applying design patterns
++4. Staying current with the latest technologies and best practices
++5. Analyzing and manipulating files within the project directory
++6. Performing web searches for up-to-date information
++
++Available tools and their optimal use cases:
++
++1. create_folder: Create new directories in the project structure.
++2. create_file: Generate new files with specified content.
++3. edit_and_apply: Examine and modify existing files.
++4. read_file: View the contents of existing files without making changes.
++5. list_files: Understand the current project structure or locate specific files.
++6. tavily_search: Obtain current information on technologies, libraries, or best practices.
++7. Analyzing images provided by the user
++
++Tool Usage Guidelines:
++- Always use the most appropriate tool for the task at hand.
++- For file modifications, use edit_and_apply. Read the file first, then apply changes if needed.
++- After making changes, always review the diff output to ensure accuracy.
++- Proactively use tavily_search when you need up-to-date information or context.
++
++Error Handling and Recovery:
++- If a tool operation fails, analyze the error message and attempt to resolve the issue.
++- For file-related errors, check file paths and permissions before retrying.
++- If a search fails, try rephrasing the query or breaking it into smaller, more specific searches.
++
++Project Creation and Management:
++1. Start by creating a root folder for new projects.
++2. Create necessary subdirectories and files within the root folder.
++3. Organize the project structure logically, following best practices for the specific project type.
++
++Code Editing Best Practices:
++1. Always read the file content before making changes.
++2. Analyze the code and determine necessary modifications.
++3. Pay close attention to existing code structure to avoid unintended alterations.
++4. Review changes thoroughly after each modification.
++
++Always strive for accuracy, clarity, and efficiency in your responses and actions. If uncertain, use the tavily_search tool or admit your limitations.
++"""
++
++automode_system_prompt = """
++You are currently in automode. Follow these guidelines:
++
++1. Goal Setting:
++   - Set clear, achievable goals based on the user's request.
++   - Break down complex tasks into smaller, manageable goals.
++
++2. Goal Execution:
++   - Work through goals systematically, using appropriate tools for each task.
++   - Utilize file operations, code writing, and web searches as needed.
++   - Always read a file before editing and review changes after editing.
++
++3. Progress Tracking:
++   - Provide regular updates on goal completion and overall progress.
++   - Use the iteration information to pace your work effectively.
++
++4. Tool Usage:
++   - Leverage all available tools to accomplish your goals efficiently.
++   - Prefer edit_and_apply for file modifications, applying changes in chunks for large edits.
++   - Use tavily_search proactively for up-to-date information.
++
++5. Error Handling:
++   - If a tool operation fails, analyze the error and attempt to resolve the issue.
++   - For persistent errors, consider alternative approaches to achieve the goal.
++
++6. Automode Completion:
++   - When all goals are completed, respond with "AUTOMODE_COMPLETE" to exit automode.
++   - Do not ask for additional tasks or modifications once goals are achieved.
++
++7. Iteration Awareness:
++   - You have access to this {iteration_info}.
++   - Use this information to prioritize tasks and manage time effectively.
++
++Remember: Focus on completing the established goals efficiently and effectively. Avoid unnecessary conversations or requests for additional tasks.
++"""
++
++
++def update_system_prompt(current_iteration=None, max_iterations=None):
++    global base_system_prompt, automode_system_prompt
++    chain_of_thought_prompt = """
++    Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
++
++    Do not reflect on the quality of the returned search results in your response.
++    """
++    if current_iteration is not None and max_iterations is not None:
++        iteration_info = f"You are currently on iteration {current_iteration} out of {max_iterations} in automode."
++        return (
++            base_system_prompt
++            + "\n\n"
++            + automode_system_prompt.format(iteration_info=iteration_info)
++            + "\n\n"
++            + chain_of_thought_prompt
++        )
++    else:
++        return base_system_prompt + "\n\n" + chain_of_thought_prompt
+diff --git a/pytest.ini b/pytest.ini
+new file mode 100644
+index 0000000..4e9c349
+--- /dev/null
++++ b/pytest.ini
+@@ -0,0 +1,5 @@
++[pytest]
++env =
++    ANTHROPIC_API_KEY=test_anthropic_key
++    TAVILY_API_KEY=test_tavily_key
++    TESTING=true
+diff --git a/requirements.txt b/requirements.txt
+index 297425e..f88df9b 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -60,8 +60,11 @@ pydantic-core==2.20.1
+ pygments==2.18.0
+     # via rich
+ pytest==8.2.2
+-    # via pytest-cov
++    # via
++    #   pytest-cov
++    #   pytest-env
+ pytest-cov==5.0.0
++pytest-env==1.1.3
+ python-dotenv==1.0.1
+ pyyaml==6.0.1
+     # via huggingface-hub
+diff --git a/tests/conftest.py b/tests/conftest.py
+new file mode 100644
+index 0000000..1607168
+--- /dev/null
++++ b/tests/conftest.py
+@@ -0,0 +1,34 @@
++# conftest.py
++import os
++
++import pytest
++
++# Set up the test environment variables before any imports
++os.environ["TESTING"] = "true"
++os.environ.setdefault("ANTHROPIC_API_KEY", "test_anthropic_key")
++os.environ.setdefault("TAVILY_API_KEY", "test_tavily_key")
++
++import database  # Now import database after setting up the environment
++
++
++@pytest.fixture(autouse=True, scope="function")
++def use_in_memory_database():
++    print("\nSetting up in-memory database")
++    original_db_file = database.DB_FILE
++    database.DB_FILE = ":memory:"
++    database.close_db_connection()  # Close any existing connection
++    database.conversation_history = []  # Reset conversation_history
++    database.init_db()  # Ensure tables are created for each test
++    yield
++    database.close_db_connection()  # Close the connection after the test
++    database.conversation_history = []  # Reset conversation_history after test
++    database.DB_FILE = original_db_file
++
++
++@pytest.fixture(autouse=True, scope="function")
++def reset_config_env(monkeypatch):
++    """Reset environment variables for config after each test."""
++    yield
++    import config
++
++    config.load_env()  # Reload environment variables after each test
+diff --git a/tests/test_config.py b/tests/test_config.py
+index ccf99e0..451bf35 100644
+--- a/tests/test_config.py
++++ b/tests/test_config.py
+@@ -11,6 +11,7 @@ def isolate_env(monkeypatch):
+     original_environ = dict(os.environ)
+     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
++    monkeypatch.delenv("TESTING", raising=False)  # Ensure TESTING is not set
+     yield
+     os.environ.clear()
+     os.environ.update(original_environ)
+@@ -23,7 +24,7 @@ def load_config():
+             del sys.modules["config"]
+         import config
+ 
+-        config.load_env()  # Explicitly call load_env() after import
++        importlib.reload(config)
+         return config
+ 
+     return _load_config
+diff --git a/tests/test_database.py b/tests/test_database.py
+new file mode 100644
+index 0000000..59403ff
+--- /dev/null
++++ b/tests/test_database.py
+@@ -0,0 +1,187 @@
++import sqlite3
++from unittest.mock import MagicMock, patch
++
++import pytest
++
++import database
++from database import (
++    ensure_table_exists,
++    execute_transaction,
++    get_total_tokens,
++    init_db,
++    load_state,
++    save_state,
++    save_total_tokens,
++)
++
++
++def test_get_db_connection():
++    with database.get_db_connection() as conn:
++        assert isinstance(conn, sqlite3.Connection)
++
++
++def test_get_db_cursor():
++    with database.get_db_connection() as conn:
++        with database.get_db_cursor(conn) as cursor:
++            assert isinstance(cursor, sqlite3.Cursor)
++
++
++def test_execute_transaction():
++    queries = [
++        ("CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)", ()),
++        ("INSERT INTO test (value) VALUES (?)", ("test_value",)),
++        ("SELECT value FROM test", ()),
++    ]
++    result = execute_transaction(queries)
++
++    assert result == [[], [], [("test_value",)]]
++
++
++def test_ensure_table_exists():
++    result_conv = ensure_table_exists("conversation_history")
++    result_token = ensure_table_exists("token_count")
++
++    print(f"Result of creating conversation_history: {result_conv}")
++    print(f"Result of creating token_count: {result_token}")
++
++    with database.get_db_connection() as conn:
++        cursor = conn.cursor()
++        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
++        tables = [table[0] for table in cursor.fetchall()]  # Extract table names
++        print(f"Tables found in the database: {tables}")
++
++        # Check if tables exist
++        cursor.execute(
++            "SELECT name FROM sqlite_master WHERE type='table' AND name='conversation_history'"
++        )
++        conv_exists = cursor.fetchone() is not None
++        cursor.execute(
++            "SELECT name FROM sqlite_master WHERE type='table' AND name='token_count'"
++        )
++        token_exists = cursor.fetchone() is not None
++
++        print(f"conversation_history exists: {conv_exists}")
++        print(f"token_count exists: {token_exists}")
++
++        assert (
++            "conversation_history" in tables
++        ), f"conversation_history not found in {tables}"
++        assert "token_count" in tables, f"token_count not found in {tables}"
++
++
++def test_init_db():
++    init_db()
++
++    with database.get_db_connection() as conn:
++        cursor = conn.cursor()
++        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
++        tables = cursor.fetchall()
++        assert ("conversation_history",) in tables
++        assert ("token_count",) in tables
++
++
++def test_load_state():
++    # First, ensure the table exists
++    ensure_table_exists("conversation_history")
++
++    # Insert test data
++    execute_transaction(
++        [
++            (
++                "INSERT INTO conversation_history (role, content) VALUES (?, ?)",
++                ("user", "Hello"),
++            ),
++            (
++                "INSERT INTO conversation_history (role, content) VALUES (?, ?)",
++                ("assistant", "Hi there!"),
++            ),
++        ]
++    )
++
++    # Print the contents of the table for debugging
++    result = execute_transaction([("SELECT * FROM conversation_history", ())])
++    print(f"Contents of conversation_history table: {result}")
++
++    # Load the state
++    loaded_history = load_state()
++
++    # Check the loaded history
++    print(f"Loaded history: {loaded_history}")
++
++    # Assert the loaded history matches what we expect
++    assert loaded_history == [
++        {"role": "user", "content": "Hello"},
++        {"role": "assistant", "content": "Hi there!"},
++    ]
++
++    # Also check the global conversation_history variable
++    print(f"Global conversation_history: {database.conversation_history}")
++    assert database.conversation_history == [
++        {"role": "user", "content": "Hello"},
++        {"role": "assistant", "content": "Hi there!"},
++    ]
++
++
++def test_get_total_tokens():
++    execute_transaction(
++        [("INSERT INTO token_count (id, total_tokens) VALUES (1, 100)", ())]
++    )
++
++    assert get_total_tokens() == 100
++
++
++def test_get_total_tokens_empty():
++    assert get_total_tokens() == 0
++
++
++def test_save_total_tokens():
++    save_total_tokens(200)
++
++    result = execute_transaction(
++        [("SELECT total_tokens FROM token_count WHERE id = 1", ())]
++    )
++    assert result == [[(200,)]]
++
++
++def test_save_state():
++    database.conversation_history = [
++        {"role": "user", "content": "Hello"},
++        {"role": "assistant", "content": "Hi there!"},
++    ]
++
++    save_state()
++
++    result = execute_transaction(
++        [("SELECT role, content FROM conversation_history", ())]
++    )
++    assert result == [[("user", "Hello"), ("assistant", "Hi there!")]]
++
++
++def test_save_state_empty():
++    database.conversation_history = []
++
++    save_state()
++
++    result = execute_transaction(
++        [("SELECT role, content FROM conversation_history", ())]
++    )
++    assert result == [[]]
++
++
++@patch("database.get_db_connection")
++def test_connection_closed_after_exception(mock_get_conn):
++    mock_conn = MagicMock()
++    mock_cursor = MagicMock()
++    mock_conn.cursor.return_value = mock_cursor
++    mock_get_conn.return_value.__enter__.return_value = mock_conn
++    mock_cursor.execute.side_effect = sqlite3.Error("Test error")
++
++    with pytest.raises(sqlite3.Error):
++        execute_transaction([("SELECT * FROM non_existent_table", ())])
++
++    # For in-memory databases, we don't close the connection after each transaction
++    # Instead, we check if close_db_connection was called in the fixture teardown
++    if database.DB_FILE == ":memory:":
++        mock_conn.close.assert_not_called()
++    else:
++        mock_conn.close.assert_called_once()
+diff --git a/tests/test_main.py b/tests/test_main.py
+new file mode 100644
+index 0000000..5f44b42
+--- /dev/null
++++ b/tests/test_main.py
+@@ -0,0 +1,141 @@
++from unittest.mock import MagicMock, call, patch
++
++import pytest
++from rich.panel import Panel
++
++import database
++import main
++
++
++@pytest.fixture(autouse=True)
++def setup_and_teardown():
++    # Setup
++    database.DB_FILE = ":memory:"
++
++    yield
++
++    # Teardown
++    if hasattr(database, "conversation_history"):
++        database.conversation_history = []
++    if hasattr(database, "total_tokens"):
++        database.total_tokens = 0
++
++
++@pytest.mark.parametrize(
++    "user_input, expected_calls",
++    [
++        ("exit", 0),
++        ("Hello", 1),
++    ],
++)
++def test_main_exit_and_chat(user_input, expected_calls, monkeypatch):
++    responses = iter([user_input, "exit"])
++    monkeypatch.setattr("builtins.input", lambda: next(responses))
++
++    with patch("main.chat_with_claude") as mock_chat:
++        mock_chat.return_value = ("Claude response", False)
++        main.main()
++        assert mock_chat.call_count == expected_calls
++
++
++def test_main_image_chat(monkeypatch):
++    responses = iter(["image", "/path/to/image.jpg", "Describe this image", "exit"])
++    monkeypatch.setattr("builtins.input", lambda: next(responses))
++
++    with patch("main.chat_with_claude") as mock_chat:
++        mock_chat.return_value = ("Image description", False)
++        main.main()
++        mock_chat.assert_called_once_with("Describe this image", "/path/to/image.jpg")
++
++
++def test_main_automode(monkeypatch):
++    responses = iter(["automode 3", "Automode goal", "exit"])
++    monkeypatch.setattr("builtins.input", lambda: next(responses))
++
++    with patch("main.chat_with_claude") as mock_chat:
++        mock_chat.side_effect = [
++            ("Step 1", False),
++            ("Step 2", False),
++            ("AUTOMODE_COMPLETE", True),
++        ]
++        main.main()
++        assert mock_chat.call_count == 3
++
++
++@patch("chat.get_client")
++def test_chat_with_claude(mock_anthropic):
++    mock_client = MagicMock()
++    mock_anthropic.return_value = mock_client
++
++    mock_response = MagicMock()
++    mock_response.content = [MagicMock(type="text", text="Mock response")]
++    mock_response.usage.input_tokens = 50
++    mock_response.usage.output_tokens = 50
++
++    mock_client.messages.create.return_value = mock_response
++
++    response, exit_continuation = main.chat_with_claude("Test input")
++
++    assert response == "Mock response"
++    assert not exit_continuation
++    assert database.get_total_tokens() == 100
++
++    # Call chat_with_claude again to check if total_tokens accumulates
++    response, exit_continuation = main.chat_with_claude("Test input 2")
++
++    assert response == "Mock response"
++    assert not exit_continuation
++    assert database.get_total_tokens() == 200
++
++
++def test_main_keyboard_interrupt():
++    # Create a mock for Console.input
++    with patch("main.console.input") as mock_console_input, patch(
++        "main.chat_with_claude"
++    ) as mock_chat, patch("main.save_state") as mock_save_state:
++        # Set up the input sequence
++        mock_console_input.side_effect = [
++            "automode 3",  # Enter automode
++            "Automode goal",  # Provide the automode goal
++            "exit",  # Exit the program after returning to regular chat
++        ]
++
++        # Set up chat_with_claude mock to raise KeyboardInterrupt on the second call
++        mock_chat.side_effect = [
++            ("Response 1", False),
++            KeyboardInterrupt(),
++            ("Response 3", False),  # This call shouldn't happen
++        ]
++
++        # Run main()
++        main.main()
++
++        # Assertions
++        assert not main.automode  # automode should be False after interruption
++
++        # Check chat_with_claude calls
++        assert mock_chat.call_count == 2  # chat_with_claude should be called twice
++        mock_chat.assert_has_calls(
++            [
++                call("Automode goal", current_iteration=1, max_iterations=3),
++                call(
++                    "Continue with the next step. Or STOP by saying 'AUTOMODE_COMPLETE' if you think you've achieved the results established in the original request.",
++                    current_iteration=2,
++                    max_iterations=3,
++                ),
++            ]
++        )
++
++        assert (
++            mock_console_input.call_count == 3
++        )  # Console.input should be called 3 times
++
++        resultPanel = Panel(
++            "\nAutomode interrupted by user. Exiting automode.",
++            title_align="left",
++            title="Automode",
++            style="bold red",
++        )
++
++        # Check that save_state was called
++        mock_save_state.assert_called_once()
+diff --git a/tools.py b/tools.py
+new file mode 100644
+index 0000000..e79dad5
+--- /dev/null
++++ b/tools.py
+@@ -0,0 +1,252 @@
++import difflib
++import os
++
++from rich.console import Console
++from rich.panel import Panel
++from rich.syntax import Syntax
++from tavily import TavilyClient
++
++from config import TAVILY_API_KEY
++
++console = Console()
++tavily = TavilyClient(api_key=TAVILY_API_KEY)
++
++
++def create_folder(path):
++    try:
++        os.makedirs(path, exist_ok=True)
++        return f"Folder created: {path}"
++    except Exception as e:
++        return f"Error creating folder: {str(e)}"
++
++
++def create_file(path, content=""):
++    try:
++        with open(path, "w") as f:
++            f.write(content)
++        return f"File created: {path}"
++    except Exception as e:
++        return f"Error creating file: {str(e)}"
++
++
++def highlight_diff(diff_text):
++    return Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
++
++
++def generate_and_apply_diff(original_content, new_content, path):
++    diff = list(
++        difflib.unified_diff(
++            original_content.splitlines(keepends=True),
++            new_content.splitlines(keepends=True),
++            fromfile=f"a/{path}",
++            tofile=f"b/{path}",
++            n=3,
++        )
++    )
++
++    if not diff:
++        return "No changes detected."
++
++    try:
++        with open(path, "w") as f:
++            f.writelines(new_content)
++
++        diff_text = "".join(diff)
++        highlighted_diff = highlight_diff(diff_text)
++
++        diff_panel = Panel(
++            highlighted_diff,
++            title=f"Changes in {path}",
++            expand=False,
++            border_style="cyan",
++        )
++
++        console.print(diff_panel)
++
++        added_lines = sum(
++            1 for line in diff if line.startswith("+") and not line.startswith("+++")
++        )
++        removed_lines = sum(
++            1 for line in diff if line.startswith("-") and not line.startswith("---")
++        )
++
++        summary = f"Changes applied to {path}:\n"
++        summary += f"  Lines added: {added_lines}\n"
++        summary += f"  Lines removed: {removed_lines}\n"
++
++        return summary
++
++    except Exception as e:
++        error_panel = Panel(
++            f"Error: {str(e)}", title="Error Applying Changes", style="bold red"
++        )
++        console.print(error_panel)
++        return f"Error applying changes: {str(e)}"
++
++
++def edit_and_apply(path, new_content):
++    try:
++        with open(path, "r") as file:
++            original_content = file.read()
++
++        if new_content != original_content:
++            diff_result = generate_and_apply_diff(original_content, new_content, path)
++            return f"Changes applied to {path}:\n{diff_result}"
++        else:
++            return f"No changes needed for {path}"
++    except Exception as e:
++        return f"Error editing/applying to file: {str(e)}"
++
++
++def read_file(path):
++    try:
++        with open(path, "r") as f:
++            content = f.read()
++        return content
++    except Exception as e:
++        return f"Error reading file: {str(e)}"
++
++
++def list_files(path="."):
++    try:
++        files = os.listdir(path)
++        return "\n".join(files)
++    except Exception as e:
++        return f"Error listing files: {str(e)}"
++
++
++def tavily_search(query):
++    try:
++        response = tavily.qna_search(query=query, search_depth="advanced")
++        return response
++    except Exception as e:
++        return f"Error performing search: {str(e)}"
++
++
++tools = [
++    {
++        "name": "create_folder",
++        "description": "Create a new folder at the specified path. Use this when you need to create a new directory in the project structure.",
++        "input_schema": {
++            "type": "object",
++            "properties": {
++                "path": {
++                    "type": "string",
++                    "description": "The path where the folder should be created",
++                }
++            },
++            "required": ["path"],
++        },
++    },
++    {
++        "name": "create_file",
++        "description": "Create a new file at the specified path with content. Use this when you need to create a new file in the project structure.",
++        "input_schema": {
++            "type": "object",
++            "properties": {
++                "path": {
++                    "type": "string",
++                    "description": "The path where the file should be created",
++                },
++                "content": {"type": "string", "description": "The content of the file"},
++            },
++            "required": ["path", "content"],
++        },
++    },
++    {
++        "name": "search_file",
++        "description": "Search for a specific pattern in a file and return the line numbers where the pattern is found. Use this to locate specific code or text within a file.",
++        "input_schema": {
++            "type": "object",
++            "properties": {
++                "path": {
++                    "type": "string",
++                    "description": "The path of the file to search",
++                },
++                "search_pattern": {
++                    "type": "string",
++                    "description": "The pattern to search for in the file",
++                },
++            },
++            "required": ["path", "search_pattern"],
++        },
++    },
++    {
++        "name": "edit_and_apply",
++        "description": "Apply changes to a file. Use this when you need to edit an existing file. YOU ALWAYS PROVIDE THE FULL FILE CONTENT WHEN EDITING. NO PARTIAL CONTENT OR COMMENTS. YOU MUST PROVIDE THE FULL FILE CONTENT.",
++        "input_schema": {
++            "type": "object",
++            "properties": {
++                "path": {
++                    "type": "string",
++                    "description": "The path of the file to edit",
++                },
++                "new_content": {
++                    "type": "string",
++                    "description": "The new content to apply to the file",
++                },
++            },
++            "required": ["path", "new_content"],
++        },
++    },
++    {
++        "name": "read_file",
++        "description": "Read the contents of a file at the specified path. Use this when you need to examine the contents of an existing file.",
++        "input_schema": {
++            "type": "object",
++            "properties": {
++                "path": {
++                    "type": "string",
++                    "description": "The path of the file to read",
++                }
++            },
++            "required": ["path"],
++        },
++    },
++    {
++        "name": "list_files",
++        "description": "List all files and directories in the specified folder. Use this when you need to see the contents of a directory.",
++        "input_schema": {
++            "type": "object",
++            "properties": {
++                "path": {
++                    "type": "string",
++                    "description": "The path of the folder to list (default: current directory)",
++                }
++            },
++        },
++    },
++    {
++        "name": "tavily_search",
++        "description": "Perform a web search using Tavily API to get up-to-date information or additional context. Use this when you need current information or feel a search could provide a better answer.",
++        "input_schema": {
++            "type": "object",
++            "properties": {
++                "query": {"type": "string", "description": "The search query"}
++            },
++            "required": ["query"],
++        },
++    },
++]
++
++
++def execute_tool(tool_name, tool_input):
++    try:
++        if tool_name == "create_folder":
++            return create_folder(tool_input["path"])
++        elif tool_name == "create_file":
++            return create_file(tool_input["path"], tool_input.get("content", ""))
++        elif tool_name == "edit_and_apply":
++            return edit_and_apply(tool_input["path"], tool_input.get("new_content"))
++        elif tool_name == "read_file":
++            return read_file(tool_input["path"])
++        elif tool_name == "list_files":
++            return list_files(tool_input.get("path", "."))
++        elif tool_name == "tavily_search":
++            return tavily_search(tool_input["query"])
++        else:
++            return f"Unknown tool: {tool_name}"
++    except KeyError as e:
++        return f"Error: Missing required parameter {str(e)} for tool {tool_name}"
++    except Exception as e:
++        return f"Error executing tool {tool_name}: {str(e)}"
+diff --git a/utils.py b/utils.py
+new file mode 100644
+index 0000000..d26ae11
+--- /dev/null
++++ b/utils.py
+@@ -0,0 +1,33 @@
++import base64
++import io
++import re
++
++from PIL import Image
++
++
++def encode_image_to_base64(image_path):
++    try:
++        with Image.open(image_path) as img:
++            max_size = (1024, 1024)
++            img.thumbnail(max_size, Image.DEFAULT_STRATEGY)
++            if img.mode != "RGB":
++                img = img.convert("RGB")
++            img_byte_arr = io.BytesIO()
++            img.save(img_byte_arr, format="JPEG")
++            return base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
++    except Exception as e:
++        return f"Error encoding image: {str(e)}"
++
++
++def parse_goals(response):
++    goals = re.findall(r"Goal \d+: (.+)", response)
++    return goals
++
++
++def execute_goals(goals, chat_function):
++    for i, goal in enumerate(goals, 1):
++        print(f"Executing Goal {i}: {goal}")
++        response, exit_continuation = chat_function(f"Continue working on goal: {goal}")
++        if "AUTOMODE_COMPLETE" in response or exit_continuation:
++            print("Automode completed.")
++            break
