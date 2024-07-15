@@ -449,9 +449,9 @@ async def execute_code(code, timeout=10):
     
     # Prepare the command to run the code
     if sys.platform == "win32":
-        command = f'"{activate_script}" && python {process_id}.py'
+        command = f'"{activate_script}" && python3 {process_id}.py'
     else:
-        command = f'source "{activate_script}" && python {process_id}.py'
+        command = f'source "{activate_script}" && python3 {process_id}.py'
     
     # Create a process to run the command
     process = await asyncio.create_subprocess_shell(
@@ -477,7 +477,8 @@ async def execute_code(code, timeout=10):
         stderr = ""
         return_code = "Running"
     
-    return process_id, stdout, stderr, return_code
+    execution_result = f"Process ID: {process_id}\n\nStdout:\n{stdout}\n\nStderr:\n{stderr}\n\nReturn Code: {return_code}"
+    return process_id, execution_result
 
 def read_file(path):
     try:
@@ -688,8 +689,10 @@ async def execute_tool(tool_name, tool_input):
         elif tool_name == "stop_process":
             return stop_process(tool_input["process_id"])
         elif tool_name == "execute_code":
-            process_id, stdout, stderr, return_code = await execute_code(tool_input["code"])
-            result = f"Process ID: {process_id}\n\nStdout:\n{stdout}\n\nStderr:\n{stderr}\n\nReturn Code: {return_code}"
+            process_id, execution_result = await execute_code(tool_input["code"])
+            analysis = await send_to_ai_for_executing(tool_input["code"], execution_result)
+            result = f"{execution_result}\n\nAnalysis:\n{analysis}"
+            return result
             if return_code == "Running":
                 result += "\n\nNote: The process is still running in the background."
             return result
