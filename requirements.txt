@@ -1,5 +1,7 @@
+anthropic
+python-dotenv
 tavily-python
 Pillow
-anthropic
 rich
 python-dotenv
+aiohttp
