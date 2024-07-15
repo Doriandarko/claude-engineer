@@ -119,7 +119,7 @@ The enhanced automode allows Claude to work autonomously on complex tasks with g
 7. The TOOLCHECKERMODEL validates tool usage and outputs for increased reliability.
 
 To use automode:
-1. Type 'automode [number]' when prompted for input, where [number] is the maximum number of iterations.
+1. Type 'automode number' when prompted for input, where number is the maximum number of iterations.
 2. Provide your request when prompted.
 3. Claude will work autonomously, providing updates after each iteration.
 4. Automode exits when the task is completed, after reaching the maximum number of iterations, or when you press Ctrl+C.
