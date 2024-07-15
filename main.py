@@ -14,6 +14,8 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 from dataclasses import dataclass
+from datetime import datetime
+import shutil
 
 console = Console()
 
@@ -47,6 +49,8 @@ else:
 
 # Set up the conversation memory
 conversation_history = []
+
+logging_is_enabled = True
 
 # automode flag
 automode = False
@@ -141,31 +145,7 @@ YOU NEVER ASK "Is there anything else you'd like to add or modify in the project
 
 # region: Sonar prompts
 
-@dataclass
-class SonarPrompts:
-    what_is_sonar: str
-    sonar_folder_structure: str
-
-def get_sonar_prompts() -> SonarPrompts:
-    what_is_sonar = """
-      Sonar is a multi-tenant, multi-app platform that allows you to build and deploy your own frontend web apps. It provides an automated API that manages communication between the frontend and backend systems. The backend is a relational database off which the automated API is built.
-
-      Here are the key concepts you need to know about Sonar:
-      - Apps: An App is a frontend system definition. An App is mostly or completely defined in a folder of shape `src/apps/<app_name>`.
-      - LocalEntity: A LocalEntity is a TypeScript object that represents a table in the database. It is used to define the structure of the table and the data that is displayed in the app.
-      - RemoteEntity: A RemoteEntity is a SQL query that represents a table in the database. It is used to define the structure of the table and the data that is displayed in the app.
-
-      Your help may be requested for the following tasks:
-      1. Creating new Apps
-      2. Developing LocalEntity and RemoteEntity definitions
-      3. Defining the menu structure for an App
-      4. Connecting an App to the Sonar platform
-    """
-    
-    how_to_create_app = """
-
-    """
-
+def get_sonar_prompts():
     sonar_prompt = """
         Currently, you are working with Sonar. Sonar is multi-tenant multi-app platform. It has nothing to do with epynomous code quality tool.
         It is a platform that allows you to build and deploy your own frontent web apps (Apps), using automated API that manages communication between the frontend and backend systems.
@@ -176,392 +156,12 @@ def get_sonar_prompts() -> SonarPrompts:
         **LocalEntity**: LocalEntity is a TypeScript object that represents a table in the database. It is used to define the structure of the table and the data that is displayed in the app.
         **RemoteEntity**: RemoteEntity is a SQL query that represents a table in the database. It is used to define the structure of the table and the data that is displayed in the app.
 
-        Your help may be asked for the following tasks:
-        ** Creating new Apps **
-        1. ask user for the name of the App folder to create, then use tool copy_folder_with_content to copy src/apps/_template to src/apps/<app_name>
-        2. ask user for display name of the App, then use tool replace_string_in_file to replace 'Example title' with the display name in src/apps/<app_name>/index.ts
-        3. ask user whether she has a text file with a description of what the App should do.
-            3a. If yes, ask them to place the file in the folder /specs.
-            3b. If no, engage them in the chat to get a sense of what the App should do. Then, create a file in /specs with the description; name it generated_from_chat_[YYYYMMDD_HHMM].txt
-        4. Read the file in /specs and develop it further:
-            4a. Construct entity relationship diagram (ERD) for the App. Save its mermaidjs representation in /specs/erd.md
-            Example:
-            ~~~mermaid
-                %%{init: {'theme':'neutral'}}%%
-                erDiagram
-                    EVENT ||--o{ SIGNAL : has
-                    EVENT {
-                    int ID
-                    timestamp CreatedAt
-                    int CreatedBy
-                    int EventStatus
-                    int Building
-                    int Area
-                    int IOPSStage
-                    int ProcessStep
-                    int Product
-                    string DetectedAt
-                    string OccurredAt
-                    int DetectedBy
-                    string QCTestingRequiredFlag
-                    int SampleSubmittedToQCLabBy
-                    int QCTestingSubmittedBy
-                    int TriageLead
-                    }
-                    EVENT ||--o{ TRIAGE_PARTICIPANT : has
-                    SIGNAL ||--|{ SIGNAL_TYPE : has
-                    SIGNAL {
-                    int ID
-                    timestamp CreatedAt
-                    int CreatedBy
-                    int EventID
-                    int SignalTypeID
-                    }
-                    TRIAGE_PARTICIPANT ||--|{ USER : has
-                    TRIAGE_PARTICIPANT {
-                    int ID
-                    timestamp CreatedAt
-                    int CreatedBy
-                    int EventID
-                    int UserID
-                    int OrgFunction
-                    }
-                    TRIAGE_PARTICIPANT ||--|{ ORG_FUNCTION : has
-                    EVENT ||--|{ BUILDING : has
-                    EVENT ||--|{ AREA : has
-                    EVENT ||--|{ IOPS_STAGE : has
-                    EVENT ||--|{ PROCESS_STEP : has
-                    EVENT ||--|{ PRODUCT : has
-                    EVENT ||--|{ EVENT_STATUS : has
-                    EVENT ||--|{ USER : has
-                    SIGNAL_TYPE ||--|{ SIGNAL_CATEGORY_LEVEL_1 : has
-                    SIGNAL_TYPE {
-                    int ID
-                    int ProductID
-                    int ProcessStepID
-                    int IOPStageID
-                    int AreaID
-                    int OrgID
-                    int PostSignalCaptureActionID
-                    int RiskLevelID
-                    int SignalCategoryLevel1ID
-                    int SignalCategoryLevel2ID
-                    int SignalCategoryLevel3ID
-                    int SignalCategoryLevel4ID
-                    int SignalCategoryLevel5ID
-                    string SignalTypeName
-                    string SignalTypeDescription
-                    }
-                    SIGNAL_TYPE ||--|{ SIGNAL_CATEGORY_LEVEL_2 : has
-                    SIGNAL_TYPE ||--|{ SIGNAL_CATEGORY_LEVEL_3 : has
-                    SIGNAL_TYPE ||--|{ SIGNAL_CATEGORY_LEVEL_4 : has
-                    SIGNAL_TYPE ||--|{ SIGNAL_CATEGORY_LEVEL_5 : has
-                    SIGNAL_TYPE ||--|{ RISK_LEVEL : has
-                    SIGNAL_TYPE ||--|{ POST_SIGNAL_CAPTURE_ACTION : has
-                    SIGNAL_TYPE ||--|{ ORG : has
-                    SIGNAL_TYPE ||--|{ AREA : has
-                    SIGNAL_TYPE ||--|{ PROCESS_STEP : has
-                    SIGNAL_TYPE ||--|{ IOPS_STAGE : has
-                    SIGNAL_TYPE ||--|{ PRODUCT : has
-                ~~~
-            4b. Construct a list of entities and their relationships. Save it in /specs/entities.md
-            4c. Construct our best shot view of the App's menu. Save it in /specs/menu.md
-                Example:
-                    # Application Menu Structure
-
-                    ## Submit Event
-                    - Create new Event
-                    - Drafts
-
-                    ## Events by Status
-                    - Awaiting sample submission
-                    - Awaiting test results
-                    - Processing stage
-                    - Resulted in Minor Deviation
-                    - Resulted in Deviation with additional investigation
-                    - Track & Trend
-                    - Deleted
-
-                    ## Events' Signals
-                    - Signals
-
-                    ## Master data
-                    - Event statuses
-                    - Event localization dimensions
-                    - Products
-                    - DMS Stages
-                    - Areas
-                    - Process Steps
-                    - Buildings
-                    - Org Functions
-
-                    ## Signal types
-                    - Signal categories
-                    - Signal categories, level 1
-                    - Signal categories, level 2
-                    - Signal categories, level 3
-                    - Signal categories, level 4
-                    - Signal categories, level 5
-                    - Signal attributes
-                    - Risk levels
-                    - Post signal capture actions
-                    - Deviation categories
-                    - Post deviation determination actions
-
-                    ## Documentation
-                    - Event state transition diagram
-                    - FRD
-
-                    ## User management
-                    - Create user
-                    - User list
-                    - Login attempts
-                    - Roles
-                    - Impersonate user
-        5. Add new LocalEntityNames (from 4b) to src/types/localEntityNames.ts by using replace_string_in_file tool.
-            Example:
-                to-be-replaced string:
-                `export type LocalEntityName =`
-                new string:
-                `export type LocalEntityName =
-                'app31.statuses' |
-                'app31.risks' |`
-        6. Add new RemoteEntityNames (from 4b) to src/types/remoteEntityNames.ts by using replace_string_in_file tool.
-            For now assume that RemoteEntityNames are 1-to-1 with LocalEntityNames.
-            Example:
-                to-be-replaced string:
-                `export type RemoteEntityName =`
-                new string:
-                `export type RemoteEntityName =
-                'app31.statuses' |
-                'app31.risks' |`
-        7. Create LocalEntity definitions in src/apps/<app_name>/entities folder. Use create_file tool to create a new file for each entity.
-            Read src/types/index.ts to understand the meaning of the flags and functions used in the file.
-            Example:
-                src/apps/app29/entities/incoming_invoices.ts
-                    /* eslint-disable camelcase */
-                    import { Id, Column, MenuItem, singleControlledAction } from 'src/types'
-                    import VuexModuleConstructor from 'src/utils/vuexModuleConstructor/VuexModuleConstructor'
-                    import { isInteger, inlineEdit, hideWhenCreatingAndEditing } from 'src/types/columnFlags'
-                    import localEntityListInMenuItem from 'src/utils/mainMenuOperations/localEntityListInMenuItem'
-                    import { RemoteEntityName } from 'src/types/remoteEntityNames'
-                    import { LocalEntityName } from 'src/types/localEntityNames'
-                    import showGrandTotalsForSummableColumns from 'src/utils/entityOperations/columns/showGrandTotalsForSummableColumns'
-                    import { Vendor } from '../vendors/vendors'
-
-                    export interface IncomingInvoice {
-                    id: Id
-                    vendor_id: Vendor['id']
-                    invoice_date: Date
-                    received_on: Date
-                    amount: number
-                    description: string
-                    }
-
-                    type T = IncomingInvoice
-
-                    const controlledActions = singleControlledAction(860)
-
-                    const columns = (): Column<T>[] => {
-                    return [
-                        { name: 'row_menu', style: 'width:20px', hideWhenCreatingAndEditing, type: 'row_menu', menuItemShortcuts: ['del', 'copy'] },
-                        { name: 'id', style: 'width:30px', isInteger, hideWhenCreatingAndEditing },
-                        { name: 'vendor_id', style: 'width:30px', references: 'app29.vendors', editable: true },
-                        { name: 'invoice_date', style: 'width:30px', inlineEdit },
-                        { name: 'received_on', style: 'width:30px', inlineEdit },
-                        { name: 'amount', style: 'width:30px', isInteger, inlineEdit },
-                        { name: 'description', style: 'width:30px', inlineEdit }
-                    ]
-                    }
-
-                    const remoteEntityName: RemoteEntityName = 'app29.incoming_invoices'
-                    const localEntityName: LocalEntityName = remoteEntityName
-
-                    const localEntity = VuexModuleConstructor({
-                    columns,
-                    remoteEntityName,
-                    apiVersion: 1,
-                    controlledActions,
-                    pageTitle: 'Incoming invoices'
-                    })
-
-                    export default localEntity
-
-                    export const incoming_invoices__menuItem = (): MenuItem => ({
-                    label: 'Incoming invoices',
-                    icon: { name: 'mdi-keyboard-outline' },
-                    prefetch: true,
-                    ...localEntityListInMenuItem<T>({
-                        localEntityNameProp: localEntityName,
-                        ...showGrandTotalsForSummableColumns({ cols: columns() })
-                    })
-                    })
-
-        8. Create RemoteEntity definitions in src/apps/<app_name>/entities folder. Use create_file tool to create a new file for each entity.
-            Ask user schema name of the app. It must start with 'app' and be followed by a number. E.g., `app29`.
-            Example:
-                src/apps/app29/entities/incoming_invoices.pgsql
-                create or replace procedure app29.incoming_invoices__init ()
-                language plpgsql
-                as $$
-                begin
-
-                if not relation_exists('app29.incoming_invoices') then
-                    create table app29.incoming_invoices (
-                        id int primary key generated always as identity
-                        , vendor_id int references app29.vendors(id)
-                        , invoice_date date
-                        , received_on date
-                        , amount numeric
-                        , description text
-                    );
-                end if;
-
-
-                insert into meta.entities ( name )
-                select 'app29.incoming_invoices'
-                where not exists ( select 1 from meta.entities where name = 'app29.incoming_invoices' );
-
-                end;
-                $$;
-
-                call app29.incoming_invoices__init();
-
-        9. Write to src/apps/<app_name>/config/mastersToFetch.ts the names of the entities that should be fetched from the backend as master data.
-            Example:
-            src/apps/app29/config/mastersToFetch.ts
-
-            import { LocalEntityName } from 'src/types/localEntityNames'
-
-            const mastersToFetch: LocalEntityName[] = [
-                'app29.vendors',
-                'app29.customers',
-                'app29.vendor_contracts',
-                'app29.customer_contracts',
-                'app29.incoming_invoices',
-                'app29.outgoing_invoices',
-                'app29.incoming_payments',
-                'app29.outgoing_payments'
-            ]
-
-            export default mastersToFetch
-
-        10. Write to src/apps/<app_name>/config/entitiesToRegister.ts the names of the entities that should be registered in the app.
-            Example:
-            src/apps/app29/config/entitiesToRegister.ts
-            /* eslint-disable camelcase */
-            import vendors from '../entities/vendors/vendors'
-            import vendor_contracts from '../entities/vendor_contracts/vendor_contracts'
-            import incoming_invoices from '../entities/incoming_invoices/incoming_invoices'
-            import outgoing_invoices from '../entities/outgoing_invoices/outgoing_invoices'
-            import outgoing_invoice_lines from '../entities/outgoing_invoices/outgoing_invoice_lines'
-            import incoming_payments from '../entities/incoming_payments/incoming_payments'
-            import outgoing_payments from '../entities/outgoing_payments/outgoing_payments'
-            import incoming_paymanets_rel_outgoing_invoices from '../entities/incoming_paymanets_rel_outgoing_invoices/incoming_paymanets_rel_outgoing_invoices'
-            import customers from '../entities/customers/customers'
-            import { LocalEntityNameToLocalEntityMap } from 'src/types'
-
-            const vuexModulesToRegister: LocalEntityNameToLocalEntityMap = {
-                'app29.vendors': vendors,
-                'app29.vendor_contracts': vendor_contracts,
-                'app29.incoming_invoices': incoming_invoices,
-                'app29.outgoing_invoices': outgoing_invoices,
-                'app29.outgoing_invoices__open': outgoing_invoices,
-                'app29.outgoing_invoice_lines': outgoing_invoice_lines,
-                'app29.incoming_payments': incoming_payments,
-                'app29.incoming_payments__unallocated': incoming_payments,
-                'app29.outgoing_payments': outgoing_payments,
-                'app29.incoming_paymanets_rel_outgoing_invoices': incoming_paymanets_rel_outgoing_invoices,
-                'app29.customers': customers
-            }
-
-            export default vuexModulesToRegister
-
-        11. Populate src/menus/default.ts with the menu structure, using menu items exported from the entities and menus files.
-            Example:
-            src/apps/app29/menus/default.ts
-            /* eslint-disable camelcase */
-            import { MenuItem } from 'src/types'
-            import { customers__menuItem } from '../entities/customers/customers'
-            import { incoming_invoices__menuItem } from '../entities/incoming_invoices/incoming_invoices'
-            import { incoming_paymanets_rel_outgoing_invoices__menuItem } from '../entities/incoming_paymanets_rel_outgoing_invoices/incoming_paymanets_rel_outgoing_invoices'
-            import { incoming_payments__menuItem, incoming_payments__unsettled__menuItem } from '../entities/incoming_payments/incoming_payments'
-            import { outgoing_invoices__menuItem, outgoing_invoices__open__menuItem } from '../entities/outgoing_invoices/outgoing_invoices'
-            import { outgoing_payments__menuItem } from '../entities/outgoing_payments/outgoing_payments'
-            import { vendors__menuItem } from '../entities/vendors/vendors'
-            import { vendor_contracts__menuItem } from '../entities/vendor_contracts/vendor_contracts'
-
-            const menuItems = (ctx: any): MenuItem[] => {
-                return [
-                { label: 'Customers', isHeader: true },
-                outgoing_invoices__menuItem(),
-                outgoing_invoices__open__menuItem(),
-                incoming_payments__menuItem(),
-                incoming_payments__unsettled__menuItem(),
-                incoming_paymanets_rel_outgoing_invoices__menuItem(),
-                customers__menuItem(),
-
-                { label: 'Vendors', isHeader: true },
-                incoming_invoices__menuItem(),
-                outgoing_payments__menuItem(),
-                vendor_contracts__menuItem(),
-                vendors__menuItem(),
-
-                { label: 'Exceptions', isHeader: true },
-                incoming_payments__unsettled__menuItem()
-                ]
-            }
-
-            export default menuItems
-
-        12. Connect the app to the platform by using sonar_connect_app_to_platform tool.
+        Sonar's specic tools:
+          * sonar_connect_app_to_platform: Use this tool to connect the App to the Sonar platform by updating the necessary files.
         """
 
-    sonar_folder_structure = """
-      Typical structure of App folder.
-      |-- index.ts
-      |-- Index.vue
-      |-- config <-- config folder contains the configuration files for the app
-        |-- mastersToFetch.ts <-- mastersToFetch is used to define the master data that needs to be fetched from the backend. Master data is master in this case because it has special treatment: It is loaded at the beginning in full and is always availabe in the app. It is used to populate dropdowns, etc.
-        |-- entitiesToRegister.ts <-- connects the entities to the app. It is used to define which entities are available in the app. Usually, entities defined in folder entities are listed here
-      |-- menus <-- menus are used to define the structure of the sidebar. This is the main and only navigation in the app
-        |-- default.ts <-- default menu is the main menu of the app. It is used to define the structure of the sidebar
-      |-- pages <-- rarely used, because content is mostly displayed in one single big GenericTable component
-        |-- Hello.vue
-      |-- entities <-- entities are the main building blocks of the app. They are the main data structures that are displayed in the app via the GenericTable component
-        |-- customers <-- folder for Entity definition
-          |-- customers.pgsql <-- RemoteEntity definition as a SQL query
-          |-- customers.ts <-- LocalEntity definition as a strongly types TypeScript object
-        |-- customer_contracts
-          |-- customer_contracts.pgsql
-          |-- customer_contracts.ts
-        |-- incoming_invoices
-          |-- incoming_invoices.pgsql
-          |-- incoming_invoices.ts
-        |-- incoming_paymanets_rel_outgoing_invoices
-          |-- incoming_paymanets_rel_outgoing_invoices.pgsql
-          |-- incoming_paymanets_rel_outgoing_invoices.ts
-        |-- incoming_payments
-          |-- incoming_payments.pgsql
-          |-- incoming_payments.ts
-        |-- outgoing_invoices
-          |-- OutgoingInvoiceCard.vue <-- Component used for custom editing or viewing card of the entity. It is used in the GenericTable component, and routed from LocalEntity definition
-          |-- outgoing_invoices.pgsql
-          |-- outgoing_invoices.ts
-          |-- outgoing_invoice_lines.ts <-- also LocalEntity definition. Closely related entities, like lines of an invoice, are usually defined in the same
-        |-- outgoing_payments
-          |-- outgoing_payments.pgsql
-          |-- outgoing_payments.ts
-        |-- vendors
-          |-- vendors.pgsql
-          |-- vendors.ts
-        |-- vendor_contracts
-          |-- vendor_contracts.pgsql
-          |-- vendor_contracts.ts
-    """  
-    
     return SonarPrompts(what_is_sonar=what_is_sonar, sonar_folder_structure=sonar_folder_structure)
-  
+
 
 # endregion: Sonar prompts
 
@@ -748,7 +348,7 @@ def replace_string_in_file(file_path, old_string, new_string):
     except Exception as e:
         return f"Error replacing string in file: {str(e)}"
 
-def sonar_connect_app_to_platform(app_id, app_folder):
+def sonar_connect_app_to_platform(app_id: int, app_folder: str) -> str:
     ldm_import_location = "src/components/LeftDrawerMenu/index.vue"
     anchor = '// <-- new-ldm-import-goes-here'
     ldm_import_line = f"import ldm{app_id} from 'src/apps/{app_folder}/menus/default'"
@@ -769,6 +369,8 @@ def sonar_connect_app_to_platform(app_id, app_folder):
     replacement4 = f",\nappPage{app_id}{anchor4}"
     replace_string_in_file(app_page, anchor4, replacement4)
 
+    return f"Connected App {app_id} to the Sonar platform"
+
 def tavily_search(query):
     try:
         response = tavily.qna_search(query=query, search_depth="advanced")
@@ -777,9 +379,7 @@ def tavily_search(query):
         return f"Error performing search: {str(e)}"
 # endregion: Tools
 
-sonar_tools = []
-
-tools = sonar_tools + [
+tools = [
     {
         "name": "create_folder",
         "description": "Create a new folder at the specified path. Use this when you need to create a new directory in the project structure.",
@@ -1167,21 +767,36 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
     return assistant_response, exit_continuation
 
 def main():
-    global automode, conversation_history
+    global automode, conversation_history, logging_is_enabled
     console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Image Support!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
+    console.print("Type 'clear' to clear the conversation history.")
     console.print("Type 'image' to include an image in your message.")
     console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
+    def log_to_file (message):
+        # create folder is not exists 'logs'
+        if not os.path.exists('logs'):
+            os.makedirs('logs')
+
+        # save message in yyyymmdd_hhmmss.txt
+        with open(f'logs/{datetime.now().strftime("%Y%m%d_%H%M%S")}.txt', 'w') as f:
+            f.write(message)
+
     while True:
         user_input = console.input("[bold cyan]You:[/bold cyan] ")
+        user_input_lower = user_input.strip().lower()
 
-        if user_input.lower() == 'exit':
+        if user_input_lower == 'exit':
             console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
             break
 
-        if user_input.lower() == 'image':
+        elif user_input_lower == 'clear':
+            conversation_history = []
+            console.print(Panel("Conversation history cleared.", title="Cleared", style="bold green"))
+
+        elif user_input_lower == 'image':
             image_path = console.input("[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] ").strip().replace("'", "")
 
             if os.path.isfile(image_path):
@@ -1190,7 +805,8 @@ def main():
             else:
                 console.print(Panel("Invalid image path. Please try again.", title="Error", style="bold red"))
                 continue
-        elif user_input.lower().startswith('automode'):
+
+        elif user_input_lower.startswith('automode'):
             try:
                 parts = user_input.split()
                 if len(parts) > 1 and parts[1].isdigit():
@@ -1231,8 +847,11 @@ def main():
                     conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
 
             console.print(Panel("Exited automode. Returning to regular chat.", style="green"))
+
         else:
             response, _ = chat_with_claude(user_input)
+            if logging_is_enabled:
+                log_to_file(f'user_input:\n{user_input}\nresponse:\n{response}\n\n')
 
 if __name__ == "__main__":
     main()
