@@ -50,6 +50,7 @@ Claude Engineer is an advanced interactive command-line interface (CLI) that har
      ```
 
 4. Set up the virtual environment for code execution:
+   Engineer will do this on its own the first time it runs a piece of code.
    ```
    python -m venv code_execution_env
    source code_execution_env/bin/activate  # On Windows, use: code_execution_env\Scripts\activate
