@@ -1,4 +1,5 @@
 import os
+from os.path import join, dirname
 from dotenv import load_dotenv
 import json
 from tavily import TavilyClient
@@ -38,7 +39,11 @@ def setup_virtual_environment():
 
 
 # Load environment variables from .env file
-load_dotenv()
+dotenv_path = join(dirname(__file__), '.env')
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path, override=True)
+else:
+    raise ValueError(f"Error: .env file not found at {dotenv_path}")
 
 # Initialize the Anthropic client
 anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
