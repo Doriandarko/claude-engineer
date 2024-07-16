@@ -32,7 +32,7 @@ Claude Engineer is an advanced interactive command-line interface (CLI) that har
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/claude-engineer.git
+   git clone https://github.com/doriandarko/claude-engineer.git
    cd claude-engineer
    ```
 
