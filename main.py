@@ -1041,6 +1041,11 @@ async def main():
     while True:
         user_input = console.input("[bold cyan]You:[/bold cyan] ")
 
+        # Check for empty input
+        if not user_input:
+            console.print(Panel("Empty input is not allowed. Please try again.", title="Error", style="bold red"))
+            continue
+
         if user_input.lower() == 'exit':
             console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
             break
