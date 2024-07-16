@@ -579,7 +579,7 @@ tools = [
             },
             "instructions": {
                 "type": "string",
-                "description": "Specific instructions for code changes, including:\n1. Functionality to add, modify, or remove\n2. Performance optimizations to implement\n3. Code style or formatting changes to apply\n4. Refactoring suggestions to improve code structure\n5. Error handling or input validation to enhance\n6. Documentation or comments to update or add\n7. Integration of new libraries or APIs\n8. Implementation of specific algorithms or design patterns\n9. Addressing of known bugs or issues\n10. Any other specific code modifications or improvements to be made"
+                "description": "After completing the code review, construct a plan for the change between <PLANNING> tags. Ask for additional source files or documentation that may be relevant. The plan should avoid duplication (DRY principle), and balance maintenance and flexibility. Present trade-offs and implementation choices at this step. Consider available Frameworks and Libraries and suggest their use when relevant. STOP at this step if we have not agreed a plan.\n\nOnce agreed, produce code between <OUTPUT> tags. Pay attention to Variable Names, Identifiers and String Literals, and check that they are reproduced accurately from the original source files unless otherwise directed. When naming by convention surround in double colons and in ::UPPERCASE::. Maintain existing code style, use language appropriate idioms. Produce Code Blocks with the language specified after the first backticks"
             },
             "batch_size": {
                 "type": "integer",
