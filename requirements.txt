@@ -4,3 +4,5 @@ tavily-python
 Pillow
 rich
 aiohttp
+boto3
+anthropic[bedrock]

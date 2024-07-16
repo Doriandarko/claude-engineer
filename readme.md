@@ -27,6 +27,7 @@ Claude Engineer is an advanced interactive command-line interface (CLI) that har
 - 💾 Chat log saving capability
 - 🔒 Enhanced code execution capabilities with isolated virtual environment
 - 🔄 Process management for long-running code executions
+- 🌩️ AWS Anthropic Bedrock support for flexible deployment options
 
 ## 🛠️ Installation
 
@@ -58,6 +59,39 @@ Claude Engineer is an advanced interactive command-line interface (CLI) that har
    pip install -r requirements.txt
    deactivate
    ```
+### AWS Bedrock Setup (Optional)
+
+To use AWS Anthropic Bedrock:
+
+1. Ensure you have an AWS account with access to Bedrock.
+2. Install and configure the AWS CLI on your machine.
+3. Set up your AWS credentials using `aws configure` or by setting environment variables.
+
+## Configuration
+
+The following environment variables can be set in the `.env` file:
+
+- `ANTHROPIC_API_KEY`: Your Anthropic API key (required if not using AWS Bedrock)
+- `TAVILY_API_KEY`: Your Tavily API key for web search functionality
+- `USE_AWS_BEDROCK`: Set to "true" to use AWS Bedrock instead of the standard Anthropic API
+- `AWS_REGION`: The AWS region for Bedrock (required if using AWS Bedrock)
+- `AWS_PROFILE`: The AWS profile to use (required if using AWS Bedrock)
+
+Example `.env` file for AWS Bedrock:
+```
+USE_AWS_BEDROCK=true
+AWS_REGION=us-west-2
+AWS_PROFILE=bedrock-profile
+TAVILY_API_KEY=your_tavily_api_key_here
+```
+
+To configure your AWS profile for Bedrock:
+
+1. Run `aws configure --profile bedrock-profile`
+2. Enter your AWS Access Key ID and Secret Access Key
+3. Set the default region to where Bedrock is available (e.g., us-west-2)
+4. Set the output format (e.g., json)
+
 
 ## 🚀 Usage
 

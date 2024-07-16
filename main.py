@@ -21,6 +21,9 @@ import venv
 import subprocess
 import sys
 import signal
+import boto3
+from anthropic import AnthropicBedrock
+
 
 def setup_virtual_environment():
     venv_name = "code_execution_env"
@@ -40,11 +43,26 @@ def setup_virtual_environment():
 # Load environment variables from .env file
 load_dotenv()
 
-# Initialize the Anthropic client
-anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-if not anthropic_api_key:
-    raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
-client = Anthropic(api_key=anthropic_api_key)
+# Initialize the appropriate client (Anthropic or AnthropicBedrock)
+def initialize_client():
+    use_aws_bedrock = os.getenv("USE_AWS_BEDROCK", "false").lower() == "true"
+    
+    if use_aws_bedrock:
+        aws_region = os.getenv("AWS_REGION")
+        aws_profile = os.getenv("AWS_PROFILE")
+        
+        if not aws_region or not aws_profile:
+            raise ValueError("AWS_REGION and AWS_PROFILE must be set for AWS Bedrock")
+        
+        session = boto3.Session(profile_name=aws_profile)
+        return AnthropicBedrock() 
+    else:
+        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not anthropic_api_key:
+            raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
+        return Anthropic(api_key=anthropic_api_key)
+
+client = initialize_client()
 
 # Initialize the Tavily client
 tavily_api_key = os.getenv("TAVILY_API_KEY")
@@ -65,10 +83,12 @@ MAX_CONTINUATION_ITERATIONS = 25
 # Claude 3.5 Sonnet claude-3-5-sonnet-20240620
 
 # Models to use
-MAINMODEL = "claude-3-5-sonnet-20240620"
-TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
-CODEEDITORMODEL = "claude-3-5-sonnet-20240620"
-CODEEXECUTIONMODEL = "claude-3-5-sonnet-20240620"
+# Update model constants to include Bedrock-specific identifiers
+MAINMODEL = "anthropic.claude-3-5-sonnet-20240620-v1:0" if os.getenv("USE_AWS_BEDROCK", "false").lower() == "true" else "claude-3-5-sonnet-20240620"
+TOOLCHECKERMODEL = "anthropic.claude-3-5-sonnet-20240620-v1:0" if os.getenv("USE_AWS_BEDROCK", "false").lower() == "true" else "claude-3-5-sonnet-20240620"
+CODEEDITORMODEL = "anthropic.claude-3-5-sonnet-20240620-v1:0" if os.getenv("USE_AWS_BEDROCK", "false").lower() == "true" else "claude-3-5-sonnet-20240620"
+CODEEXECUTIONMODEL = "anthropic.claude-3-5-sonnet-20240620-v1:0" if os.getenv("USE_AWS_BEDROCK", "false").lower() == "true" else "claude-3-5-sonnet-20240620"
+
 
 # Token tracking variables
 main_model_tokens = {'input': 0, 'output': 0}
