@@ -1,5 +1,7 @@
 import asyncio
 import base64
+from typing import List, Dict, Union
+import json 
 import queue
 import difflib
 import io
@@ -755,7 +757,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             model=MAINMODEL,
             max_tokens=4000,
             system=update_system_prompt(current_iteration, max_iterations),
-            messages=messages
+            messages=messages,
+            stream=True  # Enable streaming
         )
     except APIStatusError as e:
         if e.status_code == 429:
@@ -773,16 +776,24 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     exit_continuation = False
     tool_uses = []
 
-    for content_block in response.content:
-        if content_block.type == "text":
-            assistant_response += content_block.text
             if CONTINUATION_EXIT_PHRASE in content_block.text:
-                exit_continuation = True
-        elif content_block.type == "tool_use":
-            tool_uses.append(content_block)
+    # Handle streaming response
+    for chunk in response:
+        if chunk.type == "content_block_start":
+            if chunk.content_block.type == "text":
+                console.print("[bold green]Claude:[/bold green] ", end="")
+            elif chunk.content_block.type == "tool_use":
+                tool_uses.append(chunk.content_block)
+        elif chunk.type == "content_block_delta":
+            if chunk.delta.type == "text_delta":
+                console.print(chunk.delta.text, end="")
+                assistant_response += chunk.delta.text
+                if CONTINUATION_EXIT_PHRASE in chunk.delta.text:
+                    exit_continuation = True
+        elif chunk.type == "content_block_stop":
+            console.print()  # Add a newline at the end of the response
 
     console.print("\n")
-    console.print(Panel(Markdown(assistant_response), title="\nClaude's Response", title_align="left", expand=False))
 
     for tool_use in tool_uses:
         tool_name = tool_use.name
@@ -829,14 +840,17 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 model=TOOLCHECKERMODEL,
                 max_tokens=4000,
                 system=update_system_prompt(current_iteration, max_iterations),
-                messages=messages
+                messages=messages,
+                stream=True  # Enable streaming for tool response
             )
 
             tool_checker_response = ""
-            for tool_content_block in tool_response.content:
-                if tool_content_block.type == "text":
-                    tool_checker_response += tool_content_block.text
-            console.print(Panel(Markdown(tool_checker_response), title="Claude's Response to Tool Result", title_align="left"))
+            console.print("[bold green]Claude (Tool Response):[/bold green] ", end="")
+            for chunk in tool_response:
+                if chunk.type == "content_block_delta" and chunk.delta.type == "text_delta":
+                    console.print(chunk.delta.text, end="")
+                    tool_checker_response += chunk.delta.text
+            console.print()  # Add a newline at the end of the tool response
             assistant_response += "\n\n" + tool_checker_response
         except APIError as e:
             error_message = f"Error in tool response: {str(e)}"
