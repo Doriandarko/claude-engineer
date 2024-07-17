@@ -22,7 +22,7 @@ Claude Engineer is an advanced interactive command-line interface (CLI) that har
 - 🔍 TOOLCHECKERMODEL for validating tool usage and outputs
 - 📝 CODEEDITORMODEL for specialized code editing tasks
 - 🖥️ CODEEXECUTIONMODEL for analyzing code execution results
-- 📊 Token usage tracking (input, output, and total) for each model
+- 📊 Token usage tracking (input, output, and total) for each model, with improved visualization using tables
 - 🪟 Remaining context window display
 - 💾 Chat log saving capability
 - 🔒 Enhanced code execution capabilities with isolated virtual environment
@@ -151,8 +151,20 @@ The system prompt is now dynamically updated based on whether the script is in a
 1. In regular mode, Claude focuses on providing helpful responses and using tools as needed.
 2. In automode, Claude is instructed to work autonomously, set goals, and provide regular updates on progress.
 3. The system prompt adapts to the specific task at hand, optimizing Claude's performance for each scenario.
+4. The system prompt now includes file context for enhanced token management.
 
 The dynamic system prompt enhances Claude's ability to adapt to different scenarios and provide more relevant assistance.
+
+### 📊 Token Management and Visualization
+
+Claude Engineer now features improved token management and visualization:
+
+1. Enhanced token management using file context in the system prompt.
+2. Improved token visualization using a table format.
+3. Display of input, output, and total token usage for each model interaction.
+4. Visualization of remaining context window size.
+
+These improvements provide better insights into token usage and help manage conversations more effectively.
 
 ### 🔧 Available Tools
 
