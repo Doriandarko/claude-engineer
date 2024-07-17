@@ -1068,10 +1068,10 @@ def display_token_usage():
     table.add_column("Cost ($)", style="red")
 
     model_costs = {
-        "Main Model": {"input": 15.00, "output": 75.00, "has_context": True},
-        "Tool Checker": {"input": 1.00, "output": 2.00, "has_context": False},
+        "Main Model": {"input": 3.00, "output": 15.00, "has_context": True},
+        "Tool Checker": {"input": 3.00, "output": 15.00, "has_context": False},
         "Code Editor": {"input": 3.00, "output": 15.00, "has_context": True},
-        "Code Execution": {"input": 1.00, "output": 2.00, "has_context": False}
+        "Code Execution": {"input": 0.25, "output": 1.25, "has_context": False}
     }
 
     total_input = 0
