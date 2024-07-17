@@ -1,5 +1,5 @@
 import asyncio
-import base64
+import base64    
 from typing import List, Dict, Union
 import json 
 import queue
@@ -149,12 +149,12 @@ Project Creation and Management:
 Always strive for accuracy, clarity, and efficiency in your responses and actions. If uncertain, use the tavily_search tool or admit your limitations.
 
 If you want a specific part of your response to be spoken aloud to the user,                                                                                                                                                             │
-  enclose that part in [SPEAK] and [/SPEAK] tags.                                                                                                                                                                                          │
+  enclose that part in double asterisks (**) on each side.                                                                                                                                                                                          │
                                                                                                                                                                                                                                            │
   Example:                                                                                                                                                                                                                                 │
-  Hello! [SPEAK]How can I assist you today?[/SPEAK]                                                                                                                                                                                        │
+  Hello! **How can I assist you today?**                                                                                                                                                                                                        │
                                                                                                                                                                                                                                            │
-  Only the text between the tags will be converted to speech.        
+  Only the text between the double asterisks will be converted to speech.        
 
 """
 
@@ -776,7 +776,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     exit_continuation = False
     tool_uses = []
 
-            if CONTINUATION_EXIT_PHRASE in content_block.text:
     # Handle streaming response
     for chunk in response:
         if chunk.type == "content_block_start":
@@ -934,13 +933,13 @@ async def main():
                             
                                 response, _ = await chat_with_claude(user_input)
                                 
-                                # Extract and process [SPEAK] tags
-                                speak_content = re.findall(r'\[SPEAK\](.*?)\[/SPEAK\]', response, re.DOTALL)
+                                # Extract and process ** tags
+                                speak_content = re.findall(r'\*\*(.*?)\*\*', response, re.DOTALL)
                                 for content in speak_content:
                                     text_to_speech(content)
                                 
-                                # Remove [SPEAK] tags from the response
-                                response = re.sub(r'\[SPEAK\]|\[/SPEAK\]', '', response)
+                                # Remove ** tags from the response
+                                response = re.sub(r'\*\*', '', response)
                                 
                                 live.update(Panel(Markdown(response), title="Claude's Response", title_align="left", expand=False))
                             else:
