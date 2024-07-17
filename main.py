@@ -1039,7 +1039,10 @@ async def main():
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
     while True:
-        user_input = console.input("[bold cyan]You:[/bold cyan] ")
+        #Handle Multi line paste
+        console.print("[bold cyan]You:[/bold cyan] ", end="")
+        user_input = sys.stdin.read()
+        console.print(f"{user_input.strip()}")
 
         # Check for empty input
         if not user_input:
