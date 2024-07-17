@@ -1,25 +1,63 @@
-import os
-from dotenv import load_dotenv
-import json
-import base64
-from PIL import Image
-import io
-import re
-from anthropic import Anthropic, APIStatusError, APIError
-import difflib
-import time
-from rich.console import Console
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.markdown import Markdown
 import asyncio
+import base64
+import queue
+import difflib
+import io
+import json
+import os
+import re
+import tempfile
+import threading
+import time
+import wave
+import subprocess
+import itertools
+
 import aiohttp
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+import numpy as np
+import simpleaudio as sa
+import sounddevice as sd
+from anthropic import Anthropic, APIError, APIStatusError
+from dotenv import load_dotenv
+from openai import OpenAI
+from PIL import Image
+from pydub import AudioSegment
+from pydub.playback import play
+from pynput import keyboard
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.progress import (BarColumn, Progress, SpinnerColumn,
+                           TaskProgressColumn, TextColumn)
+from rich.syntax import Syntax
+from rich.live import Live
+from rich.spinner import Spinner
+
+ctrl_pressed = False
+esc_pressed = False
+
+
+def on_press(key):
+    global ctrl_pressed
+    global esc_pressed
+    if key == keyboard.Key.ctrl:
+        ctrl_pressed = True
+    elif key == keyboard.Key.esc:
+        esc_pressed = True
+
+def on_release(key):
+    global ctrl_pressed
+    global esc_pressed
+    if key == keyboard.Key.ctrl:
+        ctrl_pressed = False
+    elif key == keyboard.Key.esc:
+        esc_pressed = False
 
 # Load environment variables from .env file
 load_dotenv(override=True)
 
 console = Console()
+voice_input = ""
 
 # Add these constants at the top of the file
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
@@ -107,6 +145,15 @@ Project Creation and Management:
 
 
 Always strive for accuracy, clarity, and efficiency in your responses and actions. If uncertain, use the tavily_search tool or admit your limitations.
+
+If you want a specific part of your response to be spoken aloud to the user,                                                                                                                                                             │
+  enclose that part in [SPEAK] and [/SPEAK] tags.                                                                                                                                                                                          │
+                                                                                                                                                                                                                                           │
+  Example:                                                                                                                                                                                                                                 │
+  Hello! [SPEAK]How can I assist you today?[/SPEAK]                                                                                                                                                                                        │
+                                                                                                                                                                                                                                           │
+  Only the text between the tags will be converted to speech.        
+
 """
 
 # Auto mode-specific system prompt
@@ -145,6 +192,132 @@ You are currently in automode. Follow these guidelines:
 
 Remember: Focus on completing the established goals efficiently and effectively. Avoid unnecessary conversations or requests for additional tasks.
 """
+
+def speech_to_text(filename="recorded_audio.wav", debug=False):
+    is_recording = False
+    recorded_audio = []
+    samplerate = 44100  # Sample rate
+
+    def transcribe_audio_openai(file_path):
+        client = OpenAI()
+        with open(file_path, "rb") as audio:
+            transcript = client.audio.transcriptions.create(
+                file=audio, model="whisper-1", language="en"
+            )
+        if debug:
+            print("Transcribed Text (OpenAI):", transcript)
+        return transcript
+
+    def on_press(key):
+        nonlocal is_recording
+        if key == keyboard.Key.ctrl:
+            if not is_recording:
+                is_recording = True
+                recorded_audio.clear()
+
+    def on_release(key):
+        nonlocal is_recording
+        if key == keyboard.Key.ctrl:
+            if is_recording:
+                is_recording = False
+                return False  # Stop listener
+
+    def callback(indata, frames, time, status):
+        if is_recording:
+            recorded_audio.append(indata.copy())
+
+    with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+        with sd.InputStream(samplerate=samplerate, channels=1, callback=callback):
+            listener.join()
+
+    if not recorded_audio:
+        return None
+
+    recording = np.concatenate(recorded_audio, axis=0)
+    recording_int = np.int16(recording * 32767)
+    
+    with wave.open(filename, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(samplerate)
+        wf.writeframes(recording_int.tobytes())
+
+    return transcribe_audio_openai(filename)
+
+def text_to_speech(message, service="openai"):
+    def convert_opus_to_wav(opus_file_path):
+        wav_file_path = opus_file_path.replace(".opus", ".wav")
+        command = f"ffmpeg -i {opus_file_path} {wav_file_path} > /dev/null 2>&1"
+        os.system(command)
+        return wav_file_path
+
+    def audio_player(playback_queue):
+        while True:
+            wav_path = playback_queue.get()
+            try:
+                audio = AudioSegment.from_file(wav_path, format="wav")
+                play_obj = sa.play_buffer(
+                    audio.raw_data,
+                    num_channels=audio.channels,
+                    bytes_per_sample=audio.sample_width,
+                    sample_rate=audio.frame_rate,
+                )
+                play_obj.wait_done()
+                print(f"Audio played: {wav_path}")
+            except subprocess.CalledProcessError as e:
+                print(f"Subprocess error: {e}")
+            except Exception as e:
+                print(f"Unexpected error: {e}")
+            finally:
+                os.remove(wav_path)
+                playback_queue.task_done()
+
+    def create_temp_file(suffix=".wav"):
+        temp_fd, temp_path = tempfile.mkstemp(suffix=suffix)
+        os.close(temp_fd)
+        return temp_path
+
+    def generate_with_openai(message):
+        temp_path = create_temp_file(suffix=".opus")
+        client = OpenAI()
+        
+        # Extract the text from the Transcription object if necessary
+        if hasattr(message, 'text'):
+            message = message.text
+        
+        response = client.audio.speech.create(
+            model="tts-1", response_format="opus", voice="alloy", input=message, speed="1.0"
+        )
+        with open(temp_path, "wb") as f:
+            f.write(response.content)
+            print(f"Audio generated: {temp_path}")
+            return temp_path
+
+    message_queue = queue.Queue()
+    playback_queue = queue.Queue()
+
+    def audio_generator():
+        while True:
+            service, message = message_queue.get()
+            if service == "openai":
+                try:
+                    temp_path = generate_with_openai(message)
+                    playback_queue.put(convert_opus_to_wav(temp_path))
+                except Exception as e:
+                    print(f"Error generating audio: {e}")
+            else:
+                print(f"Unknown service: {service}")
+            message_queue.task_done()
+
+    message_queue.put((service, message))
+
+    threading.Thread(target=audio_generator, daemon=True).start()
+    threading.Thread(target=audio_player, args=(playback_queue,), daemon=True).start()
+
+    # Wait for the queues to be empty
+    message_queue.join()
+    playback_queue.join()
+
 
 def update_system_prompt(current_iteration=None, max_iterations=None):
     global base_system_prompt, automode_system_prompt
@@ -608,7 +781,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         elif content_block.type == "tool_use":
             tool_uses.append(content_block)
 
-    console.print(Panel(Markdown(assistant_response), title="Claude's Response", title_align="left", expand=False))
+    console.print("\n")
+    console.print(Panel(Markdown(assistant_response), title="\nClaude's Response", title_align="left", expand=False))
 
     for tool_use in tool_uses:
         tool_name = tool_use.name
@@ -676,20 +850,116 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 
     return assistant_response, exit_continuation
 
+
+
+
 async def main():
-    global automode, conversation_history
+    global automode, conversation_history, voice_input, esc_pressed, ctrl_pressed
+    
+    ctrl_pressed = False
+    esc_pressed = False
+    
     console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Image Support!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
     console.print("Type 'image' to include an image in your message.")
     console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
+    console.print("Type 'voice' to enter voice input mode.")
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
+    
+    def speech_to_text_thread(voice_input_queue, stop_event):
+        while not stop_event.is_set():
+            voice_input = speech_to_text()
+            if voice_input and hasattr(voice_input, 'text'):
+                voice_input_queue.put(voice_input.text)
+            time.sleep(0.1)
+
+    voice_mode = False
+    voice_input_queue = queue.Queue()
+    stop_event = threading.Event()
+
+    keyboard_listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+    keyboard_listener.start()
 
     while True:
-        user_input = console.input("[bold cyan]You:[/bold cyan] ")
+        if not voice_mode:
+            console.print("[bold cyan]You:[/bold cyan] ", end="")
+            user_input = input()
+        
+        if user_input.lower() == 'voice':
+            voice_mode = True
+            console.print(Panel("Entering voice mode. Hold Ctrl to speak, release when done. Say 'exit voice' or press Esc to exit voice mode.", title="Voice Mode", style="bold blue"))
+            
+            stop_event.clear()
+            speech_thread = threading.Thread(target=speech_to_text_thread, args=(voice_input_queue, stop_event), daemon=True)
+            speech_thread.start()
+            
+            spinner = Spinner("dots")
+            
+            with Live(spinner, refresh_per_second=10) as live:
+                live.update("Hold Ctrl to speak...")
+                
+                while voice_mode:
+                    try:
+                        if ctrl_pressed:
+                            live.update("Listening...")
+                            
+                            while ctrl_pressed:
+                                await asyncio.sleep(0.1)
+                            
+                            live.update("Processing...")
+                            
+                            user_input = await asyncio.wait_for(wait_for_voice_input(voice_input_queue), timeout=5.0)
+                            
+                            if user_input:
+                                live.update(f"[bold cyan]You (voice):[/bold cyan] {user_input}")
+                            
+                                if user_input.lower() == 'exit voice':
+                                    voice_mode = False
+                                    live.update("Exiting voice mode. Returning to text input.")
+                                    break
+                            
+                                response, _ = await chat_with_claude(user_input)
+                                
+                                # Extract and process [SPEAK] tags
+                                speak_content = re.findall(r'\[SPEAK\](.*?)\[/SPEAK\]', response, re.DOTALL)
+                                for content in speak_content:
+                                    text_to_speech(content)
+                                
+                                # Remove [SPEAK] tags from the response
+                                response = re.sub(r'\[SPEAK\]|\[/SPEAK\]', '', response)
+                                
+                                live.update(Panel(Markdown(response), title="Claude's Response", title_align="left", expand=False))
+                            else:
+                                live.update("No speech detected. Please try again.")
+                        
+                        elif esc_pressed:
+                            voice_mode = False
+                            esc_pressed = False
+                            live.update("Exiting voice mode. Returning to text input.")
+                            break
+                        
+                        await asyncio.sleep(0.1)
+                        
+                    except asyncio.TimeoutError:
+                        live.update("Voice input timed out. Please try again.")
+                    
+                    live.update("Hold Ctrl to speak...")
+            
+            # Clean up voice mode resources
+            stop_event.set()
+            speech_thread.join(timeout=1)
+            voice_input_queue = queue.Queue()
+            continue
 
         if user_input.lower() == 'exit':
-            console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
-            break
+            if voice_mode:
+                console.print(Panel("OK, you're back to typing.", title="Exiting Voice", style="bold blue"))
+                voice_mode = False
+                speech_thread.join()
+                continue
+            else:
+                console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
+                break
 
         if user_input.lower() == 'image':
             image_path = console.input("[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] ").strip().replace("'", "")
@@ -712,7 +982,7 @@ async def main():
                 console.print(Panel(f"Entering automode with {max_iterations} iterations. Please provide the goal of the automode.", title_align="left", title="Automode", style="bold yellow"))
                 console.print(Panel("Press Ctrl+C at any time to exit the automode loop.", style="bold yellow"))
                 user_input = console.input("[bold cyan]You:[/bold cyan] ")
-
+               
                 iteration_count = 0
                 try:
                     while automode and iteration_count < max_iterations:
@@ -743,6 +1013,13 @@ async def main():
             console.print(Panel("Exited automode. Returning to regular chat.", style="green"))
         else:
             response, _ = await chat_with_claude(user_input)
+
+    keyboard_listener.stop()
+
+async def wait_for_voice_input(queue):
+    while queue.empty():
+        await asyncio.sleep(0.1)
+    return queue.get()
 
 if __name__ == "__main__":
     asyncio.run(main())
