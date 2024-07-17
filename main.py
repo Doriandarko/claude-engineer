@@ -21,20 +21,27 @@ import venv
 import subprocess
 import sys
 import signal
+import logging
+from typing import Tuple, Optional
 
-def setup_virtual_environment():
+
+def setup_virtual_environment() -> Tuple[str, str]:
     venv_name = "code_execution_env"
     venv_path = os.path.join(os.getcwd(), venv_name)
-    if not os.path.exists(venv_path):
-        venv.create(venv_path, with_pip=True)
-    
-    # Activate the virtual environment
-    if sys.platform == "win32":
-        activate_script = os.path.join(venv_path, "Scripts", "activate.bat")
-    else:
-        activate_script = os.path.join(venv_path, "bin", "activate")
-    
-    return venv_path, activate_script
+    try:
+        if not os.path.exists(venv_path):
+            venv.create(venv_path, with_pip=True)
+        
+        # Activate the virtual environment
+        if sys.platform == "win32":
+            activate_script = os.path.join(venv_path, "Scripts", "activate.bat")
+        else:
+            activate_script = os.path.join(venv_path, "bin", "activate")
+        
+        return venv_path, activate_script
+    except Exception as e:
+        logging.error(f"Error setting up virtual environment: {str(e)}")
+        raise
 
 
 # Load environment variables from .env file
@@ -54,34 +61,12 @@ tavily = TavilyClient(api_key=tavily_api_key)
 
 console = Console()
 
-# Add these constants at the top of the file
-CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
-MAX_CONTINUATION_ITERATIONS = 25
-
-# Available Claude models:
-# Claude 3 Opus     claude-3-opus-20240229
-# Claude 3 Sonnet   claude-3-sonnet-20240229
-# Claude 3 Haiku    claude-3-haiku-20240307
-# Claude 3.5 Sonnet claude-3-5-sonnet-20240620
-
-# Models to use
-MAINMODEL = "claude-3-5-sonnet-20240620"
-TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
-CODEEDITORMODEL = "claude-3-5-sonnet-20240620"
-CODEEXECUTIONMODEL = "claude-3-5-sonnet-20240620"
 
 # Token tracking variables
 main_model_tokens = {'input': 0, 'output': 0}
 tool_checker_tokens = {'input': 0, 'output': 0}
 code_editor_tokens = {'input': 0, 'output': 0}
 code_execution_tokens = {'input': 0, 'output': 0}
-
-
-# You can set this to whatever you want, so you can see the progress towards a certain amount of tokens
-# I set to 1M tokens, so you can see the progress towards 1M tokens
-MAX_CONTEXT_TOKENS = 1000000  # 1M tokens for context window
-
-
 
 # Set up the conversation memory
 conversation_history = []
@@ -95,9 +80,19 @@ automode = False
 # Global dictionary to store running processes
 running_processes = {}
 
-# base prompt
-# base prompt
-base_system_prompt = """
+# Constants
+CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
+MAX_CONTINUATION_ITERATIONS = 25
+MAX_CONTEXT_TOKENS = 200000  # Reduced to 200k tokens for context window
+
+# Models
+MAINMODEL = "claude-3-5-sonnet-20240620"
+TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
+CODEEDITORMODEL = "claude-3-5-sonnet-20240620"
+CODEEXECUTIONMODEL = "claude-3-haiku-20240307"
+
+# System prompts
+BASE_SYSTEM_PROMPT = """
 You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
 
 1. Creating and managing project structures
@@ -145,8 +140,7 @@ Project Creation and Management:
 Always strive for accuracy, clarity, and efficiency in your responses and actions. Remember, you are guiding another AI through the coding process, so your instructions must be precise and comprehensive. If uncertain, use the tavily_search tool or admit your limitations. When executing code, always keep in mind that it runs in the isolated 'code_execution_env' virtual environment. Be aware of any long-running processes you start and manage them appropriately, including stopping them when they are no longer needed.
 """
 
-# Auto mode-specific system prompt
-automode_system_prompt = """
+AUTOMODE_SYSTEM_PROMPT = """
 You are currently in automode. Follow these guidelines:
 
 1. Goal Setting:
@@ -182,8 +176,8 @@ You are currently in automode. Follow these guidelines:
 Remember: Focus on completing the established goals efficiently and effectively. Avoid unnecessary conversations or requests for additional tasks.
 """
 
-def update_system_prompt(current_iteration=None, max_iterations=None):
-    global base_system_prompt, automode_system_prompt
+
+def update_system_prompt(current_iteration: Optional[int] = None, max_iterations: Optional[int] = None) -> str:
     chain_of_thought_prompt = """
     Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
 
@@ -193,9 +187,9 @@ def update_system_prompt(current_iteration=None, max_iterations=None):
         iteration_info = ""
         if current_iteration is not None and max_iterations is not None:
             iteration_info = f"You are currently on iteration {current_iteration} out of {max_iterations} in automode."
-        return base_system_prompt + "\n\n" + automode_system_prompt.format(iteration_info=iteration_info) + "\n\n" + chain_of_thought_prompt
+        return BASE_SYSTEM_PROMPT + "\n\n" + AUTOMODE_SYSTEM_PROMPT.format(iteration_info=iteration_info) + "\n\n" + chain_of_thought_prompt
     else:
-        return base_system_prompt + "\n\n" + chain_of_thought_prompt
+        return BASE_SYSTEM_PROMPT + "\n\n" + chain_of_thought_prompt
 
 def create_folder(path):
     try:
@@ -262,19 +256,14 @@ def generate_and_apply_diff(original_content, new_content, path):
         return f"Error applying changes: {str(e)}"
 
 
-async def send_to_ai_for_editing(file_content, batch_content, instructions, project_context):
+async def generate_edit_instructions(file_content, instructions, project_context):
     global code_editor_tokens, code_editor_memory
     try:
-        
-        # Log the raw batch content
-        console.print(Panel("Batch content sent to AI:", title="Batch", style="bold yellow"))
-        console.print(batch_content)
-
         # Prepare memory context
         memory_context = "\n".join([f"Memory {i+1}:\n{mem}" for i, mem in enumerate(code_editor_memory)])
 
         system_prompt = f"""
-        You are an incredible AI coding agent that edits code files. Your task is to carefully review, analyze, and improve the provided code based on the given instructions and project context. Follow these steps:
+        You are an AI coding agent that generates edit instructions for code files. Your task is to analyze the provided code and generate SEARCH/REPLACE blocks for necessary changes. Follow these steps:
 
         1. Review the entire file content to understand the context:
         {file_content}
@@ -288,33 +277,29 @@ async def send_to_ai_for_editing(file_content, batch_content, instructions, proj
         4. Consider the memory of previous edits:
         {memory_context}
 
-        5. Examine the batch of code provided in the user message.
+        5. Generate SEARCH/REPLACE blocks for each necessary change. Each block should:
+           - Include enough context to uniquely identify the code to be changed
+           - Provide the exact replacement code, maintaining correct indentation and formatting
+           - Focus on specific, targeted changes rather than large, sweeping modifications
 
-        6. Before making any changes, consider:
-           - How the instructions apply to this specific batch
-           - The batch in the context of the entire file and all previously edited batches
-           - The overall structure and purpose of the code
-           - Potential impacts on other parts of the file and other files in the project
-           - Best practices and coding standards for the language
-           - Potential issues and improvements not mentioned in the instructions
-
-        7. Make improvements to the code, ensuring you:
+        6. Ensure that your SEARCH/REPLACE blocks:
            - Address all relevant aspects of the instructions
            - Maintain or enhance code readability and efficiency
-           - Use the correct indentation and formatting of each line
-           - Add, remove, or modify lines as necessary, matching surrounding indentation
-           - Consider the file type when formatting the edited lines
-           - Ensure consistency with all previously edited batches and the project context
+           - Consider the overall structure and purpose of the code
+           - Follow best practices and coding standards for the language
+           - Maintain consistency with the project context and previous edits
 
-        8. If no improvements are needed or if the instructions don't apply to this batch, return the lines unchanged.
+        IMPORTANT: RETURN ONLY THE SEARCH/REPLACE BLOCKS. NO EXPLANATIONS OR COMMENTS.
+        USE THE FOLLOWING FORMAT FOR EACH BLOCK:
 
-        CRITICAL: 
-        - USE THE RIGHT indentation and formatting.
-        - Focus only on code improvements based on the instructions and your analysis of the file and project context.
-        - Ensure consistency with all previously edited batches and other files in the project.
+        <SEARCH>
+        Code to be replaced
+        </SEARCH>
+        <REPLACE>
+        New code to insert
+        </REPLACE>
 
-        IMPORTANT: RETURN ONLY THE EDITED BATCH, WITH THE RIGHT INDENTATION. NO EXPLANATIONS OR COMMENTS.
-        DO NOT FOR ANY REASON RETURN THE LINE NUMBERS. WE ONLY NEED THE CODE LIKE YOU WERE WRITING IT IN A FILE.
+        If no changes are needed, return an empty list.
         """
 
         # Make the API call
@@ -324,117 +309,124 @@ async def send_to_ai_for_editing(file_content, batch_content, instructions, proj
             system=system_prompt,
             extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=[
-                {"role": "user", "content": f"Edit this batch RETURN ONLY THE EDITED CODE, WITH THE RIGHT INDENTATION. NO EXPLANATIONS OR COMMENTS LEAVE CODE UNTOUCHED IF NO IMPROVEMENTS ARE NEEDED:\n{batch_content}"}
+                {"role": "user", "content": "Generate SEARCH/REPLACE blocks for the necessary changes."}
             ]
         )
         # Update token usage for code editor
         code_editor_tokens['input'] += response.usage.input_tokens
         code_editor_tokens['output'] += response.usage.output_tokens
 
-        # Log the AI's response
-        # console.print(Panel("Raw AI response:", title="Debug", style="bold yellow"))
-        # console.print(response.content[0].text)
+        # Parse the response to extract SEARCH/REPLACE blocks
+        edit_instructions = parse_search_replace_blocks(response.content[0].text)
 
-        edited_content = response.content[0].text
 
         # Update code editor memory
-        code_editor_memory.append(f"Batch:\n{batch_content}\n\nEdited:\n{edited_content}")
+        code_editor_memory.append(f"Edit Instructions:\n{response.content[0].text}")
 
-        return edited_content
+        return edit_instructions
 
     except Exception as e:
-        console.print(f"Error in AI editing: {str(e)}", style="bold red")
-        return batch_content  # Return original batch content if any exception occurs
+        console.print(f"Error in generating edit instructions: {str(e)}", style="bold red")
+        return []  # Return empty list if any exception occurs
 
 
 
-async def edit_and_apply(path, instructions, project_context, batch_size=None, is_automode=False):
+def parse_search_replace_blocks(response_text):
+    blocks = []
+    lines = response_text.split('\n')
+    current_block = {}
+    current_section = None
+
+    for line in lines:
+        if line.strip() == '<SEARCH>':
+            current_section = 'search'
+            current_block['search'] = []
+        elif line.strip() == '</SEARCH>':
+            current_section = None
+        elif line.strip() == '<REPLACE>':
+            current_section = 'replace'
+            current_block['replace'] = []
+        elif line.strip() == '</REPLACE>':
+            current_section = None
+            if 'search' in current_block and 'replace' in current_block:
+                blocks.append({
+                    'search': '\n'.join(current_block['search']),
+                    'replace': '\n'.join(current_block['replace'])
+                })
+            current_block = {}
+        elif current_section:
+            current_block[current_section].append(line)
+
+    return blocks
+
+
+async def edit_and_apply(path, instructions, project_context, is_automode=False):
     try:
         with open(path, 'r') as file:
             original_content = file.read()
 
-        # If batch_size is None, let process_code_file determine the appropriate size
-        edited_content = await process_code_file(path, instructions, project_context, batch_size, is_automode)
+        edit_instructions = await generate_edit_instructions(original_content, instructions, project_context)
+        
+        if edit_instructions:
+            console.print(Panel("The following SEARCH/REPLACE blocks have been generated:", title="Edit Instructions", style="cyan"))
+            for i, block in enumerate(edit_instructions, 1):
+                console.print(f"Block {i}:")
+                console.print(Panel(f"SEARCH:\n{block['search']}\n\nREPLACE:\n{block['replace']}", expand=False))
 
-        if edited_content != original_content:
-            # Print the raw AI output for debugging
-            # console.print(Panel("Raw AI Output:", title="Debug", style="bold yellow"))
-            # console.print(edited_content)
+            edited_content, changes_made = await apply_edits(path, edit_instructions, original_content)
 
-            diff_result = generate_and_apply_diff(original_content, edited_content, path)
+            if changes_made:
+                diff_result = generate_and_apply_diff(original_content, edited_content, path)
 
-            console.print(Panel("The following changes have been suggested:", title="File Changes", style="cyan"))
-            console.print(diff_result)
+                console.print(Panel("The following changes will be applied:", title="File Changes", style="cyan"))
+                console.print(diff_result)
 
-            if not is_automode:
-                confirm = console.input("[bold yellow]Do you want to apply these changes? (yes/no): [/bold yellow]")
-                if confirm.lower() != 'yes':
-                    # Revert changes
-                    with open(path, 'w') as file:
-                        file.write(original_content)
-                    return "Changes were not applied and file reverted to original content."
+                if not is_automode:
+                    confirm = console.input("[bold yellow]Do you want to apply these changes? (yes/no): [/bold yellow]")
+                    if confirm.lower() != 'yes':
+                        return "Changes were not applied."
 
-            # In automode, changes are already applied, so we don't need to write again
-            if not is_automode:
                 with open(path, 'w') as file:
                     file.write(edited_content)
-            return f"Changes applied to {path}:\n{diff_result}"
+                return f"Changes applied to {path}:\n{diff_result}"
+            else:
+                return f"No changes needed for {path}"
         else:
-            return f"No changes needed for {path}"
+            return f"No changes suggested for {path}"
     except Exception as e:
         return f"Error editing/applying to file: {str(e)}"
 
 
-async def process_code_file(file_path, instructions, project_context, batch_size=None, is_automode=False):
-    with open(file_path, 'r') as f:
-        original_content = f.read()
 
-    lines = original_content.splitlines(keepends=True)
-    total_lines = len(lines)
-
-    if batch_size is None:
-        # Determine appropriate batch size based on file size
-        if total_lines < 200:
-            batch_size = total_lines  # Process entire file as one batch
-        elif total_lines < 1000:
-            batch_size = 250  # Use middle value of 200-300 for medium files
-        else:
-            batch_size = 350  # Use middle value of 300-400 for large files
-
-    edited_content = []
-    previous_batches = []  # New: Keep track of previous batches
+async def apply_edits(file_path, edit_instructions, original_content):
+    changes_made = False
+    edited_content = original_content
+    total_edits = len(edit_instructions)
 
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
-        TaskProgressColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         console=console
     ) as progress:
-        task = progress.add_task("[cyan]Editing file...", total=total_lines)
+        edit_task = progress.add_task("[cyan]Applying edits...", total=total_edits)
 
-        for i in range(0, total_lines, batch_size):
-            batch = lines[i:i+batch_size]
-            batch_content = ''.join(batch)
-            edited_batch = await send_to_ai_for_editing(original_content, batch_content, instructions, project_context)
+        for i, edit in enumerate(edit_instructions, 1):
+            search_content = edit['search']
+            replace_content = edit['replace']
             
-            edited_content.extend(edited_batch.splitlines(keepends=True))
-            previous_batches.append(edited_batch)  # New: Add edited batch to previous_batches
+            if search_content in edited_content:
+                edited_content = edited_content.replace(search_content, replace_content)
+                changes_made = True
+                
+                # Display the diff for this edit
+                diff_result = generate_and_apply_diff(search_content, replace_content, file_path)
+                console.print(Panel(diff_result, title=f"Changes in {file_path} ({i}/{total_edits})", style="cyan"))
 
-            # Write the changes to the file after each batch
-            if is_automode:
-                with open(file_path, 'w') as f:
-                    f.writelines(edited_content + lines[i+batch_size:])
+            progress.update(edit_task, advance=1)
 
-            progress.update(task, advance=len(batch))
-            await asyncio.sleep(0.01)
-
-    progress.update(task, completed=total_lines)
-
-    # Display token usage after all batches have been processed
-    display_token_usage()
-
-    return ''.join(edited_content)
+    return edited_content, changes_made
 
 async def execute_code(code, timeout=10):
     global running_processes
@@ -665,8 +657,9 @@ tools = [
     }
 ]
 
-# Update the execute_tool function
-async def execute_tool(tool_name, tool_input):
+from typing import Dict, Any
+
+async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> str:
     try:
         if tool_name == "create_folder":
             return create_folder(tool_input["path"])
@@ -677,7 +670,6 @@ async def execute_tool(tool_name, tool_input):
                 tool_input["path"],
                 tool_input["instructions"],
                 tool_input["project_context"],
-                batch_size=tool_input.get("batch_size", 250),
                 is_automode=automode
             )
         elif tool_name == "read_file":
@@ -690,10 +682,10 @@ async def execute_tool(tool_name, tool_input):
             return stop_process(tool_input["process_id"])
         elif tool_name == "execute_code":
             process_id, execution_result = await execute_code(tool_input["code"])
-            analysis = await send_to_ai_for_executing(tool_input["code"], execution_result)
+            analysis_task = asyncio.create_task(send_to_ai_for_executing(tool_input["code"], execution_result))
+            analysis = await analysis_task
             result = f"{execution_result}\n\nAnalysis:\n{analysis}"
-            return result
-            if return_code == "Running":
+            if process_id in running_processes:
                 result += "\n\nNote: The process is still running in the background."
             return result
         else:
@@ -701,6 +693,7 @@ async def execute_tool(tool_name, tool_input):
     except KeyError as e:
         return f"Error: Missing required parameter {str(e)} for tool {tool_name}"
     except Exception as e:
+        logging.error(f"Error executing tool {tool_name}: {str(e)}")
         return f"Error executing tool {tool_name}: {str(e)}"
 
 def encode_image_to_base64(image_path):
@@ -993,6 +986,15 @@ def display_token_usage():
     total_input = 0
     total_output = 0
     
+    model_costs = {
+        "Main Model": {"input": 15.00, "output": 75.00},
+        "Tool Checker": {"input": 1.00, "output": 2.00},
+        "Code Editor": {"input": 3.00, "output": 15.00},
+        "Code Execution": {"input": 1.00, "output": 2.00}
+    }
+    
+    total_cost = 0
+    
     for model, tokens in [("Main Model", main_model_tokens), 
                           ("Tool Checker", tool_checker_tokens),
                           ("Code Editor", code_editor_tokens),
@@ -1003,9 +1005,15 @@ def display_token_usage():
         total_input += tokens['input']
         total_output += tokens['output']
 
+        input_cost = (tokens['input'] / 1_000_000) * model_costs[model]["input"]
+        output_cost = (tokens['output'] / 1_000_000) * model_costs[model]["output"]
+        model_cost = input_cost + output_cost
+        total_cost += model_cost
+
         console.print(f"{model}:")
         console.print(f"  Input: {tokens['input']}, Output: {tokens['output']}, Total: {total}")
         console.print(f"  Percentage of context window used: {percentage:.2f}%")
+        console.print(f"  Cost: ${model_cost:.3f}")
         
         with Progress(TextColumn("[progress.description]{task.description}"),
                       BarColumn(bar_width=50),
@@ -1016,12 +1024,9 @@ def display_token_usage():
     grand_total = total_input + total_output
     total_percentage = (grand_total / MAX_CONTEXT_TOKENS) * 100
 
-    # Calculate the cost
-    input_cost = (total_input / 1_000_000) * 3.00
-    output_cost = (total_output / 1_000_000) * 15.00
-    total_cost = input_cost + output_cost
-
-    console.print(f"\nTotal Token Usage: Input: {total_input}, Output: {total_output}, Grand Total: {grand_total}, Cost: ${total_cost:.3f}")
+    console.print(f"\nTotal Token Usage: Input: {total_input}, Output: {total_output}, Grand Total: {grand_total}")
+    console.print(f"Total Cost: ${total_cost:.3f}")
+    console.print(f"Total Percentage of Context Window Used: {total_percentage:.2f}%")
 
     console.print("\n")
 
