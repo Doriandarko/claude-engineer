@@ -1,19 +1,19 @@
-import os
-from dotenv import load_dotenv
+import asyncio
+from typing import List, Dict, Union, Tuple, Optional
+import queue
 import json
-from tavily import TavilyClient
 import base64
-from PIL import Image
-import io
-import re
-from anthropic import Anthropic, APIStatusError, APIError
 import difflib
+import io
+import os
+import re
 import time
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
-import asyncio
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+import aiohttp
 import aiohttp
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
@@ -31,7 +31,10 @@ import subprocess
 import sys
 import signal
 import logging
-from typing import Tuple, Optional
+from dotenv import load_dotenv
+from PIL import Image
+from anthropic import Anthropic, APIStatusError, APIError
+
 
 
 def setup_virtual_environment() -> Tuple[str, str]:
@@ -53,25 +56,31 @@ def setup_virtual_environment() -> Tuple[str, str]:
         raise
 
 
+
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(override=True)
+
+use_stream=True
 
 # Initialize the Anthropic client
-anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-if not anthropic_api_key:
-    raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
-client = Anthropic(api_key=anthropic_api_key)
+client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-# Initialize the Tavily client
-tavily_api_key = os.getenv("TAVILY_API_KEY")
-if not tavily_api_key:
-    raise ValueError("TAVILY_API_KEY not found in environment variables")
-tavily = TavilyClient(api_key=tavily_api_key)
+# Tavily API configuration
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+TAVILY_API_URL = "https://api.tavily.com/search"
+
+# Add error checking for required environment variables
+if not os.getenv("ANTHROPIC_API_KEY"):
+    raise ValueError("ANTHROPIC_API_KEY is not set in the environment variables")
+
+if not os.getenv("TAVILY_API_KEY"):
+    raise ValueError("TAVILY_API_KEY is not set in the environment variables")
 
 console = Console()
 
 
 # Token tracking variables
+
 main_model_tokens = {'input': 0, 'output': 0}
 tool_checker_tokens = {'input': 0, 'output': 0}
 code_editor_tokens = {'input': 0, 'output': 0}
@@ -97,6 +106,8 @@ file_contents = {}
 
 # Global dictionary to store running processes
 running_processes = {}
+
+console = Console()
 
 # Constants
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
@@ -536,10 +547,23 @@ def list_files(path="."):
     except Exception as e:
         return f"Error listing files: {str(e)}"
 
-def tavily_search(query):
+async def tavily_search(query):
     try:
-        response = tavily.qna_search(query=query, search_depth="advanced")
-        return response
+        headers = {
+            "Content-Type": "application/json",
+            "X-API-Key": TAVILY_API_KEY
+        }
+        payload = {
+            "query": query,
+            "search_depth": "advanced"
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(TAVILY_API_URL, headers=headers, json=payload) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result
+                else:
+                    return f"Error performing search: HTTP {response.status}, {await response.text()}"
     except Exception as e:
         return f"Error performing search: {str(e)}"
 
@@ -847,10 +871,9 @@ def save_chat():
     
     return filename
 
-
-
 async def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
-    global conversation_history, automode, main_model_tokens
+
+    global conversation_history
 
     # This function uses MAINMODEL, which maintains context across calls
     current_conversation = []
@@ -917,11 +940,197 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=messages,
             tools=tools,
-            tool_choice={"type": "auto"}
+            tool_choice={"type": "auto"},
+            stream=use_stream
         )
-        # Update token usage for MAINMODEL
-        main_model_tokens['input'] += response.usage.input_tokens
-        main_model_tokens['output'] += response.usage.output_tokens
+        
+        # Initialize variables
+        assistant_response = ""
+        exit_continuation = False
+        tool_uses = []
+        tool_use = {}
+        stream_input_tokens = 0
+        stream_output_tokens = 0
+
+        if use_stream:
+             tool_block = ""
+             for chunk in response:
+                if chunk.type == "content_block_start":
+                    if chunk.content_block.type == "text":
+                        console.print("[bold green]Claude:[/bold green] ", end="")
+                    elif chunk.content_block.type == "tool_use":
+                        tool_use = chunk.content_block
+                        tool_use.input = ""             
+                if chunk.type == "message_start":
+                    stream_input_tokens = chunk.message.usage.input_tokens
+                elif chunk.type == "message_delta":
+                    stream_output_tokens += chunk.usage.output_tokens
+                elif chunk.type == "content_block_stop":
+                    if tool_use:
+                        try:
+                            tool_use.input = json.loads(tool_use.input)
+                        except json.JSONDecodeError:
+                            console.print("[bold red]Error: Invalid JSON in tool input[/bold red]")
+                        tool_uses.append(tool_use)
+                        tool_block = json.dumps(tool_use.dict(), indent=2)
+                        assistant_response += f"\n\nTool Use:\n{tool_block}\n\n"
+                
+                elif chunk.type == "content_block_delta":
+                    if chunk.delta.type == "text_delta":
+                        console.print(chunk.delta.text, end="")
+                        assistant_response += chunk.delta.text
+
+                        if CONTINUATION_EXIT_PHRASE in chunk.delta.text:
+                            exit_continuation = True
+
+                    elif chunk.delta.type == "input_json_delta":
+                        tool_use.input += chunk.delta.partial_json
+
+
+
+                elif chunk.type == "message_stop":
+                    console.print()  # Print a newline at the end of the message
+                # Update token usage for MAINMODEL after streaming
+                main_model_tokens['input'] += stream_input_tokens
+                main_model_tokens['output'] += stream_output_tokens
+        else:
+            # Non-streaming response handling
+            for content_block in response.content:
+                if content_block.type == "text":
+                    assistant_response += content_block.text
+                    if CONTINUATION_EXIT_PHRASE in content_block.text:
+                        exit_continuation = True
+                elif content_block.type == "tool_use":
+                    tool_uses.append(content_block)
+
+            console.print(Panel(Markdown(assistant_response), title="Claude's Response", title_align="left", border_style="blue", expand=False))
+
+            # Update token usage for MAINMODEL (non-streaming)
+            main_model_tokens['input'] += response.usage.input_tokens
+            main_model_tokens['output'] += response.usage.output_tokens
+
+        # Display files in context
+        if file_contents:
+            files_in_context = "\n".join(file_contents.keys())
+        else:
+            files_in_context = "No files in context. Read, create, or edit files to add."
+        
+        console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
+
+        for tool_use in tool_uses:
+            tool_name = tool_use.name
+            tool_input = tool_use.input
+            tool_use_id = tool_use.id
+
+            console.print(Panel(f"Tool Used: {tool_name}", style="green"))
+            console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
+
+            tool_result = await execute_tool(tool_name, tool_input)
+            
+            if tool_result["is_error"]:
+                console.print(Panel(tool_result["content"], title="Tool Execution Error", style="bold red"))
+            else:
+                console.print(Panel(tool_result["content"], title_align="left", title="Tool Result", style="green"))
+            
+            current_conversation.append({
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": tool_use_id,
+                        "name": tool_name,
+                        "input": tool_input
+                    }
+                ]
+            })
+
+            current_conversation.append({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_id,
+                        "content": tool_result["content"],
+                        "is_error": tool_result["is_error"]
+                    }
+                ]
+            })
+            # Update the file_contents dictionary if applicable
+            if tool_name in ['create_file', 'edit_and_apply', 'read_file'] and not tool_result["is_error"]:
+                if 'path' in tool_input:
+                    file_path = tool_input['path']
+                    if "File contents updated in system prompt" in tool_result["content"] or \
+                    "File created and added to system prompt" in tool_result["content"] or \
+                    "has been read and stored in the system prompt" in tool_result["content"]:
+                        # The file_contents dictionary is already updated in the tool function
+                        pass
+
+            messages = filtered_conversation_history + current_conversation
+           
+            try:
+                tool_response = client.messages.create(
+                    model=TOOLCHECKERMODEL,
+                    max_tokens=8000,
+                    system=update_system_prompt(current_iteration, max_iterations),
+                    extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
+                    messages=messages,
+                    tools=tools,
+                    tool_choice={"type": "auto"},
+                    stream=use_stream
+                )
+                tool_checker_response = ""
+                
+                # Initialize token counters for streaming
+                stream_input_tokens = 0
+                stream_output_tokens = 0
+
+                if use_stream:
+                    console.print("[bold green]Claude (Tool Response):[/bold green] ", end="")
+                    tool_content_block = ""
+                    for chunk in tool_response:
+                        if chunk.type == "message_start":
+                            stream_input_tokens = chunk.message.usage.input_tokens
+                        elif chunk.type == "message_delta":
+                            stream_output_tokens += chunk.usage.output_tokens
+
+                        if chunk.type == "content_block_delta" and chunk.delta.type == "text_delta":
+                            tool_content_block += chunk.delta.text
+                            console.print(chunk.delta.text, end="")
+                            
+                        elif chunk.type == "content_block_stop":
+                            console.print()  # Add a newline at the end of the tool response
+                            assistant_response += "\n\n" + tool_content_block
+                            break
+                
+                    # Update token usage for tool checker after streaming
+                    tool_checker_tokens['input'] += stream_input_tokens
+                    tool_checker_tokens['output'] += stream_output_tokens
+                else:
+                    # Update token usage for tool checker (non-streaming)
+                    tool_checker_tokens['input'] += tool_response.usage.input_tokens
+                    tool_checker_tokens['output'] += tool_response.usage.output_tokens
+
+                    for tool_content_block in tool_response.content:
+                        if tool_content_block.type == "text":
+                            tool_checker_response += tool_content_block.text
+                    console.print(Panel(Markdown(tool_checker_response), title="Claude's Response to Tool Result",  title_align="left", border_style="blue", expand=False))
+                    assistant_response += "\n\n" + tool_checker_response
+            except APIError as e:
+                error_message = f"Error in tool response: {str(e)}"
+                console.print(Panel(error_message, title="Error", style="bold red"))
+                assistant_response += f"\n\n{error_message}"
+
+        if assistant_response:
+            current_conversation.append({"role": "assistant", "content": assistant_response})
+
+        conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
+
+        # Display token usage at the end (for both streaming and non-streaming)
+        display_token_usage()
+
+        
+        return assistant_response, exit_continuation
+
     except APIStatusError as e:
         if e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
@@ -933,113 +1142,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     except APIError as e:
         console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
         return "I'm sorry, there was an error communicating with the AI. Please try again.", False
-
-    assistant_response = ""
-    exit_continuation = False
-    tool_uses = []
-
-    for content_block in response.content:
-        if content_block.type == "text":
-            assistant_response += content_block.text
-            if CONTINUATION_EXIT_PHRASE in content_block.text:
-                exit_continuation = True
-        elif content_block.type == "tool_use":
-            tool_uses.append(content_block)
-
-    console.print(Panel(Markdown(assistant_response), title="Claude's Response", title_align="left", border_style="blue", expand=False))
-
-    # Display files in context
-    if file_contents:
-        files_in_context = "\n".join(file_contents.keys())
-    else:
-        files_in_context = "No files in context. Read, create, or edit files to add."
-    console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
-
-    for tool_use in tool_uses:
-        tool_name = tool_use.name
-        tool_input = tool_use.input
-        tool_use_id = tool_use.id
-
-        console.print(Panel(f"Tool Used: {tool_name}", style="green"))
-        console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
-
-        tool_result = await execute_tool(tool_name, tool_input)
-        
-        if tool_result["is_error"]:
-            console.print(Panel(tool_result["content"], title="Tool Execution Error", style="bold red"))
-        else:
-            console.print(Panel(tool_result["content"], title_align="left", title="Tool Result", style="green"))
-
-        current_conversation.append({
-            "role": "assistant",
-            "content": [
-                {
-                    "type": "tool_use",
-                    "id": tool_use_id,
-                    "name": tool_name,
-                    "input": tool_input
-                }
-            ]
-        })
-
-        current_conversation.append({
-            "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": tool_use_id,
-                    "content": tool_result["content"],
-                    "is_error": tool_result["is_error"]
-                }
-            ]
-        })
-
-        # Update the file_contents dictionary if applicable
-        if tool_name in ['create_file', 'edit_and_apply', 'read_file'] and not tool_result["is_error"]:
-            if 'path' in tool_input:
-                file_path = tool_input['path']
-                if "File contents updated in system prompt" in tool_result["content"] or \
-                   "File created and added to system prompt" in tool_result["content"] or \
-                   "has been read and stored in the system prompt" in tool_result["content"]:
-                    # The file_contents dictionary is already updated in the tool function
-                    pass
-
-        messages = filtered_conversation_history + current_conversation
-
-        try:
-            tool_response = client.messages.create(
-                model=TOOLCHECKERMODEL,
-                max_tokens=8000,
-                system=update_system_prompt(current_iteration, max_iterations),
-                extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
-                messages=messages,
-                tools=tools,
-                tool_choice={"type": "auto"}
-            )
-            # Update token usage for tool checker
-            tool_checker_tokens['input'] += tool_response.usage.input_tokens
-            tool_checker_tokens['output'] += tool_response.usage.output_tokens
-
-            tool_checker_response = ""
-            for tool_content_block in tool_response.content:
-                if tool_content_block.type == "text":
-                    tool_checker_response += tool_content_block.text
-            console.print(Panel(Markdown(tool_checker_response), title="Claude's Response to Tool Result",  title_align="left", border_style="blue", expand=False))
-            assistant_response += "\n\n" + tool_checker_response
-        except APIError as e:
-            error_message = f"Error in tool response: {str(e)}"
-            console.print(Panel(error_message, title="Error", style="bold red"))
-            assistant_response += f"\n\n{error_message}"
-
-    if assistant_response:
-        current_conversation.append({"role": "assistant", "content": assistant_response})
-
-    conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
-
-    # Display token usage at the end
-    display_token_usage()
-
-    return assistant_response, exit_continuation
 
 def reset_code_editor_memory():
     global code_editor_memory
