@@ -1,29 +1,28 @@
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Tuple, Optional
 import queue
 import json
-import os
-from dotenv import load_dotenv
-import base64
-from PIL import Image
-import io
-import re
-from anthropic import Anthropic, APIStatusError, APIError
-import difflib
-import time
-from rich.console import Console
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.markdown import Markdown
 import asyncio
-import aiohttp
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+import base64
+import difflib
+import io
+import os
+import re
+import time
 import datetime
 import venv
 import subprocess
 import sys
 import signal
 import logging
-from typing import Tuple, Optional
+from dotenv import load_dotenv
+from PIL import Image
+from anthropic import Anthropic, APIStatusError, APIError
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.markdown import Markdown
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+import aiohttp
 
 
 def setup_virtual_environment() -> Tuple[str, str]:
@@ -847,7 +846,7 @@ def save_chat():
     
     return filename
 
-
+use_stream=True
 
 async def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
     global conversation_history, automode, main_model_tokens
@@ -910,20 +909,21 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 
     try:
         # MAINMODEL call, which maintains context
-        use_stream = False
         response = client.messages.create(
             model=MAINMODEL,
             max_tokens=8000,
             system=update_system_prompt(current_iteration, max_iterations),
             extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=messages,
-            # tools=tools,
-            # tool_choice={"type": "auto"},
+            tools=tools,
+            tool_choice={"type": "auto"},
             # stream=use_stream  # Enable streaming
+            stream=use_stream  # Enable streaming
         )
         # Update token usage for MAINMODEL
-        main_model_tokens['input'] += response.usage.input_tokens
-        main_model_tokens['output'] += response.usage.output_tokens
+        if not use_stream:
+            main_model_tokens['input'] += response.usage.input_tokens
+            main_model_tokens['output'] += response.usage.output_tokens
     except APIStatusError as e:
         if e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
@@ -941,7 +941,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     tool_uses = []
 
     if use_stream:
-    # Handle streaming response
         for chunk in response:
             if chunk.type == "content_block_start":
                 if chunk.content_block.type == "text":
@@ -955,24 +954,25 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     if CONTINUATION_EXIT_PHRASE in chunk.delta.text:
                         exit_continuation = True
             elif chunk.type == "content_block_stop":
-                console.print()  # Add a newline at the end of the response
+                console.print()  #
     else:
         for content_block in response.content:
             if content_block.type == "text":
                 assistant_response += content_block.text
-                if CONTINUATION_EXIT_PHRASE in content_block.text:             
+                if CONTINUATION_EXIT_PHRASE in content_block.text:
                     exit_continuation = True
             elif content_block.type == "tool_use":
                 tool_uses.append(content_block)
 
         console.print(Panel(Markdown(assistant_response), title="Claude's Response", title_align="left", border_style="blue", expand=False))
-    
-    # Display files in context
-    if file_contents:
-        files_in_context = "\n".join(file_contents.keys())
-    else:
-        files_in_context = "No files in context. Read, create, or edit files to add."
-    console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
+
+        # Display files in context
+        if file_contents:
+            files_in_context = "\n".join(file_contents.keys())
+        else:
+            files_in_context = "No files in context. Read, create, or edit files to add."
+        console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
+
 
     for tool_use in tool_uses:
         tool_name = tool_use.name
@@ -1025,8 +1025,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 
         messages = filtered_conversation_history + current_conversation
 
-        use_stream = False
-
         try:
             tool_response = client.messages.create(
                 model=TOOLCHECKERMODEL,
@@ -1036,11 +1034,12 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 messages=messages,
                 tools=tools,
                 tool_choice={"type": "auto"},
-                stream=use_stream
+                stream=use_stream  # Enable streaming for tool response
             )
-            # Update token usage for tool checker
-            tool_checker_tokens['input'] += tool_response.usage.input_tokens
-            tool_checker_tokens['output'] += tool_response.usage.output_tokens
+            if not use_stream:
+                # Update token usage for tool checker
+                tool_checker_tokens['input'] += tool_response.usage.input_tokens
+                tool_checker_tokens['output'] += tool_response.usage.output_tokens
 
             tool_checker_response = ""
             if use_stream:
@@ -1052,11 +1051,13 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 console.print()  # Add a newline at the end of the tool response
                 assistant_response += "\n\n" + tool_checker_response
             else:
-                for tool_content_block in tool_response.content:
-                    if tool_content_block.type == "text":
-                        tool_checker_response += tool_content_block.text
-                console.print(Panel(Markdown(tool_checker_response), title="Claude's Response to Tool Result",  title_align="left", border_style="blue", expand=False))
-                assistant_response += "\n\n" + tool_checker_response
+                console.print("[bold green]Claude (Tool Response):[/bold green] ", end="")
+                for chunk in tool_response:
+                    if chunk.type == "content_block_delta" and chunk.delta.type == "text_delta":
+                        console.print(chunk.delta.text, end="")
+                    tool_checker_response += chunk.delta.text
+                    console.print()  # Add a newline at the end of the tool response
+                    assistant_response += "\n\n" + tool_checker_response
 
         except APIError as e:
             error_message = f"Error in tool response: {str(e)}"
@@ -1069,7 +1070,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
 
     # Display token usage at the end
-    display_token_usage()
+    if not use_stream:
+        display_token_usage()
 
     return assistant_response, exit_continuation
 
