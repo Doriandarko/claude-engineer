@@ -1142,7 +1142,7 @@ async def main():
             continue
 
         if user_input.lower() == 'image':
-            image_path = console.input("[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] ").strip().replace("'", "")
+            image_path = console.input("[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] ").strip(" '\"\\").replace("\\ ", " ")
 
             if os.path.isfile(image_path):
                 user_input = console.input("[bold cyan]You (prompt for image):[/bold cyan] ")
