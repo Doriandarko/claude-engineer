@@ -118,7 +118,14 @@ Available tools and their optimal use cases:
 1. create_folder: Create new directories in the project structure.
 2. create_file: Generate new files with specified content. Strive to make the file as complete and useful as possible.
 3. search_file: Search for specific patterns within a file.
-4. edit_and_apply: Examine and modify existing files by instructing a separate AI coding agent.
+4. edit_and_apply: Examine and modify existing files by instructing a separate AI coding agent. You are responsible for providing clear, detailed instructions to this agent. When using this tool:
+   - Provide comprehensive context about the project, including recent changes, new variables or functions, and how files are interconnected.
+   - Clearly state the specific changes or improvements needed, explaining the reasoning behind each modification.
+   - Include ALL the snippets of code to change, along with the desired modifications.
+   - Specify coding standards, naming conventions, or architectural patterns to be followed.
+   - Anticipate potential issues or conflicts that might arise from the changes and provide guidance on how to handle them.
+4. execute_code: Run Python code exclusively in the 'code_execution_env' virtual environment and analyze its output. Use this when you need to test code functionality or diagnose issues. Remember that all code execution happens in this isolated environment. This tool now returns a process ID for long-running processes.
+5. stop_process: Stop a running process by its ID. Use this when you need to terminate a long-running process started by the execute_code tool.
 5. execute_code: Run Python code exclusively in the 'code_execution_env' virtual environment and analyze its output.
 6. stop_process: Stop a running process by its ID.
 7. read_file: Read the contents of an existing file.
