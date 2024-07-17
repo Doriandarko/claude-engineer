@@ -110,15 +110,20 @@ You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, 
 Available tools and their optimal use cases:
 
 1. create_folder: Create new directories in the project structure.
-2. create_file: Generate new files with specified content.
-3. edit_and_apply: Examine and modify existing files by instructing a coding agbet. When editing consider the following guidelines:
-   - ALWAYS send the instructions to the coding AI agent in the same message as the file content.
-   - Always adapt based on the file's content, language, and the specific editing task.
-   - Prioritize maintaining code structure and formatting over strictly adhering to batch size guidelines.
-4. read_file: View the contents of existing files without making changes.
-5. list_files: Understand the current project structure or locate specific files.
-6. tavily_search: Obtain current information on technologies, libraries, or best practices.
-7. Analyzing images provided by the user
+2. create_file: Generate new files with specified content. Strive to make the file as complete and useful as possible.
+3. edit_and_apply: Examine and modify existing files by instructing a separate AI coding agent. You are responsible for providing clear, detailed instructions to this agent. When using this tool:
+   - Provide comprehensive context about the project, including recent changes, new variables or functions, and how files are interconnected.
+   - Clearly state the specific changes or improvements needed, explaining the reasoning behind each modification.
+   - Include ALL the snippets of code to change, along with the desired modifications.
+   - Specify coding standards, naming conventions, or architectural patterns to be followed.
+   - Anticipate potential issues or conflicts that might arise from the changes and provide guidance on how to handle them.
+4. execute_code: Run Python code exclusively in the 'code_execution_env' virtual environment and analyze its output. Use this when you need to test code functionality or diagnose issues. Remember that all code execution happens in this isolated environment. This tool now returns a process ID for long-running processes.
+5. stop_process: Stop a running process by its ID. Use this when you need to terminate a long-running process started by the execute_code tool.
+6. execute_code: Run Python code exclusively in the 'code_execution_env' virtual environment and analyze its output.
+7. stop_process: Stop a running process by its ID.
+8. read_file: Read the contents of an existing file.
+9. list_files: List all files and directories in a specified folder.
+10. tavily_search: Perform a web search using the Tavily API for up-to-date information.
 
 Tool Usage Guidelines:
 - Always use the most appropriate tool for the task at hand.
@@ -575,24 +580,6 @@ tools = [
                 }
             },
             "required": ["path", "content"]
-        }
-    },
-    {
-        "name": "search_file",
-        "description": "Search for a specific pattern in a file and return the line numbers where the pattern is found. Use this to locate specific code or text within a file.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The path of the file to search"
-                },
-                "search_pattern": {
-                    "type": "string",
-                    "description": "The pattern to search for in the file"
-                }
-            },
-            "required": ["path", "search_pattern"]
         }
     },
     {
