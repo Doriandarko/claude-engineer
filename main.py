@@ -908,7 +908,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=messages,
             tools=tools,
-            tool_choice={"type": "auto"}
+            tool_choice={"type": "auto"},
             stream=True  # Enable streaming
         )
         # Update token usage for MAINMODEL
@@ -1006,7 +1006,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
                 messages=messages,
                 tools=tools,
-                tool_choice={"type": "auto"}
+                tool_choice={"type": "auto"},
                 stream=True  # Enable streaming for tool response
             )
             # Update token usage for tool checker
