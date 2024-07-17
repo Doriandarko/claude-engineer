@@ -885,9 +885,9 @@ async def main():
             console.print("[bold cyan]You:[/bold cyan] ", end="")
             user_input = input()
         
-        if user_input.lower() == 'voice':
+        if user_input.lower() == 'voicemode':
             voice_mode = True
-            console.print(Panel("Entering voice mode. Hold Ctrl to speak, release when done. Say 'exit voice' or press Esc to exit voice mode.", title="Voice Mode", style="bold blue"))
+            console.print(Panel("Entering voice mode. Hold Ctrl to speak, release when done. Say 'exit voicemode' or press Esc to exit voice mode.", title="Voice Mode", style="bold blue"))
             
             stop_event.clear()
             speech_thread = threading.Thread(target=speech_to_text_thread, args=(voice_input_queue, stop_event), daemon=True)
@@ -913,7 +913,7 @@ async def main():
                             if user_input:
                                 live.update(f"[bold cyan]You (voice):[/bold cyan] {user_input}")
                             
-                                if user_input.lower() == 'exit voice':
+                                if user_input.lower() == 'exit voicemode':
                                     voice_mode = False
                                     live.update("Exiting voice mode. Returning to text input.")
                                     break
