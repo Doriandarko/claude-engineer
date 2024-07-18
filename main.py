@@ -3,7 +3,6 @@ import queue
 import json
 import os
 from dotenv import load_dotenv
-import json
 import base64
 from PIL import Image
 import io
@@ -210,7 +209,7 @@ def update_system_prompt(current_iteration: Optional[int] = None, max_iterations
     Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
 
     Do not reflect on the quality of the returned search results in your response.
-    """ 
+    """
     
     file_contents_prompt = "\n\nFile Contents:\n"
     for path, content in file_contents.items():
@@ -234,7 +233,7 @@ def create_folder(path):
 def create_file(path, content=""):
     global file_contents
     try:
-        with open(path, 'w') as f:            
+        with open(path, 'w') as f:
             f.write(content)
         file_contents[path] = content
         return f"File created and added to system prompt: {path}"
@@ -289,7 +288,7 @@ def generate_and_apply_diff(original_content, new_content, path):
         )
         console.print(error_panel)
         return f"Error applying changes: {str(e)}"
-    
+
 
 async def generate_edit_instructions(file_content, instructions, project_context):
     global code_editor_tokens, code_editor_memory
@@ -337,7 +336,7 @@ async def generate_edit_instructions(file_content, instructions, project_context
         If no changes are needed, return an empty list.
         """
 
-    # Make the API call to CODEEDITORMODEL (context is not maintained except for code_editor_memory)
+        # Make the API call to CODEEDITORMODEL (context is not maintained except for code_editor_memory)
         response = client.messages.create(
             model=CODEEDITORMODEL,
             max_tokens=8000,
@@ -358,7 +357,7 @@ async def generate_edit_instructions(file_content, instructions, project_context
         code_editor_memory.append(f"Edit Instructions:\n{response.content[0].text}")
 
         return edit_instructions
-        
+
     except Exception as e:
         console.print(f"Error in generating edit instructions: {str(e)}", style="bold red")
         return []  # Return empty list if any exception occurs
@@ -396,12 +395,12 @@ def parse_search_replace_blocks(response_text):
 
 async def edit_and_apply(path, instructions, project_context, is_automode=False):
     global file_contents
-    try:        
+    try:
         original_content = file_contents.get(path, "")
         if not original_content:
             with open(path, 'r') as file:
                 original_content = file.read()
-                file_contents[path] = original_content
+            file_contents[path] = original_content
 
         edit_instructions = await generate_edit_instructions(original_content, instructions, project_context)
         
@@ -434,7 +433,7 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False)
         else:
             return f"No changes suggested for {path}"
     except Exception as e:
-            return f"Error editing/applying to file: {str(e)}"
+        return f"Error editing/applying to file: {str(e)}"
 
 
 
@@ -449,7 +448,7 @@ async def apply_edits(file_path, edit_instructions, original_content):
         BarColumn(),
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         console=console
-   ) as progress:
+    ) as progress:
         edit_task = progress.add_task("[cyan]Applying edits...", total=total_edits)
 
         for i, edit in enumerate(edit_instructions, 1):
@@ -567,7 +566,7 @@ tools = [
     {
         "name": "create_folder",
         "description": "Create a new folder at the specified path. This tool should be used when you need to create a new directory in the project structure. It will create all necessary parent directories if they don't exist. The tool will return a success message if the folder is created or already exists, and an error message if there's a problem creating the folder.",
-          "input_schema": {
+        "input_schema": {
             "type": "object",
             "properties": {
                 "path": {
@@ -591,12 +590,12 @@ tools = [
                 "content": {
                     "type": "string",
                     "description": "The content of the file. This should include all necessary code, comments, and formatting."
-                }        
+                }
             },
             "required": ["path", "content"]
         }
     },
-   {
+    {
         "name": "edit_and_apply",
         "description": "Apply AI-powered improvements to a file based on specific instructions and detailed project context. This function reads the file, processes it in batches using AI with conversation history and comprehensive code-related project context. It generates a diff and allows the user to confirm changes before applying them. The goal is to maintain consistency and prevent breaking connections between files. This tool should be used for complex code modifications that require understanding of the broader project context.",
         "input_schema": {
@@ -647,7 +646,7 @@ tools = [
         }
     },
     {
-        "name": "read_file",        
+        "name": "read_file",
         "description": "Read the contents of a file at the specified path. This tool should be used when you need to examine the contents of an existing file. It will return the entire contents of the file as a string. If the file doesn't exist or can't be read, an appropriate error message will be returned.",
         "input_schema": {
             "type": "object",
@@ -661,7 +660,7 @@ tools = [
         }
     },
     {
-     "name": "list_files",
+        "name": "list_files",
         "description": "List all files and directories in the specified folder. This tool should be used when you need to see the contents of a directory. It will return a list of all files and subdirectories in the specified path. If the directory doesn't exist or can't be read, an appropriate error message will be returned.",
         "input_schema": {
             "type": "object",
@@ -886,7 +885,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     else:
         current_conversation.append({"role": "user", "content": user_input})
 
-   # Filter conversation history to maintain context
+    # Filter conversation history to maintain context
     filtered_conversation_history = []
     for message in conversation_history:
         if isinstance(message['content'], list):
@@ -911,13 +910,16 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 
     try:
         # MAINMODEL call, which maintains context
+        use_stream = False
         response = client.messages.create(
-            model=MAINMODEL, 
+            model=MAINMODEL,
             max_tokens=8000,
             system=update_system_prompt(current_iteration, max_iterations),
             extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=messages,
-            stream=False            
+            # tools=tools,
+            # tool_choice={"type": "auto"},
+            # stream=use_stream  # Enable streaming
         )
         # Update token usage for MAINMODEL
         main_model_tokens['input'] += response.usage.input_tokens
@@ -938,15 +940,32 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     exit_continuation = False
     tool_uses = []
 
-    for content_block in response.content:
-        if content_block.type == "text":
-            assistant_response += content_block.text
-            if CONTINUATION_EXIT_PHRASE in content_block.text:             
-                exit_continuation = True
-        elif content_block.type == "tool_use":
-            tool_uses.append(content_block)
+    if use_stream:
+    # Handle streaming response
+        for chunk in response:
+            if chunk.type == "content_block_start":
+                if chunk.content_block.type == "text":
+                    console.print("[bold green]Claude:[/bold green] ", end="")
+                elif chunk.content_block.type == "tool_use":
+                    tool_uses.append(chunk.content_block)
+            elif chunk.type == "content_block_delta":
+                if chunk.delta.type == "text_delta":
+                    console.print(chunk.delta.text, end="")
+                    assistant_response += chunk.delta.text
+                    if CONTINUATION_EXIT_PHRASE in chunk.delta.text:
+                        exit_continuation = True
+            elif chunk.type == "content_block_stop":
+                console.print()  # Add a newline at the end of the response
+    else:
+        for content_block in response.content:
+            if content_block.type == "text":
+                assistant_response += content_block.text
+                if CONTINUATION_EXIT_PHRASE in content_block.text:             
+                    exit_continuation = True
+            elif content_block.type == "tool_use":
+                tool_uses.append(content_block)
 
-    console.print(Panel(Markdown(assistant_response), title="Claude's Response", title_align="left", border_style="blue", expand=False))
+        console.print(Panel(Markdown(assistant_response), title="Claude's Response", title_align="left", border_style="blue", expand=False))
     
     # Display files in context
     if file_contents:
@@ -969,7 +988,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             console.print(Panel(tool_result["content"], title="Tool Execution Error", style="bold red"))
         else:
             console.print(Panel(tool_result["content"], title_align="left", title="Tool Result", style="green"))
-
+        
         current_conversation.append({
             "role": "assistant",
             "content": [
@@ -1006,6 +1025,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 
         messages = filtered_conversation_history + current_conversation
 
+        use_stream = False
+
         try:
             tool_response = client.messages.create(
                 model=TOOLCHECKERMODEL,
@@ -1014,18 +1035,29 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
                 messages=messages,
                 tools=tools,
-                tool_choice={"type": "auto"}
+                tool_choice={"type": "auto"},
+                stream=use_stream
             )
             # Update token usage for tool checker
             tool_checker_tokens['input'] += tool_response.usage.input_tokens
             tool_checker_tokens['output'] += tool_response.usage.output_tokens
 
             tool_checker_response = ""
-            for tool_content_block in tool_response.content:
-                if tool_content_block.type == "text":
-                    tool_checker_response += tool_content_block.text
-            console.print(Panel(Markdown(tool_checker_response), title="Claude's Response to Tool Result",  title_align="left", border_style="blue", expand=False))
-            assistant_response += "\n\n" + tool_checker_response
+            if use_stream:
+                console.print("[bold green]Claude (Tool Response):[/bold green] ", end="")
+                for chunk in tool_response.content:
+                    if chunk.type == "text":
+                        console.print(chunk.text, end="")
+                        tool_checker_response += chunk.text
+                console.print()  # Add a newline at the end of the tool response
+                assistant_response += "\n\n" + tool_checker_response
+            else:
+                for tool_content_block in tool_response.content:
+                    if tool_content_block.type == "text":
+                        tool_checker_response += tool_content_block.text
+                console.print(Panel(Markdown(tool_checker_response), title="Claude's Response to Tool Result",  title_align="left", border_style="blue", expand=False))
+                assistant_response += "\n\n" + tool_checker_response
+
         except APIError as e:
             error_message = f"Error in tool response: {str(e)}"
             console.print(Panel(error_message, title="Error", style="bold red"))
