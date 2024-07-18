@@ -1,7 +1,6 @@
 import os
 from dotenv import load_dotenv
 import json
-from tavily import TavilyClient
 import base64
 from PIL import Image
 import io
@@ -53,14 +52,6 @@ if not anthropic_api_key:
     raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
 client = Anthropic(api_key=anthropic_api_key)
 
-# Initialize the Tavily client
-tavily_api_key = os.getenv("TAVILY_API_KEY")
-if not tavily_api_key:
-    raise ValueError("TAVILY_API_KEY not found in environment variables")
-tavily = TavilyClient(api_key=tavily_api_key)
-
-console = Console()
-
 
 # Token tracking variables
 main_model_tokens = {'input': 0, 'output': 0}
@@ -85,6 +76,8 @@ file_contents = {}
 
 # Global dictionary to store running processes
 running_processes = {}
+
+console = Console()
 
 # Constants
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
