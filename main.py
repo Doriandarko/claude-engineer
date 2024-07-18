@@ -47,7 +47,7 @@ def setup_virtual_environment() -> Tuple[str, str]:
 
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(override=True)
 
 # Initialize the Anthropic client
 client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -210,7 +210,7 @@ def update_system_prompt(current_iteration: Optional[int] = None, max_iterations
     Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
 
     Do not reflect on the quality of the returned search results in your response.
-    """
+    """ 
     
     file_contents_prompt = "\n\nFile Contents:\n"
     for path, content in file_contents.items():
@@ -234,7 +234,7 @@ def create_folder(path):
 def create_file(path, content=""):
     global file_contents
     try:
-        with open(path, 'w') as f:
+        with open(path, 'w') as f:            
             f.write(content)
         file_contents[path] = content
         return f"File created and added to system prompt: {path}"
@@ -289,7 +289,7 @@ def generate_and_apply_diff(original_content, new_content, path):
         )
         console.print(error_panel)
         return f"Error applying changes: {str(e)}"
-
+    
 
 async def generate_edit_instructions(file_content, instructions, project_context):
     global code_editor_tokens, code_editor_memory
@@ -337,7 +337,7 @@ async def generate_edit_instructions(file_content, instructions, project_context
         If no changes are needed, return an empty list.
         """
 
-        # Make the API call to CODEEDITORMODEL (context is not maintained except for code_editor_memory)
+    # Make the API call to CODEEDITORMODEL (context is not maintained except for code_editor_memory)
         response = client.messages.create(
             model=CODEEDITORMODEL,
             max_tokens=8000,
@@ -358,7 +358,7 @@ async def generate_edit_instructions(file_content, instructions, project_context
         code_editor_memory.append(f"Edit Instructions:\n{response.content[0].text}")
 
         return edit_instructions
-
+        
     except Exception as e:
         console.print(f"Error in generating edit instructions: {str(e)}", style="bold red")
         return []  # Return empty list if any exception occurs
@@ -396,7 +396,7 @@ def parse_search_replace_blocks(response_text):
 
 async def edit_and_apply(path, instructions, project_context, is_automode=False):
     global file_contents
-    try:
+    try:        
         original_content = file_contents.get(path, "")
         if not original_content:
             with open(path, 'r') as file:
@@ -430,11 +430,11 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False)
                 console.print(Panel(f"File contents updated in system prompt: {path}", style="green"))
                 return f"Changes applied to {path}:\n{diff_result}"
             else:
-                return f"No changes needed for {path}"        
+                return f"No changes needed for {path}"
         else:
             return f"No changes suggested for {path}"
     except Exception as e:
-        return f"Error editing/applying to file: {str(e)}"
+            return f"Error editing/applying to file: {str(e)}"
 
 
 
@@ -449,7 +449,7 @@ async def apply_edits(file_path, edit_instructions, original_content):
         BarColumn(),
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         console=console
-    ) as progress:
+   ) as progress:
         edit_task = progress.add_task("[cyan]Applying edits...", total=total_edits)
 
         for i, edit in enumerate(edit_instructions, 1):
@@ -567,7 +567,7 @@ tools = [
     {
         "name": "create_folder",
         "description": "Create a new folder at the specified path. This tool should be used when you need to create a new directory in the project structure. It will create all necessary parent directories if they don't exist. The tool will return a success message if the folder is created or already exists, and an error message if there's a problem creating the folder.",
-        "input_schema": {
+          "input_schema": {
             "type": "object",
             "properties": {
                 "path": {
@@ -591,12 +591,12 @@ tools = [
                 "content": {
                     "type": "string",
                     "description": "The content of the file. This should include all necessary code, comments, and formatting."
-                }
+                }        
             },
             "required": ["path", "content"]
         }
     },
-    {
+   {
         "name": "edit_and_apply",
         "description": "Apply AI-powered improvements to a file based on specific instructions and detailed project context. This function reads the file, processes it in batches using AI with conversation history and comprehensive code-related project context. It generates a diff and allows the user to confirm changes before applying them. The goal is to maintain consistency and prevent breaking connections between files. This tool should be used for complex code modifications that require understanding of the broader project context.",
         "input_schema": {
@@ -647,7 +647,7 @@ tools = [
         }
     },
     {
-        "name": "read_file",
+        "name": "read_file",        
         "description": "Read the contents of a file at the specified path. This tool should be used when you need to examine the contents of an existing file. It will return the entire contents of the file as a string. If the file doesn't exist or can't be read, an appropriate error message will be returned.",
         "input_schema": {
             "type": "object",
@@ -661,7 +661,7 @@ tools = [
         }
     },
     {
-        "name": "list_files",
+     "name": "list_files",
         "description": "List all files and directories in the specified folder. This tool should be used when you need to see the contents of a directory. It will return a list of all files and subdirectories in the specified path. If the directory doesn't exist or can't be read, an appropriate error message will be returned.",
         "input_schema": {
             "type": "object",
@@ -886,7 +886,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     else:
         current_conversation.append({"role": "user", "content": user_input})
 
-    # Filter conversation history to maintain context
+   # Filter conversation history to maintain context
     filtered_conversation_history = []
     for message in conversation_history:
         if isinstance(message['content'], list):
@@ -912,12 +912,12 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     try:
         # MAINMODEL call, which maintains context
         response = client.messages.create(
-            model=MAINMODEL,
+            model=MAINMODEL, 
             max_tokens=8000,
             system=update_system_prompt(current_iteration, max_iterations),
             extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=messages,
-            stream=True            
+            stream=False            
         )
         # Update token usage for MAINMODEL
         main_model_tokens['input'] += response.usage.input_tokens
@@ -941,13 +941,13 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     for content_block in response.content:
         if content_block.type == "text":
             assistant_response += content_block.text
-            if CONTINUATION_EXIT_PHRASE in content_block.text:
-                    exit_continuation = True
+            if CONTINUATION_EXIT_PHRASE in content_block.text:             
+                exit_continuation = True
         elif content_block.type == "tool_use":
             tool_uses.append(content_block)
 
     console.print(Panel(Markdown(assistant_response), title="Claude's Response", title_align="left", border_style="blue", expand=False))
-
+    
     # Display files in context
     if file_contents:
         files_in_context = "\n".join(file_contents.keys())
