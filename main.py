@@ -996,9 +996,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         
         console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
 
-
-    print(tool_uses)
-    for tool_use in tool_uses:
+    print(tool_uses)for tool_use in tool_uses:
         tool_name = tool_use.name
         tool_input = tool_use.input
         tool_use_id = tool_use.id
