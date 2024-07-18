@@ -951,7 +951,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     console.print("[bold green]Claude:[/bold green] ", end="")   
                 elif chunk.content_block.type == "tool_use":
                     tool_use = chunk.content_block
-                    tool_use.input = "" 
+                    tool_use.input = ""
             elif chunk.type == "content_block_stop":  
                 if tool_use:
                     try:
@@ -961,7 +961,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     tool_uses.append(tool_use)
                     tool_block = json.dumps(tool_use.dict(), indent=2)
                     assistant_response += f"\n\nTool Use:\n{tool_block}\n\n"
-                    tool_use = None # Initialize input as an empty string
+    
             elif chunk.type == "content_block_delta":
                 if chunk.delta.type == "text_delta":
                     console.print(chunk.delta.text, end="")
