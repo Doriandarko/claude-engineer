@@ -44,8 +44,11 @@ def setup_virtual_environment() -> Tuple[str, str]:
         raise
 
 
+
 # Load environment variables from .env file
 load_dotenv(override=True)
+
+use_stream=True
 
 # Initialize the Anthropic client
 client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -846,10 +849,8 @@ def save_chat():
     
     return filename
 
-use_stream=True
-
 async def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
-    global conversation_history, automode, main_model_tokens
+    global conversation_history, automode, main_model_tokens,use_stream
 
     # This function uses MAINMODEL, which maintains context across calls
     current_conversation = []
@@ -939,22 +940,43 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     assistant_response = ""
     exit_continuation = False
     tool_uses = []
+    tool_use = None
+    input_string = ""
 
     if use_stream:
+        tool_block = ""
         for chunk in response:
             if chunk.type == "content_block_start":
                 if chunk.content_block.type == "text":
-                    console.print("[bold green]Claude:[/bold green] ", end="")
+                    console.print("[bold green]Claude:[/bold green] ", end="")   
                 elif chunk.content_block.type == "tool_use":
-                    tool_uses.append(chunk.content_block)
+                    tool_use = chunk.content_block
+                    tool_use.input = "" 
+            elif chunk.type == "content_block_stop":  
+                if tool_use:
+                    try:
+                        tool_use.input = json.loads(tool_use.input)
+                    except json.JSONDecodeError:
+                        console.print("[bold red]Error: Invalid JSON in tool input[/bold red]")
+                    tool_uses.append(tool_use)
+                    tool_block = json.dumps(tool_use.dict(), indent=2)
+                    assistant_response += f"\n\nTool Use:\n{tool_block}\n\n"
+                    tool_use = None # Initialize input as an empty string
             elif chunk.type == "content_block_delta":
                 if chunk.delta.type == "text_delta":
                     console.print(chunk.delta.text, end="")
                     assistant_response += chunk.delta.text
+                
                     if CONTINUATION_EXIT_PHRASE in chunk.delta.text:
                         exit_continuation = True
-            elif chunk.type == "content_block_stop":
-                console.print()  #
+                
+                elif chunk.delta.type == "input_json_delta":
+                    tool_use.input += chunk.delta.partial_json
+                
+        
+            
+            elif chunk.type == "message_stop":
+                console.print()  # Print a newline at the end of the message
     else:
         for content_block in response.content:
             if content_block.type == "text":
@@ -971,9 +993,11 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             files_in_context = "\n".join(file_contents.keys())
         else:
             files_in_context = "No files in context. Read, create, or edit files to add."
+        
         console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
 
 
+    print(tool_uses)
     for tool_use in tool_uses:
         tool_name = tool_use.name
         tool_input = tool_use.input
@@ -1012,19 +1036,18 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 }
             ]
         })
-
         # Update the file_contents dictionary if applicable
         if tool_name in ['create_file', 'edit_and_apply', 'read_file'] and not tool_result["is_error"]:
             if 'path' in tool_input:
                 file_path = tool_input['path']
                 if "File contents updated in system prompt" in tool_result["content"] or \
-                   "File created and added to system prompt" in tool_result["content"] or \
-                   "has been read and stored in the system prompt" in tool_result["content"]:
+                "File created and added to system prompt" in tool_result["content"] or \
+                "has been read and stored in the system prompt" in tool_result["content"]:
                     # The file_contents dictionary is already updated in the tool function
                     pass
 
         messages = filtered_conversation_history + current_conversation
-
+       
         try:
             tool_response = client.messages.create(
                 model=TOOLCHECKERMODEL,
@@ -1034,31 +1057,37 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 messages=messages,
                 tools=tools,
                 tool_choice={"type": "auto"},
-                stream=use_stream  # Enable streaming for tool response
+                stream=use_stream # use_stream  # Enable streaming for tool response
             )
+            tool_checker_response = ""
             if not use_stream:
                 # Update token usage for tool checker
                 tool_checker_tokens['input'] += tool_response.usage.input_tokens
                 tool_checker_tokens['output'] += tool_response.usage.output_tokens
 
-            tool_checker_response = ""
-            if use_stream:
-                console.print("[bold green]Claude (Tool Response):[/bold green] ", end="")
-                for chunk in tool_response.content:
-                    if chunk.type == "text":
-                        console.print(chunk.text, end="")
-                        tool_checker_response += chunk.text
-                console.print()  # Add a newline at the end of the tool response
+            
+                for tool_content_block in tool_response.content:
+                    if tool_content_block.type == "text":
+                        tool_checker_response += tool_content_block.text
+                console.print(Panel(Markdown(tool_checker_response), title="Claude's Response to Tool Result",  title_align="left", border_style="blue", expand=False))
                 assistant_response += "\n\n" + tool_checker_response
             else:
                 console.print("[bold green]Claude (Tool Response):[/bold green] ", end="")
+                tool_content_block = ""
                 for chunk in tool_response:
-                    if chunk.type == "content_block_delta" and chunk.delta.type == "text_delta":
-                        console.print(chunk.delta.text, end="")
-                    tool_checker_response += chunk.delta.text
-                    console.print()  # Add a newline at the end of the tool response
-                    assistant_response += "\n\n" + tool_checker_response
+                    # if chunk.type == "text":
+                    #    console.print(chunk.text, end="")
+                    #    tool_checker_response += chunk.text
 
+                    if chunk.type == "content_block_delta" and chunk.delta.type == "text_delta":
+                        tool_content_block += chunk.delta.text
+                        console.print(chunk.delta.text, end="")
+                        
+                    elif chunk.type == "content_block_stop":
+                        console.print()  # Add a newline at the end of the tool response
+                        assistant_response += "\n\n" + tool_content_block
+                        break
+                
         except APIError as e:
             error_message = f"Error in tool response: {str(e)}"
             console.print(Panel(error_message, title="Error", style="bold red"))
@@ -1073,6 +1102,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     if not use_stream:
         display_token_usage()
 
+    
     return assistant_response, exit_continuation
 
 def reset_code_editor_memory():
