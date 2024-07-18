@@ -917,8 +917,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             system=update_system_prompt(current_iteration, max_iterations),
             extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=messages,
-            tools=tools,
-            tool_choice={"type": "auto"}
+            stream=True            
         )
         # Update token usage for MAINMODEL
         main_model_tokens['input'] += response.usage.input_tokens
