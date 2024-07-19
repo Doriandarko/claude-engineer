@@ -286,11 +286,14 @@ def generate_and_apply_diff(original_content, new_content, path):
         return f"Error applying changes: {str(e)}"
 
 
-async def generate_edit_instructions(file_content, instructions, project_context):
+async def generate_edit_instructions(file_content, instructions, project_context, full_file_contents):
     global code_editor_tokens, code_editor_memory
     try:
         # Prepare memory context (this is the only part that maintains some context between calls)
         memory_context = "\n".join([f"Memory {i+1}:\n{mem}" for i, mem in enumerate(code_editor_memory)])
+
+        # Prepare full file contents context
+        full_file_contents_context = "\n\n".join([f"--- {path} ---\n{content}" for path, content in full_file_contents.items()])
 
         system_prompt = f"""
         You are an AI coding agent that generates edit instructions for code files. Your task is to analyze the provided code and generate SEARCH/REPLACE blocks for necessary changes. Follow these steps:
@@ -307,17 +310,21 @@ async def generate_edit_instructions(file_content, instructions, project_context
         4. Consider the memory of previous edits:
         {memory_context}
 
-        5. Generate SEARCH/REPLACE blocks for each necessary change. Each block should:
+        5. Consider the full context of all files in the project:
+        {full_file_contents_context}
+
+        6. Generate SEARCH/REPLACE blocks for each necessary change. Each block should:
            - Include enough context to uniquely identify the code to be changed
            - Provide the exact replacement code, maintaining correct indentation and formatting
            - Focus on specific, targeted changes rather than large, sweeping modifications
 
-        6. Ensure that your SEARCH/REPLACE blocks:
+        7. Ensure that your SEARCH/REPLACE blocks:
            - Address all relevant aspects of the instructions
            - Maintain or enhance code readability and efficiency
            - Consider the overall structure and purpose of the code
            - Follow best practices and coding standards for the language
            - Maintain consistency with the project context and previous edits
+           - Take into account the full context of all files in the project
 
         IMPORTANT: RETURN ONLY THE SEARCH/REPLACE BLOCKS. NO EXPLANATIONS OR COMMENTS.
         USE THE FOLLOWING FORMAT FOR EACH BLOCK:
@@ -398,7 +405,7 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False)
                 original_content = file.read()
             file_contents[path] = original_content
 
-        edit_instructions = await generate_edit_instructions(original_content, instructions, project_context)
+        edit_instructions = await generate_edit_instructions(original_content, instructions, project_context, file_contents)
         
         if edit_instructions:
             console.print(Panel("The following SEARCH/REPLACE blocks have been generated:", title="Edit Instructions", style="cyan"))
