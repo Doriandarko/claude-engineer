@@ -77,6 +77,9 @@ file_contents = {}
 # Code editor memory (maintains some context for CODEEDITORMODEL between calls)
 code_editor_memory = []
 
+# Files already present in code editor's context
+code_editor_files = set()
+
 # automode flag
 automode = False
 
@@ -286,14 +289,17 @@ def generate_and_apply_diff(original_content, new_content, path):
         return f"Error applying changes: {str(e)}"
 
 
-async def generate_edit_instructions(file_content, instructions, project_context, full_file_contents):
-    global code_editor_tokens, code_editor_memory
+async def generate_edit_instructions(file_path, file_content, instructions, project_context, full_file_contents):
+    global code_editor_tokens, code_editor_memory, code_editor_files
     try:
         # Prepare memory context (this is the only part that maintains some context between calls)
         memory_context = "\n".join([f"Memory {i+1}:\n{mem}" for i, mem in enumerate(code_editor_memory)])
 
-        # Prepare full file contents context
-        full_file_contents_context = "\n\n".join([f"--- {path} ---\n{content}" for path, content in full_file_contents.items()])
+        # Prepare full file contents context, excluding the file being edited if it's already in code_editor_files
+        full_file_contents_context = "\n\n".join([
+            f"--- {path} ---\n{content}" for path, content in full_file_contents.items()
+            if path != file_path or path not in code_editor_files
+        ])
 
         system_prompt = f"""
         You are an AI coding agent that generates edit instructions for code files. Your task is to analyze the provided code and generate SEARCH/REPLACE blocks for necessary changes. Follow these steps:
@@ -357,7 +363,10 @@ async def generate_edit_instructions(file_content, instructions, project_context
         edit_instructions = parse_search_replace_blocks(response.content[0].text)
 
         # Update code editor memory (this is the only part that maintains some context between calls)
-        code_editor_memory.append(f"Edit Instructions:\n{response.content[0].text}")
+        code_editor_memory.append(f"Edit Instructions for {file_path}:\n{response.content[0].text}")
+
+        # Add the file to code_editor_files set
+        code_editor_files.add(file_path)
 
         return edit_instructions
 
@@ -405,7 +414,7 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False)
                 original_content = file.read()
             file_contents[path] = original_content
 
-        edit_instructions = await generate_edit_instructions(original_content, instructions, project_context, file_contents)
+        edit_instructions = await generate_edit_instructions(path, original_content, instructions, project_context, file_contents)
         
         if edit_instructions:
             console.print(Panel("The following SEARCH/REPLACE blocks have been generated:", title="Edit Instructions", style="cyan"))
@@ -1038,15 +1047,16 @@ def reset_code_editor_memory():
 
 
 def reset_conversation():
-    global conversation_history, main_model_tokens, tool_checker_tokens, code_editor_tokens, code_execution_tokens, file_contents
+    global conversation_history, main_model_tokens, tool_checker_tokens, code_editor_tokens, code_execution_tokens, file_contents, code_editor_files
     conversation_history = []
     main_model_tokens = {'input': 0, 'output': 0}
     tool_checker_tokens = {'input': 0, 'output': 0}
     code_editor_tokens = {'input': 0, 'output': 0}
     code_execution_tokens = {'input': 0, 'output': 0}
     file_contents = {}
+    code_editor_files = set()
     reset_code_editor_memory()
-    console.print(Panel("Conversation history, token counts, file contents, and code editor memory have been reset.", title="Reset", style="bold green"))
+    console.print(Panel("Conversation history, token counts, file contents, code editor memory, and code editor files have been reset.", title="Reset", style="bold green"))
     display_token_usage()
 
 def display_token_usage():
