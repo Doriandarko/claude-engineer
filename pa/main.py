@@ -8,6 +8,7 @@ import io
 import re
 from anthropic import Anthropic, APIStatusError, APIError
 from openai import OpenAI
+from openai import ChatCompletion
 import difflib
 import time
 from rich.console import Console
@@ -71,7 +72,7 @@ else:
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
     if not openrouter_api_key:
         raise ValueError("OPENROUTER_API_KEY not found in environment variables")
-    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=openrouter_api_key)
+    client = OpenAI(api_key=openrouter_api_key)
 
 # Initialize the Tavily client
 tavily_api_key = os.getenv("TAVILY_API_KEY")
@@ -585,6 +586,18 @@ def get_openai_tools(tools):
             "description": tool["description"]
         })
     return openai_tools
+    openai_tools = []
+    for tool in tools:
+        openai_tools.append({
+            "name": tool["name"],
+            "parameters": {
+                "type": "object",
+                "properties": tool["input_schema"]["properties"],
+                "required": tool["input_schema"].get("required", [])
+            },
+            "description": tool["description"]
+        })
+    return openai_tools
 
 tools = [
     {
@@ -966,7 +979,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             main_model_tokens['output'] += response.usage.output_tokens
         else:
             # OpenAI call for Open Router
-            response = client.chat.completions.create(
+            response = ChatCompletion.create(
                 model="openai/gpt-4o-mini",
                 messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
                 functions=get_openai_tools(tools),
@@ -1085,11 +1098,11 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     if tool_content_block.type == "text":
                         tool_checker_response += tool_content_block.text
             else:
-                tool_response = client.chat.completions.create(
+                tool_response = ChatCompletion.create(
                     model="openai/gpt-4o-mini",
                     messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
-                    tools=get_openai_tools(tools),
-                    tool_choice="auto"
+                    functions=get_openai_tools(tools),
+                    function_call="auto"
                 )
                 tool_checker_response = tool_response.choices[0].message.content
 
