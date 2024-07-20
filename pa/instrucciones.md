@@ -1,15 +1,15 @@
-Modifica este programa de python para que funcione con el sdk de openai (con base_url apuntando a Open Router), utiliza el modelo 'openai/gpt-4o-mini', considera que esto será un pull request, por lo cual es esencial no modificar tanto el código. 
+Modifica este programa de python para que funcione con el SDK de OpenAI (con base_url apuntando a Open Router), utilizando el modelo 'openai/gpt-4o-mini'. Considera que esto será un pull request, por lo cual es esencial no modificar tanto el código.
 
-El proyecto tendrá lugar en el folder 'pa', si no existe, créalo. Considera también lo siguiente:
+El proyecto se encuentra en el folder 'pa'. Ya se han implementado algunas características, pero se necesita continuar con las siguientes tareas:
 
 1. Preguntarle al usuario si desea utilizar Anthropic u Open Router cuando se inicializa el programa (solo habrá dos opciones y el usuario se puede desplazar con flechitas arriba/abajo y enter en consola).
 
 2. Transformar la llamada al cliente para que coincida con el SDK (chat.completions.) y 
 client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 
-3. Transformar la estructura de la definición de funciones para que coincida con el formato de openai en caso de que el usuario haya seleccionado usar Open Router. Asegúrate de que el uso de las tools ocurra bien:
+3. Transformar la estructura de la definición de funciones para que coincida con el formato de OpenAI en caso de que el usuario haya seleccionado usar Open Router. Asegúrate de que el uso de las tools ocurra bien:
 
-# Esta función transforma el objeto CLAUDE_TOOLS en un objeto compatible con openai
+# Esta función transforma el objeto CLAUDE_TOOLS en un objeto compatible con OpenAI
 def get_openai_tools(tools):
     openai_tools = []
     for tool in tools:
@@ -22,7 +22,6 @@ def get_openai_tools(tools):
             }
         })
     return openai_tools
-
 
 4. Que la respuesta se hile correctamente en la conversación y no falle al usar functions & tools, que siempre haga correctamente la distinción cuando es Anthropic y cuando es Open Router para leer bien la response.
 
@@ -40,3 +39,9 @@ def get_openai_tools(tools):
 
 Código a modificar:
 /Users/obedvargasvillarreal/Documents/obeskay/proyectos/experimentos/claude-engineer/pa/main.py
+
+Progreso actual:
+- Se ha implementado la selección del proveedor de IA (Anthropic u Open Router) al inicializar el programa.
+- Se ha transformado la llamada al cliente para que coincida con el SDK de OpenAI.
+- Se ha comenzado a transformar la estructura de las funciones para que coincida con el formato de OpenAI.
+- Se ha asegurado que el uso de las tools ocurra correctamente.
