@@ -923,7 +923,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         current_conversation.append(image_message)
         console.print(Panel("Image message added to conversation history", title_align="left", title="Image Added", style="green"))
     else:
-        current_conversation.appen d({"role": "user", "content": user_input})
+        current_conversation.append({"role": "user", "content": user_input})
 
     # Filter conversation history to maintain context
     filtered_conversation_history = []
