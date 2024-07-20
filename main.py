@@ -15,6 +15,15 @@ from rich.syntax import Syntax
 from rich.markdown import Markdown
 import asyncio
 import aiohttp
+from prompt_toolkit import PromptSession
+from prompt_toolkit.styles import Style
+
+async def get_user_input(prompt="You: "):
+    style = Style.from_dict({
+        'prompt': 'cyan bold',
+    })
+    session = PromptSession(style=style)
+    return await session.prompt_async(prompt, multiline=False)
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 import datetime
 import venv
@@ -101,7 +110,7 @@ MAINMODEL = "claude-3-5-sonnet-20240620"  # Maintains conversation history and f
 # Models that don't maintain context (memory is reset after each call)
 TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
 CODEEDITORMODEL = "claude-3-5-sonnet-20240620"
-CODEEXECUTIONMODEL = "claude-3-haiku-20240307"
+CODEEXECUTIONMODEL = "claude-3-5-sonnet-20240620"
 
 # System prompts
 BASE_SYSTEM_PROMPT = """
@@ -1076,7 +1085,7 @@ def display_token_usage():
         "Main Model": {"input": 3.00, "output": 15.00, "has_context": True},
         "Tool Checker": {"input": 3.00, "output": 15.00, "has_context": False},
         "Code Editor": {"input": 3.00, "output": 15.00, "has_context": True},
-        "Code Execution": {"input": 0.25, "output": 1.25, "has_context": False}
+        "Code Execution": {"input": 3.00, "output": 15.00, "has_context": False}
     }
 
     total_input = 0
@@ -1143,7 +1152,7 @@ async def main():
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
     while True:
-        user_input = console.input("[bold cyan]You:[/bold cyan] ")
+        user_input = await get_user_input()
 
         if user_input.lower() == 'exit':
             console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
@@ -1159,10 +1168,10 @@ async def main():
             continue
 
         if user_input.lower() == 'image':
-            image_path = console.input("[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] ").strip().replace("'", "")
+            image_path = (await get_user_input("Drag and drop your image here, then press enter: ")).strip().replace("'", "")
 
             if os.path.isfile(image_path):
-                user_input = console.input("[bold cyan]You (prompt for image):[/bold cyan] ")
+                user_input = await get_user_input("You (prompt for image): ")
                 response, _ = await chat_with_claude(user_input, image_path)
             else:
                 console.print(Panel("Invalid image path. Please try again.", title="Error", style="bold red"))
@@ -1178,7 +1187,7 @@ async def main():
                 automode = True
                 console.print(Panel(f"Entering automode with {max_iterations} iterations. Please provide the goal of the automode.", title_align="left", title="Automode", style="bold yellow"))
                 console.print(Panel("Press Ctrl+C at any time to exit the automode loop.", style="bold yellow"))
-                user_input = console.input("[bold cyan]You:[/bold cyan] ")
+                user_input = await get_user_input()
 
                 iteration_count = 0
                 try:
