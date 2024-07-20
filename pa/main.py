@@ -7,8 +7,7 @@ from PIL import Image
 import io
 import re
 from anthropic import Anthropic, APIStatusError, APIError
-from openai import OpenAI
-from openai import ChatCompletion
+import openai
 import difflib
 import time
 from rich.console import Console
@@ -72,7 +71,8 @@ else:
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
     if not openrouter_api_key:
         raise ValueError("OPENROUTER_API_KEY not found in environment variables")
-    client = OpenAI(api_key=openrouter_api_key)
+    openai.api_key = openrouter_api_key
+    openai.api_base = "https://openrouter.ai/api/v1"
 
 # Initialize the Tavily client
 tavily_api_key = os.getenv("TAVILY_API_KEY")
@@ -979,7 +979,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             main_model_tokens['output'] += response.usage.output_tokens
         else:
             # OpenAI call for Open Router
-            response = ChatCompletion.create(
+            response = openai.ChatCompletion.create(
                 model="openai/gpt-4o-mini",
                 messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
                 functions=get_openai_tools(tools),
