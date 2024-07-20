@@ -81,7 +81,7 @@ Special commands:
 - Type 'image' to include an image in your message for analysis.
 - Type 'reset' to reset the entire conversation without restarting the script.
 - Type 'automode number' to enter Autonomous mode with a specific number of iterations.
-- Type 'save' to save the current chat log.
+- Type 'save chat' to save the current chat log.
 - Press Ctrl+C at any time to exit the automode and return to regular chat.
 
 After each interaction, Claude Engineer will display:
