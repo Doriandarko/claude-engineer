@@ -72,7 +72,7 @@ else:
     if not openrouter_api_key:
         raise ValueError("OPENROUTER_API_KEY not found in environment variables")
     openai.api_key = openrouter_api_key
-    openai.api_base = "https://openrouter.ai/api/v1"
+    openai.base_url = "https://openrouter.ai/api/v1"
 
 # Initialize the Tavily client
 tavily_api_key = os.getenv("TAVILY_API_KEY")
