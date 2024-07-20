@@ -44,12 +44,32 @@ def main():
     client = get_client()
     console.print("Client initialized successfully.", style="bold green")
     
-    # Add your code here to interact with the client
-    # For example:
     if isinstance(client, Anthropic):
         console.print("Using Anthropic API", style="bold blue")
     else:
         console.print("Using Open Router API", style="bold blue")
+
+    while True:
+        user_input = input("Enter your prompt (or 'exit' to quit): ")
+        if user_input.lower() == 'exit':
+            break
+
+        try:
+            if isinstance(client, Anthropic):
+                response = client.messages.create(
+                    model="claude-3-sonnet-20240229",
+                    max_tokens=1000,
+                    messages=[{"role": "user", "content": user_input}]
+                )
+                console.print(response.content[0].text, style="green")
+            else:
+                response = client.ChatCompletion.create(
+                    model="openai/gpt-4-turbo-preview",
+                    messages=[{"role": "user", "content": user_input}]
+                )
+                console.print(response.choices[0].message.content, style="green")
+        except Exception as e:
+            console.print(f"Error: {str(e)}", style="bold red")
 
 if __name__ == "__main__":
     main()
