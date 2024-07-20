@@ -1,13 +1,28 @@
 from typing import List, Dict, Union, Tuple, Optional
 import queue
 import json
-import asyncio
 import base64
 import difflib
 import io
 import os
 import re
 import time
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.markdown import Markdown
+import asyncio
+import aiohttp
+from prompt_toolkit import PromptSession
+from prompt_toolkit.styles import Style
+
+async def get_user_input(prompt="You: "):
+    style = Style.from_dict({
+        'prompt': 'cyan bold',
+    })
+    session = PromptSession(style=style)
+    return await session.prompt_async(prompt, multiline=False)
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 import datetime
 import venv
 import subprocess
@@ -83,6 +98,9 @@ file_contents = {}
 # Code editor memory (maintains some context for CODEEDITORMODEL between calls)
 code_editor_memory = []
 
+# Files already present in code editor's context
+code_editor_files = set()
+
 # automode flag
 automode = False
 
@@ -91,6 +109,8 @@ file_contents = {}
 
 # Global dictionary to store running processes
 running_processes = {}
+
+console = Console()
 
 # Constants
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
@@ -104,7 +124,7 @@ MAINMODEL = "claude-3-5-sonnet-20240620"  # Maintains conversation history and f
 # Models that don't maintain context (memory is reset after each call)
 TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
 CODEEDITORMODEL = "claude-3-5-sonnet-20240620"
-CODEEXECUTIONMODEL = "claude-3-haiku-20240307"
+CODEEXECUTIONMODEL = "claude-3-5-sonnet-20240620"
 
 # System prompts
 BASE_SYSTEM_PROMPT = """
@@ -292,11 +312,17 @@ def generate_and_apply_diff(original_content, new_content, path):
         return f"Error applying changes: {str(e)}"
 
 
-async def generate_edit_instructions(file_content, instructions, project_context):
-    global code_editor_tokens, code_editor_memory
+async def generate_edit_instructions(file_path, file_content, instructions, project_context, full_file_contents):
+    global code_editor_tokens, code_editor_memory, code_editor_files
     try:
         # Prepare memory context (this is the only part that maintains some context between calls)
         memory_context = "\n".join([f"Memory {i+1}:\n{mem}" for i, mem in enumerate(code_editor_memory)])
+
+        # Prepare full file contents context, excluding the file being edited if it's already in code_editor_files
+        full_file_contents_context = "\n\n".join([
+            f"--- {path} ---\n{content}" for path, content in full_file_contents.items()
+            if path != file_path or path not in code_editor_files
+        ])
 
         system_prompt = f"""
         You are an AI coding agent that generates edit instructions for code files. Your task is to analyze the provided code and generate SEARCH/REPLACE blocks for necessary changes. Follow these steps:
@@ -313,17 +339,21 @@ async def generate_edit_instructions(file_content, instructions, project_context
         4. Consider the memory of previous edits:
         {memory_context}
 
-        5. Generate SEARCH/REPLACE blocks for each necessary change. Each block should:
+        5. Consider the full context of all files in the project:
+        {full_file_contents_context}
+
+        6. Generate SEARCH/REPLACE blocks for each necessary change. Each block should:
            - Include enough context to uniquely identify the code to be changed
            - Provide the exact replacement code, maintaining correct indentation and formatting
            - Focus on specific, targeted changes rather than large, sweeping modifications
 
-        6. Ensure that your SEARCH/REPLACE blocks:
+        7. Ensure that your SEARCH/REPLACE blocks:
            - Address all relevant aspects of the instructions
            - Maintain or enhance code readability and efficiency
            - Consider the overall structure and purpose of the code
            - Follow best practices and coding standards for the language
            - Maintain consistency with the project context and previous edits
+           - Take into account the full context of all files in the project
 
         IMPORTANT: RETURN ONLY THE SEARCH/REPLACE BLOCKS. NO EXPLANATIONS OR COMMENTS.
         USE THE FOLLOWING FORMAT FOR EACH BLOCK:
@@ -356,7 +386,10 @@ async def generate_edit_instructions(file_content, instructions, project_context
         edit_instructions = parse_search_replace_blocks(response.content[0].text)
 
         # Update code editor memory (this is the only part that maintains some context between calls)
-        code_editor_memory.append(f"Edit Instructions:\n{response.content[0].text}")
+        code_editor_memory.append(f"Edit Instructions for {file_path}:\n{response.content[0].text}")
+
+        # Add the file to code_editor_files set
+        code_editor_files.add(file_path)
 
         return edit_instructions
 
@@ -404,7 +437,7 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False)
                 original_content = file.read()
             file_contents[path] = original_content
 
-        edit_instructions = await generate_edit_instructions(original_content, instructions, project_context)
+        edit_instructions = await generate_edit_instructions(path, original_content, instructions, project_context, file_contents)
         
         if edit_instructions:
             console.print(Panel("The following SEARCH/REPLACE blocks have been generated:", title="Edit Instructions", style="cyan"))
@@ -1111,15 +1144,16 @@ def reset_code_editor_memory():
 
 
 def reset_conversation():
-    global conversation_history, main_model_tokens, tool_checker_tokens, code_editor_tokens, code_execution_tokens, file_contents
+    global conversation_history, main_model_tokens, tool_checker_tokens, code_editor_tokens, code_execution_tokens, file_contents, code_editor_files
     conversation_history = []
     main_model_tokens = {'input': 0, 'output': 0}
     tool_checker_tokens = {'input': 0, 'output': 0}
     code_editor_tokens = {'input': 0, 'output': 0}
     code_execution_tokens = {'input': 0, 'output': 0}
     file_contents = {}
+    code_editor_files = set()
     reset_code_editor_memory()
-    console.print(Panel("Conversation history, token counts, file contents, and code editor memory have been reset.", title="Reset", style="bold green"))
+    console.print(Panel("Conversation history, token counts, file contents, code editor memory, and code editor files have been reset.", title="Reset", style="bold green"))
     display_token_usage()
 
 def display_token_usage():
@@ -1139,7 +1173,7 @@ def display_token_usage():
         "Main Model": {"input": 3.00, "output": 15.00, "has_context": True},
         "Tool Checker": {"input": 3.00, "output": 15.00, "has_context": False},
         "Code Editor": {"input": 3.00, "output": 15.00, "has_context": True},
-        "Code Execution": {"input": 0.25, "output": 1.25, "has_context": False}
+        "Code Execution": {"input": 3.00, "output": 15.00, "has_context": False}
     }
 
     total_input = 0
@@ -1206,7 +1240,7 @@ async def main():
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
     while True:
-        user_input = console.input("[bold cyan]You:[/bold cyan] ")
+        user_input = await get_user_input()
 
         if user_input.lower() == 'exit':
             console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
@@ -1222,10 +1256,10 @@ async def main():
             continue
 
         if user_input.lower() == 'image':
-            image_path = console.input("[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] ").strip().replace("'", "")
+            image_path = (await get_user_input("Drag and drop your image here, then press enter: ")).strip().replace("'", "")
 
             if os.path.isfile(image_path):
-                user_input = console.input("[bold cyan]You (prompt for image):[/bold cyan] ")
+                user_input = await get_user_input("You (prompt for image): ")
                 response, _ = await chat_with_claude(user_input, image_path)
             else:
                 console.print(Panel("Invalid image path. Please try again.", title="Error", style="bold red"))
@@ -1241,7 +1275,7 @@ async def main():
                 automode = True
                 console.print(Panel(f"Entering automode with {max_iterations} iterations. Please provide the goal of the automode.", title_align="left", title="Automode", style="bold yellow"))
                 console.print(Panel("Press Ctrl+C at any time to exit the automode loop.", style="bold yellow"))
-                user_input = console.input("[bold cyan]You:[/bold cyan] ")
+                user_input = await get_user_input()
 
                 iteration_count = 0
                 try:

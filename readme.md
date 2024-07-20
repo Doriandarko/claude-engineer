@@ -81,7 +81,7 @@ Special commands:
 - Type 'image' to include an image in your message for analysis.
 - Type 'reset' to reset the entire conversation without restarting the script.
 - Type 'automode number' to enter Autonomous mode with a specific number of iterations.
-- Type 'save' to save the current chat log.
+- Type 'save chat' to save the current chat log.
 - Press Ctrl+C at any time to exit the automode and return to regular chat.
 
 After each interaction, Claude Engineer will display:
@@ -226,6 +226,79 @@ Claude Engineer utilizes multiple AI models to provide specialized functionality
 4. CODEEXECUTIONMODEL: Analyzes the results of code executions and provides insights.
 
 These models work together to provide a comprehensive and intelligent development assistance experience.
+
+## Workflow Diagram
+
+```mermaid
+graph TD
+    A[Start] --> B[Initialize]
+    B --> C{User Input}
+    
+    C -->|"exit"| D[End]
+    C -->|"reset"| E[Reset Conversation]
+    C -->|"save chat"| F[Save Chat to Markdown]
+    C -->|"image"| G[Process Image]
+    C -->|"automode"| H[Enter Automode]
+    C -->|Other| I[Regular Chat]
+    
+    E --> C
+    F --> C
+    G --> J[chat_with_claude]
+    H --> K[Automode Loop]
+    I --> J
+    
+    J --> L{Tool Use?}
+    L -->|Yes| M[Execute Tool]
+    L -->|No| N[Generate Response]
+    
+    M --> O[Tool Checker]
+    O --> N
+    
+    N --> P[Update Conversation History]
+    P --> Q[Display Token Usage]
+    Q --> C
+    
+    subgraph Memory Management
+        R[Conversation History]
+        S[File Contents]
+        T[Code Editor Memory]
+    end
+    
+    subgraph Models
+        U[MAINMODEL - Claude-3.5-Sonnet]
+        V[TOOLCHECKERMODEL - Claude-3.5-Sonnet]
+        W[CODEEDITORMODEL - Claude-3.5-Sonnet]
+        X[CODEEXECUTIONMODEL - Claude-3-Haiku]
+    end
+    
+    subgraph Tools
+        Y[create_folder]
+        Z[create_file]
+        AA[edit_and_apply]
+        AB[execute_code]
+        AC[stop_process]
+        AD[read_file]
+        AE[list_files]
+        AF[tavily_search]
+    end
+    
+    J --> R
+    J --> S
+    J --> T
+    J --> U
+    O --> V
+    AA --> W
+    AB --> X
+    M --> Y
+    M --> Z
+    M --> AA
+    M --> AB
+    M --> AC
+    M --> AD
+    M --> AE
+    M --> AF
+```
+
 
 ## 👥 Contributing
 
