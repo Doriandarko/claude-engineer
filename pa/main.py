@@ -75,9 +75,14 @@ if __name__ == "__main__":
     main()
 import os
 from dotenv import load_dotenv
-from adapter import get_client, get_openai_tools
+from adapter import Adapter
 from tavily import TavilyClient
 from rich.console import Console
+from rich.panel import Panel
+from rich.markdown import Markdown
+import asyncio
+from prompt_toolkit import PromptSession
+from prompt_toolkit.styles import Style
 
 # Load environment variables from .env file
 load_dotenv()
@@ -90,13 +95,50 @@ tavily = TavilyClient(api_key=tavily_api_key)
 
 console = Console()
 
-# Initialize the AI client
-client = get_client()
+async def get_user_input(prompt="You: "):
+    style = Style.from_dict({
+        'prompt': 'cyan bold',
+    })
+    session = PromptSession(style=style)
+    return await session.prompt_async(prompt, multiline=False)
 
-# Example usage of the client
-def main():
-    console.print("Client initialized successfully.")
-    # Add your code here to interact with the client
+async def main():
+    console.print(Panel("Welcome to the AI Assistant!", title="Welcome", style="bold green"))
+    console.print("Type 'exit' to end the conversation.")
+
+    # Initialize the AI client
+    adapter = Adapter()
+    client = adapter.get_client()
+    model = adapter.get_model()
+
+    console.print(f"Using model: {model}")
+
+    while True:
+        user_input = await get_user_input()
+
+        if user_input.lower() == 'exit':
+            console.print(Panel("Thank you for chatting. Goodbye!", title="Goodbye", style="bold green"))
+            break
+
+        try:
+            if isinstance(client, Adapter.Anthropic):
+                response = client.messages.create(
+                    model=model,
+                    max_tokens=1000,
+                    messages=[{"role": "user", "content": user_input}]
+                )
+                assistant_response = response.content[0].text
+            else:
+                response = client.ChatCompletion.create(
+                    model=model,
+                    messages=[{"role": "user", "content": user_input}]
+                )
+                assistant_response = response.choices[0].message.content
+
+            console.print(Panel(Markdown(assistant_response), title="AI Response", border_style="blue"))
+
+        except Exception as e:
+            console.print(Panel(f"Error: {str(e)}", title="Error", style="bold red"))
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
