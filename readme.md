@@ -22,7 +22,7 @@ Claude Engineer is an advanced interactive command-line interface (CLI) that har
 - 🔍 TOOLCHECKERMODEL for validating tool usage and outputs
 - 📝 CODEEDITORMODEL for specialized code editing tasks
 - 🖥️ CODEEXECUTIONMODEL for analyzing code execution results
-- 📊 Token usage tracking (input, output, and total) for each model
+- 📊 Token usage tracking (input, output, and total) for each model, with improved visualization using tables
 - 🪟 Remaining context window display
 - 💾 Chat log saving capability
 - 🔒 Enhanced code execution capabilities with isolated virtual environment
@@ -185,8 +185,20 @@ The system prompt is now dynamically updated based on whether the script is in a
 1. In regular mode, Claude focuses on providing helpful responses and using tools as needed.
 2. In automode, Claude is instructed to work autonomously, set goals, and provide regular updates on progress.
 3. The system prompt adapts to the specific task at hand, optimizing Claude's performance for each scenario.
+4. The system prompt now includes file context for enhanced token management.
 
 The dynamic system prompt enhances Claude's ability to adapt to different scenarios and provide more relevant assistance.
+
+### 📊 Token Management and Visualization
+
+Claude Engineer now features improved token management and visualization:
+
+1. Enhanced token management using file context in the system prompt.
+2. Improved token visualization using a table format.
+3. Display of input, output, and total token usage for each model interaction.
+4. Visualization of remaining context window size.
+
+These improvements provide better insights into token usage and help manage conversations more effectively.
 
 ### 🔧 Available Tools
 
@@ -248,6 +260,79 @@ Claude Engineer utilizes multiple AI models to provide specialized functionality
 4. CODEEXECUTIONMODEL: Analyzes the results of code executions and provides insights.
 
 These models work together to provide a comprehensive and intelligent development assistance experience.
+
+## Workflow Diagram
+
+```mermaid
+graph TD
+    A[Start] --> B[Initialize]
+    B --> C{User Input}
+    
+    C -->|"exit"| D[End]
+    C -->|"reset"| E[Reset Conversation]
+    C -->|"save chat"| F[Save Chat to Markdown]
+    C -->|"image"| G[Process Image]
+    C -->|"automode"| H[Enter Automode]
+    C -->|Other| I[Regular Chat]
+    
+    E --> C
+    F --> C
+    G --> J[chat_with_claude]
+    H --> K[Automode Loop]
+    I --> J
+    
+    J --> L{Tool Use?}
+    L -->|Yes| M[Execute Tool]
+    L -->|No| N[Generate Response]
+    
+    M --> O[Tool Checker]
+    O --> N
+    
+    N --> P[Update Conversation History]
+    P --> Q[Display Token Usage]
+    Q --> C
+    
+    subgraph Memory Management
+        R[Conversation History]
+        S[File Contents]
+        T[Code Editor Memory]
+    end
+    
+    subgraph Models
+        U[MAINMODEL - Claude-3.5-Sonnet]
+        V[TOOLCHECKERMODEL - Claude-3.5-Sonnet]
+        W[CODEEDITORMODEL - Claude-3.5-Sonnet]
+        X[CODEEXECUTIONMODEL - Claude-3-Haiku]
+    end
+    
+    subgraph Tools
+        Y[create_folder]
+        Z[create_file]
+        AA[edit_and_apply]
+        AB[execute_code]
+        AC[stop_process]
+        AD[read_file]
+        AE[list_files]
+        AF[tavily_search]
+    end
+    
+    J --> R
+    J --> S
+    J --> T
+    J --> U
+    O --> V
+    AA --> W
+    AB --> X
+    M --> Y
+    M --> Z
+    M --> AA
+    M --> AB
+    M --> AC
+    M --> AD
+    M --> AE
+    M --> AF
+```
+
 
 ## 👥 Contributing
 
