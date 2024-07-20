@@ -586,18 +586,6 @@ def get_openai_tools(tools):
             "description": tool["description"]
         })
     return openai_tools
-    openai_tools = []
-    for tool in tools:
-        openai_tools.append({
-            "name": tool["name"],
-            "parameters": {
-                "type": "object",
-                "properties": tool["input_schema"]["properties"],
-                "required": tool["input_schema"].get("required", [])
-            },
-            "description": tool["description"]
-        })
-    return openai_tools
 
 tools = [
     {
@@ -979,7 +967,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             main_model_tokens['output'] += response.usage.output_tokens
         else:
             # OpenAI call for Open Router
-            response = openai.chat.completions.create(
+            response = openai.ChatCompletion.create(
                 model="openai/gpt-4o-mini",
                 messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
                 functions=get_openai_tools(tools),
@@ -1010,8 +998,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         assistant_response = response.choices[0].message.content
         if assistant_response and CONTINUATION_EXIT_PHRASE in assistant_response:
             exit_continuation = True
-        if response.choices[0].message.function_call:
-            tool_uses = [response.choices[0].message.function_call]
+        if response.choices[0].message.get("function_call"):
+            tool_uses = [response.choices[0].message["function_call"]]
 
     console.print(Panel(Markdown(assistant_response), title="AI's Response", title_align="left", border_style="blue", expand=False))
 
