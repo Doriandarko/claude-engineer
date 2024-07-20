@@ -3,7 +3,7 @@ import time
 from anthropic import Anthropic
 from config import ANTHROPIC_API_KEY, COORDINATOR_MODEL, COORDINATOR_BASE_PROMPT, CONTINUATION_EXIT_PHRASE
 from tool_agent import ToolAgent
-from tools import tool_definitions, execute_tool
+from tool_box import ToolBox
 from utils import parse_goals, print_panel
 
 logging.basicConfig(level=logging.INFO)
@@ -13,7 +13,8 @@ class Coordinator:
     def __init__(self):
         self.client = Anthropic(api_key=ANTHROPIC_API_KEY)
         self.conversation_history = []
-        self.tool_agents = {tool["name"]: ToolAgent(tool["name"], tool["description"], tool["input_schema"]) for tool in tool_definitions}
+        self.toolbox = ToolBox()
+        self.tool_agents = {tool["name"]: ToolAgent(tool["name"], tool["description"], tool["input_schema"]) for tool in self.toolbox.tool_definitions}
         self.current_goals = []
         self.automode = False
 
@@ -45,7 +46,7 @@ class Coordinator:
                     max_tokens=4000,
                     system=COORDINATOR_BASE_PROMPT,
                     messages=messages,
-                    tools=tool_definitions
+                    tools=self.toolbox.tool_definitions
                 )
                 
                 self.conversation_history.append({"role": "user", "content": message_content})
@@ -61,7 +62,7 @@ class Coordinator:
                     logger.info(f"Tool input: {tool_input}")
                     
                     # Execute the actual tool function
-                    actual_result = execute_tool(tool_name, tool_input)
+                    actual_result = self.toolbox.execute_tool(tool_name, tool_input)
                     
                     logger.info(f"Tool result: {actual_result}")
                     
@@ -87,7 +88,7 @@ class Coordinator:
                         max_tokens=2000,
                         system=COORDINATOR_BASE_PROMPT,
                         messages=self.conversation_history,
-                        tools=tool_definitions
+                        tools=self.toolbox.tool_definitions
                     )
                     
                     # Process the continuation response
