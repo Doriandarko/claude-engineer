@@ -1008,7 +1008,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 tool_uses.append(content_block)
     else:
         assistant_response = response.choices[0].message.content
-        if CONTINUATION_EXIT_PHRASE in assistant_response:
+        if assistant_response and CONTINUATION_EXIT_PHRASE in assistant_response:
             exit_continuation = True
         if response.choices[0].message.function_call:
             tool_uses = [response.choices[0].message.function_call]
