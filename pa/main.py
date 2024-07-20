@@ -1098,7 +1098,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     if tool_content_block.type == "text":
                         tool_checker_response += tool_content_block.text
             else:
-                tool_response = ChatCompletion.create(
+                tool_response = openai.ChatCompletion.create(
                     model="openai/gpt-4o-mini",
                     messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
                     functions=get_openai_tools(tools),
