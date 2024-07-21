@@ -983,7 +983,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                         "messages": [{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
                         "functions": get_openai_tools(tools),
                         "function_call": "auto",
-                        "stream": True
                     },
                     headers={"Authorization": f"Bearer {openai.api_key}"}
                 ) as resp:
