@@ -549,6 +549,9 @@ def read_file(path):
         file_contents[path] = content
         console.print(Panel(f"File '{path}' has been read successfully and stored in the system prompt.", title="File Read", style="green"))
         return content
+    except FileNotFoundError:
+        console.print(Panel(f"File '{path}' not found.", title="Error", style="bold red"))
+        return f"File '{path}' not found."
     except Exception as e:
         console.print(Panel(f"Error reading file '{path}': {str(e)}", title="Error", style="bold red"))
         return f"Error reading file '{path}': {str(e)}"
