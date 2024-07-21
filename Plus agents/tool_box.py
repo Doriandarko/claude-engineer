@@ -42,6 +42,8 @@ class ToolBox:
                     print(f"Error importing {filename}: {e}")
         
         sys.path.remove(os.path.dirname(subfolder_path))
+
+        return self.tools
     
     def execute_tool(self, tool_name, tool_input):
         for tool in self.tools:

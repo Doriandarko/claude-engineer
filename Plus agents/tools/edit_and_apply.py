@@ -26,7 +26,7 @@ class edit_and_apply(base_tool):
     }
         self.name = self.definition["name"]
     
-    def execute(tool_input):
+    def execute(self, tool_input):
         try:
             path = tool_input["path"]
             new_content = tool_input["new_content"]

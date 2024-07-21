@@ -20,7 +20,7 @@ class create_folder(base_tool):
     }
         self.name = self.definition["name"]
     
-    def execute(tool_input):
+    def execute(self, tool_input):
         try:
             path = tool_input["path"]
             os.makedirs(path, exist_ok=True)

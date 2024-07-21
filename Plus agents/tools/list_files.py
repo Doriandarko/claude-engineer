@@ -19,7 +19,7 @@ class list_files(base_tool):
     }
         self.name = self.definition["name"]
     
-    def execute(tool_input):
+    def execute(self, tool_input):
         try:
             path = tool_input["path"]
             files = os.listdir(path)

@@ -21,7 +21,7 @@ class tavily_search(base_tool):
     }
         self.name = self.definition["name"]
     
-    def execute(tool_input):
+    def execute(self, tool_input):
         try:
             query = tool_input["query"]
             response = tavily.qna_search(query=query, search_depth="advanced")

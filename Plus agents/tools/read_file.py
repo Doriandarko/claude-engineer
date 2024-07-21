@@ -19,7 +19,7 @@ class read_file(base_tool):
     }
         self.name = self.definition["name"]
     
-    def execute(tool_input):
+    def execute(self, tool_input):
         try:
             path = tool_input["path"]
             with open(path, 'r') as f:
