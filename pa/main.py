@@ -1034,26 +1034,43 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     return await chat_with_claude(user_input, image_path, current_iteration, max_iterations, retry=True)
                 return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
             
-            if isinstance(response, dict) and 'choices' in response:
-                choices = response['choices']
+            # Handle the Open Router response as a dictionary
+            if isinstance(response, dict):
+                choices = response.get('choices', [])
                 if choices and isinstance(choices[0], dict):
                     choice = choices[0]
-                    if 'message' in choice and isinstance(choice['message'], dict):
-                        message = choice['message']
+                    message = choice.get('message', {})
+                    
+                    # Verify the structure of the response more robustly
+                    if isinstance(message, dict):
                         assistant_response = message.get('content', '')
                         if CONTINUATION_EXIT_PHRASE in assistant_response:
                             exit_continuation = True
-                        tool_uses = message.get('tool_calls', [])
+                        
+                        # Handle tool calls
+                        tool_calls = message.get('tool_calls', [])
+                        if isinstance(tool_calls, list):
+                            tool_uses = []
+                            for call in tool_calls:
+                                if isinstance(call, dict) and 'function' in call:
+                                    function = call['function']
+                                    tool_uses.append({
+                                        'id': call.get('id', ''),
+                                        'name': function.get('name', ''),
+                                        'arguments': function.get('arguments', '{}')
+                                    })
+                        else:
+                            tool_uses = []
                     else:
-                        error_msg = f"Error: Response does not contain a valid message. Response structure: {choice}"
+                        error_msg = f"Error: Response does not contain a valid message structure. Response: {message}"
                         console.print(Panel(error_msg, title="API Error", style="bold red"))
                         return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
                 else:
-                    error_msg = f"Error: Received an unexpected response format from Open Router. Response structure: {response}"
+                    error_msg = f"Error: Received an unexpected choices format from Open Router. Choices: {choices}"
                     console.print(Panel(error_msg, title="API Error", style="bold red"))
                     return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
             else:
-                error_msg = f"Error: Received an unexpected response format from Open Router. Response structure: {response}"
+                error_msg = f"Error: Received an unexpected response format from Open Router. Response: {response}"
                 console.print(Panel(error_msg, title="API Error", style="bold red"))
                 return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
     except (APIStatusError, APIError) as e:
