@@ -1005,9 +1005,10 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     console.print(Panel("Error: Response does not contain a message.", title="API Error", style="bold red"))
                     return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
             else:
-                console.print(Panel("Error: Received an unexpected response format from Open Router.", title="API Error", style="bold red"))
+                console.print(Panel("Error: Received an unexpected response format from Open Router. Please check the API response structure.", title="API Error", style="bold red"))
+                console.print(Panel(f"Full response: {response}", title="Debug: Open Router Response", style="dim"))
                 return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
-                # Add additional logging or handling as needed
+                logging.error(f"Unexpected response format from Open Router: {response}")
     except (APIStatusError, APIError) as e:
         if isinstance(e, APIStatusError) and e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
