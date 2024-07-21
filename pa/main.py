@@ -58,9 +58,9 @@ def setup_virtual_environment() -> Tuple[str, str]:
             activate_script = os.path.join(venv_path, "bin", "activate")
         
         return venv_path, activate_script
-        except Exception as e:
+    except Exception as e:
         logging.error(f"Error setting up virtual environment: {str(e)}")
-        raise e
+        raise
 
 
 # Load environment variables from .env file
@@ -1006,9 +1006,9 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                         tool_uses = response.choices[0].message.tool_calls
                 else:
                     console.print(Panel("Error: Response does not contain a message.", title="API Error", style="bold red"))
-                        return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
+                    return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
             else:
-    console.print(Panel("Error: Received an unexpected response format from Open Router. Please check the API response structure.", title="API Error", style="bold red"))
+console.print(Panel("Error: Received an unexpected response format from Open Router. Please check the API response structure.", title="API Error", style="bold red"))
                 console.print(Panel(f"Full response: {response}", title="Debug: Open Router Response", style="dim"))
                     return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
                 except Exception as e:
