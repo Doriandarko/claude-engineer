@@ -1059,6 +1059,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         else:
             console.print(Panel(tool_result["content"], title_align="left", title="Tool Result", style="green"))
 
+        # Add tool use to the conversation
         current_conversation.append({
             "role": "assistant",
             "content": [
@@ -1071,6 +1072,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             ]
         })
 
+        # Add tool result to the conversation
         current_conversation.append({
             "role": "user",
             "content": [
@@ -1082,6 +1084,9 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 }
             ]
         })
+
+        # Allow for user input after tool execution
+        user_input = console.input("[bold cyan]You:[/bold cyan] ")
 
         # Update the file_contents dictionary if applicable
         if tool_name in ['create_file', 'edit_and_apply', 'read_file'] and not tool_result["is_error"]:
