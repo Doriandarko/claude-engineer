@@ -740,7 +740,6 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
             )
         elif tool_name == "read_file":
             result = read_file(tool_input["path"])
-            console.print(Panel(f"File '{tool_input['path']}' read successfully.", title="File Read", style="green"))
         elif tool_name == "list_files":
             result = list_files(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
@@ -749,8 +748,7 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
             result = stop_process(tool_input["process_id"])
         elif tool_name == "execute_code":
             process_id, execution_result = await execute_code(tool_input["code"])
-            analysis_task = asyncio.create_task(send_to_ai_for_executing(tool_input["code"], execution_result))
-            analysis = await analysis_task
+            analysis = await send_to_ai_for_executing(tool_input["code"], execution_result)
             result = f"{execution_result}\n\nAnalysis:\n{analysis}"
             if process_id in running_processes:
                 result += "\n\nNote: The process is still running in the background."
@@ -762,20 +760,29 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
         if result is None:
             result = "Operation completed successfully, but no output was returned."
 
+        if is_error:
+            console.print(Panel(str(result), title=f"Error Executing Tool: {tool_name}", style="bold red"))
+        else:
+            console.print(Panel(str(result), title=f"Tool Execution Result: {tool_name}", style="green"))
+
         return {
             "content": str(result),
             "is_error": is_error
         }
     except KeyError as e:
-        logging.error(f"Missing required parameter {str(e)} for tool {tool_name}")
+        error_msg = f"Missing required parameter {str(e)} for tool {tool_name}"
+        logging.error(error_msg)
+        console.print(Panel(error_msg, title="Tool Execution Error", style="bold red"))
         return {
-            "content": f"Error: Missing required parameter {str(e)} for tool {tool_name}",
+            "content": error_msg,
             "is_error": True
         }
     except Exception as e:
-        logging.error(f"Error executing tool {tool_name}: {str(e)}")
+        error_msg = f"Error executing tool {tool_name}: {str(e)}"
+        logging.error(error_msg)
+        console.print(Panel(error_msg, title="Tool Execution Error", style="bold red"))
         return {
-            "content": f"Error executing tool {tool_name}: {str(e)}",
+            "content": error_msg,
             "is_error": True
         }
 
@@ -1255,48 +1262,56 @@ def display_token_usage():
 async def main():
     global automode, conversation_history
     console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Multi-Agent and Image Support!", title="Welcome", style="bold green"))
-    console.print("Type 'exit' to end the conversation.")
-    console.print("Type 'image' to include an image in your message.")
-    console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
-    console.print("Type 'reset' to clear the conversation history.")
-    console.print("Type 'save chat' to save the conversation to a Markdown file.")
-    console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
+    console.print(Panel(
+        "Commands:\n"
+        "- 'exit': End the conversation\n"
+        "- 'image': Include an image in your message\n"
+        "- 'automode [number]': Enter Autonomous mode with a specific number of iterations\n"
+        "- 'reset': Clear the conversation history\n"
+        "- 'save chat': Save the conversation to a Markdown file\n"
+        "- 'status': Display current status (automode, conversation length, etc.)\n"
+        "While in automode, press Ctrl+C at any time to exit and return to regular chat.",
+        title="Available Commands",
+        expand=False,
+        border_style="blue"
+    ))
 
     while True:
-        user_input = console.input("[bold cyan]You:[/bold cyan] ")
+        try:
+            user_input = console.input("[bold cyan]You:[/bold cyan] ")
 
-        if user_input.lower() == 'exit':
-            console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
-            break
+            if user_input.lower() == 'exit':
+                console.print(Panel("Thank you for chatting. Goodbye!", title="Goodbye", style="bold green"))
+                break
 
-        if user_input.lower() == 'reset':
-            reset_conversation()
-            continue
-
-        if user_input.lower() == 'save chat':
-            filename = save_chat()
-            console.print(Panel(f"Chat saved to {filename}", title="Chat Saved", style="bold green"))
-            continue
-
-        if user_input.lower() == 'image':
-            image_path = console.input("[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] ").strip().replace("'", "")
-
-            if os.path.isfile(image_path):
-                user_input = console.input("[bold cyan]You (prompt for image):[/bold cyan] ")
-                response, _ = await chat_with_claude(user_input, image_path)
-            else:
-                console.print(Panel("Invalid image path. Please try again.", title="Error", style="bold red"))
+            if user_input.lower() == 'reset':
+                reset_conversation()
                 continue
-        elif user_input.lower().startswith('automode'):
-            try:
-                parts = user_input.split()
-                if len(parts) > 1 and parts[1].isdigit():
-                    max_iterations = int(parts[1])
+
+            if user_input.lower() == 'save chat':
+                filename = save_chat()
+                console.print(Panel(f"Chat saved to {filename}", title="Chat Saved", style="bold green"))
+                continue
+
+            if user_input.lower() == 'status':
+                display_status()
+                continue
+
+            if user_input.lower() == 'image':
+                image_path = console.input("[bold cyan]Drag and drop your image here, then press enter:[/bold cyan] ").strip().replace("'", "")
+
+                if os.path.isfile(image_path):
+                    user_input = console.input("[bold cyan]You (prompt for image):[/bold cyan] ")
+                    response, _ = await chat_with_claude(user_input, image_path)
                 else:
-                    max_iterations = MAX_CONTINUATION_ITERATIONS
+                    console.print(Panel("Invalid image path. Please try again.", title="Error", style="bold red"))
+                    continue
+            elif user_input.lower().startswith('automode'):
+                parts = user_input.split()
+                max_iterations = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else MAX_CONTINUATION_ITERATIONS
 
                 automode = True
-                console.print(Panel(f"Entering automode with {max_iterations} iterations. Please provide the goal of the automode.", title_align="left", title="Automode", style="bold yellow"))
+                console.print(Panel(f"Entering automode with {max_iterations} iterations. Please provide the goal of the automode.", title="Automode", style="bold yellow"))
                 console.print(Panel("Press Ctrl+C at any time to exit the automode loop.", style="bold yellow"))
                 user_input = console.input("[bold cyan]You:[/bold cyan] ")
 
@@ -1306,31 +1321,41 @@ async def main():
                         response, exit_continuation = await chat_with_claude(user_input, current_iteration=iteration_count+1, max_iterations=max_iterations)
 
                         if exit_continuation or CONTINUATION_EXIT_PHRASE in response:
-                            console.print(Panel("Automode completed.", title_align="left", title="Automode", style="green"))
+                            console.print(Panel("Automode completed.", title="Automode", style="green"))
                             automode = False
                         else:
-                            console.print(Panel(f"Continuation iteration {iteration_count + 1} completed. Press Ctrl+C to exit automode. ", title_align="left", title="Automode", style="yellow"))
+                            console.print(Panel(f"Continuation iteration {iteration_count + 1} completed. Press Ctrl+C to exit automode.", title="Automode", style="yellow"))
                             user_input = "Continue with the next step. Or STOP by saying 'AUTOMODE_COMPLETE' if you think you've achieved the results established in the original request."
-                        if not exit_continuation:
-                            iteration_count += 1
+                        
+                        iteration_count += 1
 
                         if iteration_count >= max_iterations:
-                            console.print(Panel("Max iterations reached. Exiting automode.", title_align="left", title="Automode", style="bold red"))
+                            console.print(Panel("Max iterations reached. Exiting automode.", title="Automode", style="bold red"))
                             automode = False
                 except KeyboardInterrupt:
-                    console.print(Panel("\nAutomode interrupted by user. Exiting automode.", title_align="left", title="Automode", style="bold red"))
+                    console.print(Panel("\nAutomode interrupted by user. Exiting automode.", title="Automode", style="bold red"))
                     automode = False
-                    if conversation_history and conversation_history[-1]["role"] == "user":
-                        conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
-            except KeyboardInterrupt:
-                console.print(Panel("\nAutomode interrupted by user. Exiting automode.", title_align="left", title="Automode", style="bold red"))
-                automode = False
-                if conversation_history and conversation_history[-1]["role"] == "user":
                     conversation_history.append({"role": "assistant", "content": "Automode interrupted. How can I assist you further?"})
 
-            console.print(Panel("Exited automode. Returning to regular chat.", style="green"))
-        else:
-            response, _ = await chat_with_claude(user_input)
+                console.print(Panel("Exited automode. Returning to regular chat.", style="green"))
+            else:
+                response, _ = await chat_with_claude(user_input)
+
+        except KeyboardInterrupt:
+            console.print(Panel("\nOperation interrupted by user. Returning to main menu.", style="bold yellow"))
+            continue
+        except Exception as e:
+            console.print(Panel(f"An error occurred: {str(e)}\nReturning to main menu.", title="Error", style="bold red"))
+            logging.error(f"Error in main loop: {str(e)}")
+            continue
+
+def display_status():
+    global automode, conversation_history, file_contents
+    status = f"Automode: {'On' if automode else 'Off'}\n"
+    status += f"Conversation length: {len(conversation_history)} messages\n"
+    status += f"Files in context: {len(file_contents)}\n"
+    status += f"Current AI Provider: {AI_PROVIDER}\n"
+    console.print(Panel(status, title="Current Status", expand=False, border_style="cyan"))
 
 if __name__ == "__main__":
     asyncio.run(main())
