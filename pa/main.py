@@ -1091,29 +1091,24 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         messages = filtered_conversation_history + current_conversation
 
         try:
+            tool_response = await client.chat.completions.create(
+                model="openai/gpt-4o-mini",
+                messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
+                tools=get_openai_tools(tools),
+                tool_choice="auto"
+            )
+        
             if AI_PROVIDER == 'anthropic':
-                tool_response = await client.chat.completions.create(
-                    model="openai/gpt-4o-mini",
-                    messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
-                    tools=get_openai_tools(tools),
-                    tool_choice="auto"
-                )
                 # Update token usage for tool checker (only for Anthropic)
                 tool_checker_tokens['input'] += tool_response.usage.prompt_tokens
                 tool_checker_tokens['output'] += tool_response.usage.completion_tokens
 
-                tool_checker_response = tool_response.choices[0].message.content
+            tool_checker_response = tool_response.choices[0].message.content or ""
+            if tool_checker_response:
+                console.print(Panel(Markdown(tool_checker_response), title="AI's Response to Tool Result", title_align="left", border_style="blue", expand=False))
+                assistant_response += "\n\n" + tool_checker_response
             else:
-                tool_response = await client.chat.completions.create(
-                    model="openai/gpt-4o-mini",
-                    messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
-                    tools=get_openai_tools(tools),
-                    tool_choice="auto"
-                )
-                tool_checker_response = tool_response.choices[0].message.content
-
-            console.print(Panel(Markdown(tool_checker_response), title="AI's Response to Tool Result",  title_align="left", border_style="blue", expand=False))
-            assistant_response += "\n\n" + tool_checker_response
+                console.print(Panel("No additional response from AI after tool use.", title="AI's Response to Tool Result", title_align="left", border_style="yellow", expand=False))
         except (APIStatusError, APIError) as e:
             error_message = f"Error in tool response: {str(e)}"
             console.print(Panel(error_message, title="Error", style="bold red"))
