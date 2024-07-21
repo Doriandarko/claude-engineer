@@ -965,9 +965,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     try:
         if AI_PROVIDER == 'anthropic':
             # MAINMODEL call for Anthropic, which maintains context
-            try:
-                try:
-                    response = client.chat.completions.create(
+            response = client.chat.completions.create(
                 model=MAINMODEL,
                 max_tokens=8000,
                 system=update_system_prompt(current_iteration, max_iterations),
@@ -976,12 +974,11 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 tools=tools,
                 tool_choice={"type": "auto"}
             )
-                # Update token usage for MAINMODEL (only for Anthropic)
-                try:
-                    main_model_tokens['input'] += response.usage.input_tokens
-                    main_model_tokens['output'] += response.usage.output_tokens
+            # Update token usage for MAINMODEL (only for Anthropic)
+            main_model_tokens['input'] += response.usage.input_tokens
+            main_model_tokens['output'] += response.usage.output_tokens
             
-                        for content_block in response.content:
+            for content_block in response.content:
                 if content_block.type == "text":
                     assistant_response += content_block.text
                     if CONTINUATION_EXIT_PHRASE in content_block.text:
@@ -1008,12 +1005,10 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     console.print(Panel("Error: Response does not contain a message.", title="API Error", style="bold red"))
                     return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
             else:
-console.print(Panel("Error: Received an unexpected response format from Open Router. Please check the API response structure.", title="API Error", style="bold red"))
+                console.print(Panel("Error: Received an unexpected response format from Open Router. Please check the API response structure.", title="API Error", style="bold red"))
                 console.print(Panel(f"Full response: {response}", title="Debug: Open Router Response", style="dim"))
-                    return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
-                except Exception as e:
-                                console.print(Panel(f"Error in API response: {str(e)}", title="API Error", style="bold red"))
-            return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
+                return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
+                logging.error(f"Unexpected response format from Open Router: {response}")
     except (APIStatusError, APIError) as e:
         if isinstance(e, APIStatusError) and e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
