@@ -463,6 +463,7 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False)
         else:
             return f"No changes suggested for {path}"
     except Exception as e:
+        console.print(Panel(f"Error editing/applying to file: {str(e)}", title="Error", style="bold red"))
         return f"Error editing/applying to file: {str(e)}"
 
 
