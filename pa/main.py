@@ -1024,8 +1024,10 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     assistant_response = choice.message.content or ""
                     if CONTINUATION_EXIT_PHRASE in assistant_response:
                         exit_continuation = True
-                    if hasattr(choice.message, 'tool_calls'):
+                    if hasattr(choice.message, 'tool_calls') and choice.message.tool_calls:
                         tool_uses = choice.message.tool_calls
+                    else:
+                        tool_uses = []  # Ensure tool_uses is always a list, even if empty
                 else:
                     error_msg = f"Error: Response does not contain a message. Response structure: {choice}"
                     console.print(Panel(error_msg, title="API Error", style="bold red"))
