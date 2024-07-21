@@ -1062,7 +1062,15 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             time.sleep(5)
             return await chat_with_claude(user_input, image_path, current_iteration, max_iterations)
         else:
-            console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
+            retry_count = 0
+            while retry_count < 3:
+                console.print(Panel(f"API Error: {str(e)}. Retrying after a short delay...", title="API Error", style="bold yellow"))
+                time.sleep(5)
+                try:
+                    return await chat_with_claude(user_input, image_path, current_iteration, max_iterations)
+                except (APIStatusError, APIError) as e:
+                    retry_count += 1
+            console.print(Panel(f"API Error: {str(e)}. Max retries reached. Please try again later.", title="API Error", style="bold red"))
             return "Lo siento, hubo un error al comunicarse con la IA. Por favor, intenta de nuevo.", False
 
     console.print(Panel(Markdown(assistant_response), title="AI's Response", title_align="left", border_style="blue", expand=False))
