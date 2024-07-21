@@ -1093,7 +1093,10 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 
         # Ensure user input is requested after tool execution
         if not tool_result["is_error"]:
-            user_input = console.input("[bold cyan]You:[/bold cyan] ")
+            if automode:
+                user_input = "Continue with the next step. Or STOP by saying 'AUTOMODE_COMPLETE' if you think you've achieved the results established in the original request."
+            else:
+                user_input = console.input("[bold cyan]You:[/bold cyan] ")
 
         # Update the file_contents dictionary if applicable
         if tool_name in ['create_file', 'edit_and_apply', 'read_file'] and not tool_result["is_error"]:
@@ -1296,7 +1299,8 @@ async def main():
                         else:
                             console.print(Panel(f"Continuation iteration {iteration_count + 1} completed. Press Ctrl+C to exit automode. ", title_align="left", title="Automode", style="yellow"))
                             user_input = "Continue with the next step. Or STOP by saying 'AUTOMODE_COMPLETE' if you think you've achieved the results established in the original request."
-                        iteration_count += 1
+                        if not exit_continuation:
+                            iteration_count += 1
 
                         if iteration_count >= max_iterations:
                             console.print(Panel("Max iterations reached. Exiting automode.", title_align="left", title="Automode", style="bold red"))
