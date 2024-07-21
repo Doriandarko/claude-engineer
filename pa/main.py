@@ -77,7 +77,7 @@ else:
     if not openrouter_api_key:
         raise ValueError("OPENROUTER_API_KEY not found in environment variables")
     openai.api_key = openrouter_api_key
-    openai.api_base = "https://openrouter.ai/api/v1"
+    openai.base_url = "https://openrouter.ai/api/v1"
 
 # Initialize the Tavily client
 tavily_api_key = os.getenv("TAVILY_API_KEY")
@@ -582,13 +582,12 @@ def get_openai_tools(tools):
     openai_tools = []
     for tool in tools:
         openai_tools.append({
-            "name": tool["name"],
-            "parameters": {
-                "type": "object",
-                "properties": tool["input_schema"]["properties"],
-                "required": tool["input_schema"].get("required", [])
-            },
-            "description": tool["description"]
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "parameters": tool["input_schema"],
+                "description": tool["description"]
+            }
         })
     return openai_tools
 
@@ -978,9 +977,10 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             response = await openai.chat.completions.create(
                 model="openai/gpt-4o-mini",
                 messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
-                functions=get_openai_tools(tools),
+                tools=get_openai_tools(tools),
                 function_call="auto"
             )
+            
             assistant_response = response.choices[0].message.content
             if assistant_response and CONTINUATION_EXIT_PHRASE in assistant_response:
                 exit_continuation = True
@@ -1008,6 +1008,9 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             elif content_block.type == "tool_use":
                 tool_uses.append(content_block)
     else:
+        print('-----------------')
+        print(response)
+        
         assistant_response = response.choices[0].message.content
         if assistant_response and CONTINUATION_EXIT_PHRASE in assistant_response:
             exit_continuation = True
