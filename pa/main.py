@@ -8,7 +8,7 @@ import io
 import re
 from anthropic import Anthropic, APIStatusError, APIError
 from openai import OpenAI
-from openai.types import ChatCompletion, Choice, ChatCompletionMessage
+from openai.types import Choice
 from openai.types.chat import ChatCompletionMessage, ToolCall
 import difflib
 import time
@@ -1028,36 +1028,29 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             
             console.print(Panel(f"Debug: Full Open Router response:\n{response}", title="Open Router Response", style="dim"))
             
-            if isinstance(response, ChatCompletion):
-                choices = response.choices
-                if choices and isinstance(choices[0], Choice):
-                    choice = choices[0]
+            if hasattr(response, 'choices') and response.choices:
+                choice = response.choices[0]
+                if hasattr(choice, 'message') and isinstance(choice.message, ChatCompletionMessage):
                     message = choice.message
+                    assistant_response = message.content
+                    if CONTINUATION_EXIT_PHRASE in assistant_response:
+                        exit_continuation = True
                     
-                    if isinstance(message, ChatCompletionMessage):
-                        assistant_response = message.content
-                        if CONTINUATION_EXIT_PHRASE in assistant_response:
-                            exit_continuation = True
-                        
-                        # Handle tool calls
-                        tool_calls = message.tool_calls
-                        if isinstance(tool_calls, list):
-                            tool_uses = []
-                            for call in tool_calls:
-                                if isinstance(call, ToolCall) and call.function:
-                                    tool_uses.append({
-                                        'id': call.id,
-                                        'name': call.function.name,
-                                        'arguments': call.function.arguments
-                                    })
-                        else:
-                            tool_uses = []
+                    # Handle tool calls
+                    tool_calls = message.tool_calls
+                    if isinstance(tool_calls, list):
+                        tool_uses = []
+                        for call in tool_calls:
+                            if isinstance(call, ToolCall) and hasattr(call, 'function'):
+                                tool_uses.append({
+                                    'id': call.id,
+                                    'name': call.function.name,
+                                    'arguments': call.function.arguments
+                                })
                     else:
-                        error_msg = f"Error: Response does not contain a valid message structure. Message: {message}"
-                        console.print(Panel(error_msg, title="API Error", style="bold red"))
-                        return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
+                        tool_uses = []
                 else:
-                    error_msg = f"Error: Received an unexpected choices format from Open Router. Choices: {choices}"
+                    error_msg = f"Error: Response does not contain a valid message structure. Message: {choice.message if hasattr(choice, 'message') else 'No message'}"
                     console.print(Panel(error_msg, title="API Error", style="bold red"))
                     return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
             else:
