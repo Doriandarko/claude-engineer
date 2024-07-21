@@ -7,7 +7,7 @@ from PIL import Image
 import io
 import re
 from anthropic import Anthropic, APIStatusError, APIError
-import openai
+from openai import OpenAI
 import difflib
 import time
 from rich.console import Console
@@ -973,18 +973,18 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             main_model_tokens['output'] += response.usage.output_tokens
         else:
             # OpenAI call for Open Router
-            response = await openai.chat.completions.create(
+            response = await client.chat.completions.create(
                 model="openai/gpt-4o-mini",
                 messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
                 tools=get_openai_tools(tools),
-                function_call="auto"
+                tool_choice="auto"
             )
             
             assistant_response = response.choices[0].message.content
             if assistant_response and CONTINUATION_EXIT_PHRASE in assistant_response:
                 exit_continuation = True
-            if response.choices[0].message.get("function_call"):
-                tool_uses = [response.choices[0].message["function_call"]]
+            if response.choices[0].message.tool_calls:
+                tool_uses = response.choices[0].message.tool_calls
     except (APIStatusError, APIError) as e:
         if isinstance(e, APIStatusError) and e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
