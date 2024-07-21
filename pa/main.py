@@ -740,6 +740,7 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
             )
         elif tool_name == "read_file":
             result = read_file(tool_input["path"])
+            console.print(Panel(f"File '{tool_input['path']}' read successfully.", title="File Read", style="green"))
         elif tool_name == "list_files":
             result = list_files(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
@@ -757,8 +758,12 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
             is_error = True
             result = f"Unknown tool: {tool_name}"
 
+        # Ensure result is always a string
+        if result is None:
+            result = "Operation completed successfully, but no output was returned."
+
         return {
-            "content": result,
+            "content": str(result),
             "is_error": is_error
         }
     except KeyError as e:
@@ -1008,7 +1013,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 console.print(Panel("Error: Received an unexpected response format from Open Router. Please check the API response structure.", title="API Error", style="bold red"))
                 console.print(Panel(f"Full response: {response}", title="Debug: Open Router Response", style="dim"))
                 return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
-                logging.error(f"Unexpected response format from Open Router: {response}")
     except (APIStatusError, APIError) as e:
         if isinstance(e, APIStatusError) and e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
@@ -1016,30 +1020,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             return await chat_with_claude(user_input, image_path, current_iteration, max_iterations)
         else:
             console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
-            console.print(Panel(f"Full response: {response}", title="Debug: Open Router Response", style="dim"))
             return "Lo siento, hubo un error al comunicarse con la IA. Por favor, intenta de nuevo.", False
-
-    assistant_response = ""
-    exit_continuation = False
-    tool_uses = []
-
-    if AI_PROVIDER == 'anthropic':
-        for content_block in response.content:
-            if content_block.type == "text":
-                assistant_response += content_block.text
-                if CONTINUATION_EXIT_PHRASE in content_block.text:
-                    exit_continuation = True
-            elif content_block.type == "tool_use":
-                tool_uses.append(content_block)
-    else:
-        console.print(Panel(str(response), title="Debug: Open Router Response", style="dim"))
-        
-        assistant_response = response.choices[0].message.content or ""
-        if assistant_response and CONTINUATION_EXIT_PHRASE in assistant_response:
-            exit_continuation = True
-        if response.choices[0].message.tool_calls:
-            tool_uses = response.choices[0].message.tool_calls
-            assistant_response = "Utilizando una herramienta..."
 
     console.print(Panel(Markdown(assistant_response), title="AI's Response", title_align="left", border_style="blue", expand=False))
 
@@ -1083,7 +1064,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             ]
         })
 
-        # Add tool result to the conversation and allow for user input
+        # Add tool result to the conversation
         current_conversation.append({
             "role": "user",
             "content": [
@@ -1095,13 +1076,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 }
             ]
         })
-
-        # Ensure user input is requested after tool execution
-        if not tool_result["is_error"]:
-            if automode:
-                user_input = "Continue with the next step. Or STOP by saying 'AUTOMODE_COMPLETE' if you think you've achieved the results established in the original request."
-            else:
-                user_input = console.input("[bold cyan]You:[/bold cyan] ")
 
         # Update the file_contents dictionary if applicable
         if tool_name in ['create_file', 'edit_and_apply', 'read_file'] and not tool_result["is_error"]:
@@ -1153,7 +1127,12 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     if AI_PROVIDER == 'anthropic':
         display_token_usage()
 
-    return assistant_response, exit_continuation
+    # Ensure user input is requested after tool execution if not in automode
+    if not automode:
+        user_input = console.input("[bold cyan]You:[/bold cyan] ")
+        return await chat_with_claude(user_input, current_iteration=current_iteration, max_iterations=max_iterations)
+    else:
+        return assistant_response, exit_continuation
 
 def reset_code_editor_memory():
     global code_editor_memory
