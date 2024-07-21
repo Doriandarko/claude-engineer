@@ -1142,7 +1142,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 async def process_tool_result(tool_result, current_iteration, max_iterations):
     try:
         tool_response = client.chat.completions.create(
-            model=TOOLCHECKERMODEL,
+            model="openai/gpt-4o-mini",
             messages=[
                 {"role": "system", "content": update_system_prompt(current_iteration, max_iterations)},
                 {"role": "user", "content": f"Process this tool result and provide any necessary follow-up or analysis:\n\n{tool_result['content']}"}
