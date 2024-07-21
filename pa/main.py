@@ -1018,11 +1018,12 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     else:
         console.print(Panel(str(response), title="Debug: Open Router Response", style="dim"))
         
-        assistant_response = response.choices[0].message.content
+        assistant_response = response.choices[0].message.content or ""
         if assistant_response and CONTINUATION_EXIT_PHRASE in assistant_response:
             exit_continuation = True
         if response.choices[0].message.tool_calls:
             tool_uses = response.choices[0].message.tool_calls
+            assistant_response = "Utilizando una herramienta..."
 
     console.print(Panel(Markdown(assistant_response), title="AI's Response", title_align="left", border_style="blue", expand=False))
 
@@ -1039,9 +1040,9 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             tool_input = tool_use.input
             tool_use_id = tool_use.id
         else:
-            tool_name = tool_use.name
-            tool_input = json.loads(tool_use.arguments)
-            tool_use_id = tool_use.name
+            tool_name = tool_use.function.name
+            tool_input = json.loads(tool_use.function.arguments)
+            tool_use_id = tool_use.id
 
         console.print(Panel(f"Tool Used: {tool_name}", style="green"))
         console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
