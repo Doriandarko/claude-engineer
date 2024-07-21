@@ -1026,8 +1026,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             
             console.print(Panel(f"Debug: Full Open Router response:\n{response}", title="Open Router Response", style="dim"))
             
-            if hasattr(response, 'error'):
-                error_msg = f"Open Router API Error: {response.error.get('message', 'Unknown error')}"
+            if isinstance(response, dict) and 'error' in response:
+                error_msg = f"Open Router API Error: {response['error'].get('message', 'Unknown error')}"
                 console.print(Panel(error_msg, title="API Error", style="bold red"))
                 if "The model produced invalid content" in error_msg:
                     console.print(Panel("Retrying the request with a simplified prompt...", title="Retry", style="yellow"))
