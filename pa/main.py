@@ -891,7 +891,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             console.print(Panel(f"Error encoding image: {image_base64}", title="Error", style="bold red"))
             return "I'm sorry, there was an error processing the image. Please try again.", False
 
-        if AI_PROVIDER == 'anthropic' and tool_response:
+        tool_response = None  # Initialize tool_response
+        if AI_PROVIDER == 'anthropic':
             image_message = {
                 "role": "user",
                 "content": [
