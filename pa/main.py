@@ -76,8 +76,7 @@ else:
     openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
     if not openrouter_api_key:
         raise ValueError("OPENROUTER_API_KEY not found in environment variables")
-    openai.api_key = openrouter_api_key
-    openai.base_url = "https://openrouter.ai/api/v1"
+    client = OpenAI(api_key=openrouter_api_key, base_url="https://openrouter.ai/api/v1")
 
 # Initialize the Tavily client
 tavily_api_key = os.getenv("TAVILY_API_KEY")
@@ -1099,11 +1098,11 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     if tool_content_block.type == "text":
                         tool_checker_response += tool_content_block.text
             else:
-                tool_response = await openai.chat.completions.create(
+                tool_response = await client.chat.completions.create(
                     model="openai/gpt-4o-mini",
                     messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
-                    functions=get_openai_tools(tools),
-                    function_call="auto"
+                    tools=get_openai_tools(tools),
+                    tool_choice="auto"
                 )
                 tool_checker_response = tool_response.choices[0].message.content
 
