@@ -954,6 +954,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     messages = filtered_conversation_history + current_conversation
 
     assistant_response = ""
+    exit_continuation = False
     tool_uses = []
 
     try:
@@ -971,9 +972,17 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             # Update token usage for MAINMODEL (only for Anthropic)
             main_model_tokens['input'] += response.usage.input_tokens
             main_model_tokens['output'] += response.usage.output_tokens
+            
+            for content_block in response.content:
+                if content_block.type == "text":
+                    assistant_response += content_block.text
+                    if CONTINUATION_EXIT_PHRASE in content_block.text:
+                        exit_continuation = True
+                elif content_block.type == "tool_use":
+                    tool_uses.append(content_block)
         else:
             # OpenAI call for Open Router
-            response = await client.chat.completions.create(
+            response = client.chat.completions.create(
                 model="openai/gpt-4o-mini",
                 messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
                 tools=get_openai_tools(tools),
