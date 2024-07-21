@@ -1016,14 +1016,13 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             elif content_block.type == "tool_use":
                 tool_uses.append(content_block)
     else:
-        print('-----------------')
-        print(response)
+        console.print(Panel(str(response), title="Debug: Open Router Response", style="dim"))
         
         assistant_response = response.choices[0].message.content
         if assistant_response and CONTINUATION_EXIT_PHRASE in assistant_response:
             exit_continuation = True
-        if response.choices[0].message.get("function_call"):
-            tool_uses = [response.choices[0].message["function_call"]]
+        if response.choices[0].message.tool_calls:
+            tool_uses = response.choices[0].message.tool_calls
 
     console.print(Panel(Markdown(assistant_response), title="AI's Response", title_align="left", border_style="blue", expand=False))
 
