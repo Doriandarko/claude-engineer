@@ -975,30 +975,17 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             main_model_tokens['output'] += response.usage.output_tokens
         else:
             # OpenAI call for Open Router
-            async with ClientSession() as session:
-                async with session.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    json={
-                        "model": "openai/gpt-4o-mini",
-                        "messages": [{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
-                        "functions": get_openai_tools(tools),
-                        "function_call": "auto",
-                    },
-                    headers={"Authorization": f"Bearer {openai.api_key}"}
-                ) as resp:
-                    async for line in resp.content:
-                        if line:
-                            if line.strip():  # Ensure the line is not empty
-                                data = json.loads(line.decode("utf-8"))
-                            else:
-                                continue
-                            if "choices" in data:
-                                for choice in data["choices"]:
-                                    if "delta" in choice:
-                                        if "content" in choice["delta"]:
-                                            assistant_response += choice["delta"]["content"]
-                                        if "function_call" in choice["delta"]:
-                                            tool_uses.append(choice["delta"]["function_call"])
+            response = await openai.ChatCompletion.acreate(
+                model="openai/gpt-4o-mini",
+                messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
+                functions=get_openai_tools(tools),
+                function_call="auto"
+            )
+            assistant_response = response.choices[0].message.content
+            if assistant_response and CONTINUATION_EXIT_PHRASE in assistant_response:
+                exit_continuation = True
+            if response.choices[0].message.get("function_call"):
+                tool_uses = [response.choices[0].message["function_call"]]
     except (APIStatusError, APIError) as e:
         if isinstance(e, APIStatusError) and e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
