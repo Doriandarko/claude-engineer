@@ -965,7 +965,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     try:
         if AI_PROVIDER == 'anthropic':
             # MAINMODEL call for Anthropic, which maintains context
-            response = client.chat.completions.create(
+            try:
+                response = client.chat.completions.create(
                 model=MAINMODEL,
                 max_tokens=8000,
                 system=update_system_prompt(current_iteration, max_iterations),
@@ -1008,7 +1009,9 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 console.print(Panel("Error: Received an unexpected response format from Open Router. Please check the API response structure.", title="API Error", style="bold red"))
                 console.print(Panel(f"Full response: {response}", title="Debug: Open Router Response", style="dim"))
                 return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
-                logging.error(f"Unexpected response format from Open Router: {response}")
+            except Exception as e:
+                console.print(Panel(f"Error in API response: {str(e)}", title="API Error", style="bold red"))
+                return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
     except (APIStatusError, APIError) as e:
         if isinstance(e, APIStatusError) and e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
