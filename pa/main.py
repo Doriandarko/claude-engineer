@@ -547,8 +547,10 @@ def read_file(path):
         with open(path, 'r') as f:
             content = f.read()
         file_contents[path] = content
+        console.print(Panel(f"File '{path}' has been read and stored in the system prompt.", title="File Read", style="green"))
         return f"File '{path}' has been read and stored in the system prompt."
     except Exception as e:
+        console.print(Panel(f"Error reading file: {str(e)}", title="Error", style="bold red"))
         return f"Error reading file: {str(e)}"
 
 def list_files(path="."):
