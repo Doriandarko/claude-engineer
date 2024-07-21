@@ -975,7 +975,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             main_model_tokens['output'] += response.usage.output_tokens
         else:
             # OpenAI call for Open Router
-            response = await openai.chat.completions.create(
+            response = await openai.ChatCompletion.create(
                 model="openai/gpt-4o-mini",
                 messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
                 functions=get_openai_tools(tools),
@@ -1081,7 +1081,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 
         try:
             if AI_PROVIDER == 'anthropic':
-                tool_response = await openai.chat.completions.create(
+                tool_response = await openai.ChatCompletion.create(
                     model="openai/gpt-4o-mini",
                     messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
                     functions=get_openai_tools(tools),
