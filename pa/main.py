@@ -60,7 +60,7 @@ def setup_virtual_environment() -> Tuple[str, str]:
         return venv_path, activate_script
     except Exception as e:
         logging.error(f"Error setting up virtual environment: {str(e)}")
-        raise
+        raise e
 
 
 # Load environment variables from .env file
