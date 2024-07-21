@@ -8,8 +8,6 @@ import io
 import re
 from anthropic import Anthropic, APIStatusError, APIError
 from openai import OpenAI
-from openai.types import Choice
-from openai.types.chat import ChatCompletionMessage, ToolCall
 import difflib
 import time
 from rich.console import Console
@@ -549,19 +547,11 @@ def read_file(path):
         with open(path, 'r') as f:
             content = f.read()
         file_contents[path] = content
-        success_message = f"File '{path}' has been read successfully and stored in the system prompt."
-        console.print(Panel(success_message, title="File Read", style="green"))
-        return {
-            "content": success_message,
-            "is_error": False
-        }
+        console.print(Panel(f"File '{path}' has been read successfully and stored in the system prompt.", title="File Read", style="green"))
+        return f"File '{path}' has been read and stored in the system prompt."
     except Exception as e:
-        error_message = f"Error reading file '{path}': {str(e)}"
-        console.print(Panel(error_message, title="Error", style="bold red"))
-        return {
-            "content": error_message,
-            "is_error": True
-        }
+        console.print(Panel(f"Error reading file '{path}': {str(e)}", title="Error", style="bold red"))
+        return f"Error reading file '{path}': {str(e)}"
 
 def list_files(path="."):
     try:
@@ -750,8 +740,6 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
             )
         elif tool_name == "read_file":
             result = read_file(tool_input["path"])
-            is_error = result["is_error"]
-            result = result["content"]
         elif tool_name == "list_files":
             result = list_files(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
@@ -1028,33 +1016,30 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             
             console.print(Panel(f"Debug: Full Open Router response:\n{response}", title="Open Router Response", style="dim"))
             
-            if hasattr(response, 'choices') and response.choices:
+            if hasattr(response, 'error'):
+                error_msg = f"Open Router API Error: {response.error.get('message', 'Unknown error')}"
+                console.print(Panel(error_msg, title="API Error", style="bold red"))
+                if "The model produced invalid content" in error_msg:
+                    console.print(Panel("Retrying the request with a simplified prompt...", title="Retry", style="yellow"))
+                    return await chat_with_claude(user_input, image_path, current_iteration, max_iterations, retry=True)
+                return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
+            
+            if response.choices:
                 choice = response.choices[0]
-                if hasattr(choice, 'message') and isinstance(choice.message, ChatCompletionMessage):
-                    message = choice.message
-                    assistant_response = message.content
+                if hasattr(choice, 'message'):
+                    assistant_response = choice.message.content or ""
                     if CONTINUATION_EXIT_PHRASE in assistant_response:
                         exit_continuation = True
-                    
-                    # Handle tool calls
-                    tool_calls = message.tool_calls
-                    if isinstance(tool_calls, list):
-                        tool_uses = []
-                        for call in tool_calls:
-                            if isinstance(call, ToolCall) and hasattr(call, 'function'):
-                                tool_uses.append({
-                                    'id': call.id,
-                                    'name': call.function.name,
-                                    'arguments': call.function.arguments
-                                })
+                    if hasattr(choice.message, 'tool_calls') and choice.message.tool_calls:
+                        tool_uses = choice.message.tool_calls
                     else:
-                        tool_uses = []
+                        tool_uses = []  # Ensure tool_uses is always a list, even if empty
                 else:
-                    error_msg = f"Error: Response does not contain a valid message structure. Message: {choice.message if hasattr(choice, 'message') else 'No message'}"
+                    error_msg = f"Error: Response does not contain a message. Response structure: {choice}"
                     console.print(Panel(error_msg, title="API Error", style="bold red"))
                     return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
             else:
-                error_msg = f"Error: Received an unexpected response format from Open Router. Response: {response}"
+                error_msg = f"Error: Received an unexpected response format from Open Router. Response structure: {response}"
                 console.print(Panel(error_msg, title="API Error", style="bold red"))
                 return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
     except (APIStatusError, APIError) as e:
