@@ -1034,18 +1034,22 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     return await chat_with_claude(user_input, image_path, current_iteration, max_iterations, retry=True)
                 return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
             
-            if response.choices:
-                choice = response.choices[0]
-                if hasattr(choice, 'message'):
-                    assistant_response = choice.message.content or ""
-                    if CONTINUATION_EXIT_PHRASE in assistant_response:
-                        exit_continuation = True
-                    if hasattr(choice.message, 'tool_calls') and choice.message.tool_calls:
-                        tool_uses = choice.message.tool_calls
+            if isinstance(response, dict) and 'choices' in response:
+                choices = response['choices']
+                if choices and isinstance(choices[0], dict):
+                    choice = choices[0]
+                    if 'message' in choice and isinstance(choice['message'], dict):
+                        message = choice['message']
+                        assistant_response = message.get('content', '')
+                        if CONTINUATION_EXIT_PHRASE in assistant_response:
+                            exit_continuation = True
+                        tool_uses = message.get('tool_calls', [])
                     else:
-                        tool_uses = []  # Ensure tool_uses is always a list, even if empty
+                        error_msg = f"Error: Response does not contain a valid message. Response structure: {choice}"
+                        console.print(Panel(error_msg, title="API Error", style="bold red"))
+                        return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
                 else:
-                    error_msg = f"Error: Response does not contain a message. Response structure: {choice}"
+                    error_msg = f"Error: Received an unexpected response format from Open Router. Response structure: {response}"
                     console.print(Panel(error_msg, title="API Error", style="bold red"))
                     return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
             else:
