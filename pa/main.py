@@ -1083,20 +1083,17 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 
         try:
             if AI_PROVIDER == 'anthropic':
-                tool_response = await openai.chat.completions.create(
+                tool_response = await client.chat.completions.create(
                     model="openai/gpt-4o-mini",
                     messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
-                    functions=get_openai_tools(tools),
-                    function_call="auto"
+                    tools=get_openai_tools(tools),
+                    tool_choice="auto"
                 )
                 # Update token usage for tool checker (only for Anthropic)
-                tool_checker_tokens['input'] += tool_response.usage.input_tokens
-                tool_checker_tokens['output'] += tool_response.usage.output_tokens
+                tool_checker_tokens['input'] += tool_response.usage.prompt_tokens
+                tool_checker_tokens['output'] += tool_response.usage.completion_tokens
 
-                tool_checker_response = ""
-                for tool_content_block in tool_response.content:
-                    if tool_content_block.type == "text":
-                        tool_checker_response += tool_content_block.text
+                tool_checker_response = tool_response.choices[0].message.content
             else:
                 tool_response = await client.chat.completions.create(
                     model="openai/gpt-4o-mini",
