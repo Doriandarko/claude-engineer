@@ -367,13 +367,13 @@ async def generate_edit_instructions(file_content, instructions, project_context
         """
 
         # Make the API call to CODEEDITORMODEL (context is not maintained except for code_editor_memory)
-        response = client.messages.create(
+        response = client.chat.completions.create(
             model=CODEEDITORMODEL,
             max_tokens=8000,
             system=system_prompt,
             extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=[
-                {"role": "user", "content": "Generate SEARCH/REPLACE blocks for the necessary changes."}
+                {"role": "user", "content": "Generate SEARCH/REPLACE blocks for the necessary changes."},
             ]
         )
         # Update token usage for code editor
@@ -966,7 +966,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     try:
         if AI_PROVIDER == 'anthropic':
             # MAINMODEL call for Anthropic, which maintains context
-            response = client.messages.create(
+            response = client.chat.completions.create(
                 model=MAINMODEL,
                 max_tokens=8000,
                 system=update_system_prompt(current_iteration, max_iterations),
