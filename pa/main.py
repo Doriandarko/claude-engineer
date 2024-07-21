@@ -58,7 +58,7 @@ def setup_virtual_environment() -> Tuple[str, str]:
             activate_script = os.path.join(venv_path, "bin", "activate")
         
         return venv_path, activate_script
-    except Exception as e:
+        except Exception as e:
         logging.error(f"Error setting up virtual environment: {str(e)}")
         raise
 
@@ -977,10 +977,10 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 tool_choice={"type": "auto"}
             )
                 # Update token usage for MAINMODEL (only for Anthropic)
-                    main_model_tokens['input'] += response.usage.input_tokens
-            main_model_tokens['output'] += response.usage.output_tokens
+                main_model_tokens['input'] += response.usage.input_tokens
+                main_model_tokens['output'] += response.usage.output_tokens
             
-                for content_block in response.content:
+            for content_block in response.content:
                 if content_block.type == "text":
                     assistant_response += content_block.text
                     if CONTINUATION_EXIT_PHRASE in content_block.text:
@@ -1005,14 +1005,14 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                         tool_uses = response.choices[0].message.tool_calls
                 else:
                     console.print(Panel("Error: Response does not contain a message.", title="API Error", style="bold red"))
-                    return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
+                        return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
             else:
-                console.print(Panel("Error: Received an unexpected response format from Open Router. Please check the API response structure.", title="API Error", style="bold red"))
+            console.print(Panel("Error: Received an unexpected response format from Open Router. Please check the API response structure.", title="API Error", style="bold red"))
                 console.print(Panel(f"Full response: {response}", title="Debug: Open Router Response", style="dim"))
                     return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
                 except Exception as e:
-                    console.print(Panel(f"Error in API response: {str(e)}", title="API Error", style="bold red"))
-                return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
+                        console.print(Panel(f"Error in API response: {str(e)}", title="API Error", style="bold red"))
+            return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
     except (APIStatusError, APIError) as e:
         if isinstance(e, APIStatusError) and e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
