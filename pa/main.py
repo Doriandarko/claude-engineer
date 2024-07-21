@@ -1129,7 +1129,11 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 tool_checker_tokens['input'] += tool_response.usage.prompt_tokens
                 tool_checker_tokens['output'] += tool_response.usage.completion_tokens
 
-        tool_checker_response = tool_response.choices[0].message.content or ""
+        if tool_response is not None and tool_response.choices:
+            tool_checker_response = tool_response.choices[0].message.content or ""
+        else:
+            console.print(Panel("Error: Tool response is None or has no choices.", title="Tool Response Error", style="bold red"))
+            tool_checker_response = ""
         if tool_checker_response:
             console.print(Panel(Markdown(tool_checker_response), title="AI's Response to Tool Result", title_align="left", border_style="blue", expand=False))
             assistant_response += "\n\n" + tool_checker_response
