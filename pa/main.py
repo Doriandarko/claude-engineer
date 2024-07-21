@@ -989,7 +989,10 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 ) as resp:
                     async for line in resp.content:
                         if line:
-                            data = json.loads(line.decode("utf-8"))
+                            if line.strip():  # Ensure the line is not empty
+                                data = json.loads(line.decode("utf-8"))
+                            else:
+                                continue
                             if "choices" in data:
                                 for choice in data["choices"]:
                                     if "delta" in choice:
