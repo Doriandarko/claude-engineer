@@ -1081,14 +1081,11 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 
         try:
             if AI_PROVIDER == 'anthropic':
-                tool_response = client.messages.create(
-                    model=TOOLCHECKERMODEL,
-                    max_tokens=8000,
-                    system=update_system_prompt(current_iteration, max_iterations),
-                    extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
-                    messages=messages,
-                    tools=tools,
-                    tool_choice={"type": "auto"}
+                tool_response = await openai.chat.completions.create(
+                    model="openai/gpt-4o-mini",
+                    messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
+                    functions=get_openai_tools(tools),
+                    function_call="auto"
                 )
                 # Update token usage for tool checker (only for Anthropic)
                 tool_checker_tokens['input'] += tool_response.usage.input_tokens
