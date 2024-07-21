@@ -25,6 +25,8 @@ import logging
 from typing import Tuple, Optional
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import WordCompleter
+from aiohttp import ClientSession
+from aiohttp_sse_client import client as sse_client
 
 def select_ai_provider():
     options = ['Anthropic', 'Open Router']
@@ -967,12 +969,28 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             main_model_tokens['output'] += response.usage.output_tokens
         else:
             # OpenAI call for Open Router
-            response = await openai.ChatCompletion.acreate(
-                model="openai/gpt-4o-mini",
-                messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
-                functions=get_openai_tools(tools),
-                function_call="auto"
-            )
+            async with ClientSession() as session:
+                async with session.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    json={
+                        "model": "openai/gpt-4o-mini",
+                        "messages": [{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
+                        "functions": get_openai_tools(tools),
+                        "function_call": "auto",
+                        "stream": True
+                    },
+                    headers={"Authorization": f"Bearer {openai.api_key}"}
+                ) as resp:
+                    async for line in resp.content:
+                        if line:
+                            data = json.loads(line.decode("utf-8"))
+                            if "choices" in data:
+                                for choice in data["choices"]:
+                                    if "delta" in choice:
+                                        if "content" in choice["delta"]:
+                                            assistant_response += choice["delta"]["content"]
+                                        if "function_call" in choice["delta"]:
+                                            tool_uses.append(choice["delta"]["function_call"])
     except (APIStatusError, APIError) as e:
         if isinstance(e, APIStatusError) and e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
