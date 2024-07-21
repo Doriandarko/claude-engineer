@@ -989,11 +989,15 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 tool_choice="auto"
             )
             
-            assistant_response = response.choices[0].message.content
-            if assistant_response and CONTINUATION_EXIT_PHRASE in assistant_response:
-                exit_continuation = True
-            if response.choices[0].message.tool_calls:
-                tool_uses = response.choices[0].message.tool_calls
+            if response.choices and response.choices[0].message:
+                assistant_response = response.choices[0].message.content or ""
+                if CONTINUATION_EXIT_PHRASE in assistant_response:
+                    exit_continuation = True
+                if response.choices[0].message.tool_calls:
+                    tool_uses = response.choices[0].message.tool_calls
+            else:
+                console.print(Panel("Error: Received an unexpected response format from Open Router.", title="API Error", style="bold red"))
+                return "Lo siento, hubo un error al procesar la respuesta de la API. Por favor, intenta de nuevo.", False
     except (APIStatusError, APIError) as e:
         if isinstance(e, APIStatusError) and e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
@@ -1001,7 +1005,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             return await chat_with_claude(user_input, image_path, current_iteration, max_iterations)
         else:
             console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
-            return "I'm sorry, there was an error communicating with the AI. Please try again.", False
+            console.print(Panel(f"Full response: {response}", title="Debug: Open Router Response", style="dim"))
+            return "Lo siento, hubo un error al comunicarse con la IA. Por favor, intenta de nuevo.", False
 
     assistant_response = ""
     exit_continuation = False
