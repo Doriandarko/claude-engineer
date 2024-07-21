@@ -257,11 +257,11 @@ def create_file(path, content=""):
         with open(path, 'w') as f:
             f.write(content)
         file_contents[path] = content
-        console.print(Panel(f"File created: {path}", title="File Created", style="green"))
+        console.print(Panel(f"File '{path}' created successfully.", title="File Created", style="green"))
         return f"File created and added to system prompt: {path}"
     except Exception as e:
-        console.print(Panel(f"Error creating file: {str(e)}", title="Error", style="bold red"))
-        return f"Error creating file: {str(e)}"
+        console.print(Panel(f"Error creating file '{path}': {str(e)}", title="Error", style="bold red"))
+        return f"Error creating file '{path}': {str(e)}"
 
 def highlight_diff(diff_text):
     return Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
@@ -547,12 +547,11 @@ def read_file(path):
         with open(path, 'r') as f:
             content = f.read()
         file_contents[path] = content
-        console.print(Panel(f"File '{path}' has been read and stored in the system prompt.", title="File Read", style="green"))
-        file_contents[path] = content  # Asegurarse de que el contenido se almacene
+        console.print(Panel(f"File '{path}' has been read successfully and stored in the system prompt.", title="File Read", style="green"))
         return f"File '{path}' has been read and stored in the system prompt."
     except Exception as e:
-        console.print(Panel(f"Error reading file: {str(e)}", title="Error", style="bold red"))
-        return f"Error reading file: {str(e)}"
+        console.print(Panel(f"Error reading file '{path}': {str(e)}", title="Error", style="bold red"))
+        return f"Error reading file '{path}': {str(e)}"
 
 def list_files(path="."):
     try:
