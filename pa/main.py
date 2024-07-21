@@ -44,6 +44,9 @@ AI_PROVIDER = select_ai_provider()
 def setup_virtual_environment() -> Tuple[str, str]:
     venv_name = "code_execution_env"
     venv_path = os.path.join(os.getcwd(), venv_name)
+    assistant_response = ""
+    tool_uses = []
+    
     try:
         if not os.path.exists(venv_path):
             venv.create(venv_path, with_pip=True)
