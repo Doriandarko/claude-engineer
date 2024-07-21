@@ -8,6 +8,8 @@ import io
 import re
 from anthropic import Anthropic, APIStatusError, APIError
 from openai import OpenAI
+from openai.types import ChatCompletion, Choice, ChatCompletionMessage
+from openai.types.chat import ChatCompletionMessage, ToolCall
 import difflib
 import time
 from rich.console import Console
@@ -1026,43 +1028,32 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             
             console.print(Panel(f"Debug: Full Open Router response:\n{response}", title="Open Router Response", style="dim"))
             
-            if isinstance(response, dict) and 'error' in response:
-                error_msg = f"Open Router API Error: {response['error'].get('message', 'Unknown error')}"
-                console.print(Panel(error_msg, title="API Error", style="bold red"))
-                if "The model produced invalid content" in error_msg:
-                    console.print(Panel("Retrying the request with a simplified prompt...", title="Retry", style="yellow"))
-                    return await chat_with_claude(user_input, image_path, current_iteration, max_iterations, retry=True)
-                return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
-            
-            # Handle the Open Router response as a dictionary
-            if isinstance(response, dict):
-                choices = response.get('choices', [])
-                if choices and isinstance(choices[0], dict):
+            if isinstance(response, ChatCompletion):
+                choices = response.choices
+                if choices and isinstance(choices[0], Choice):
                     choice = choices[0]
-                    message = choice.get('message', {})
+                    message = choice.message
                     
-                    # Verify the structure of the response more robustly
-                    if isinstance(message, dict):
-                        assistant_response = message.get('content', '')
+                    if isinstance(message, ChatCompletionMessage):
+                        assistant_response = message.content
                         if CONTINUATION_EXIT_PHRASE in assistant_response:
                             exit_continuation = True
                         
                         # Handle tool calls
-                        tool_calls = message.get('tool_calls', [])
+                        tool_calls = message.tool_calls
                         if isinstance(tool_calls, list):
                             tool_uses = []
                             for call in tool_calls:
-                                if isinstance(call, dict) and 'function' in call:
-                                    function = call['function']
+                                if isinstance(call, ToolCall) and call.function:
                                     tool_uses.append({
-                                        'id': call.get('id', ''),
-                                        'name': function.get('name', ''),
-                                        'arguments': function.get('arguments', '{}')
+                                        'id': call.id,
+                                        'name': call.function.name,
+                                        'arguments': call.function.arguments
                                     })
                         else:
                             tool_uses = []
                     else:
-                        error_msg = f"Error: Response does not contain a valid message structure. Response: {message}"
+                        error_msg = f"Error: Response does not contain a valid message structure. Message: {message}"
                         console.print(Panel(error_msg, title="API Error", style="bold red"))
                         return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
                 else:
