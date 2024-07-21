@@ -547,11 +547,19 @@ def read_file(path):
         with open(path, 'r') as f:
             content = f.read()
         file_contents[path] = content
-        console.print(Panel(f"File '{path}' has been read successfully and stored in the system prompt.", title="File Read", style="green"))
-        return f"File '{path}' has been read and stored in the system prompt."
+        success_message = f"File '{path}' has been read successfully and stored in the system prompt."
+        console.print(Panel(success_message, title="File Read", style="green"))
+        return {
+            "content": success_message,
+            "is_error": False
+        }
     except Exception as e:
-        console.print(Panel(f"Error reading file '{path}': {str(e)}", title="Error", style="bold red"))
-        return f"Error reading file '{path}': {str(e)}"
+        error_message = f"Error reading file '{path}': {str(e)}"
+        console.print(Panel(error_message, title="Error", style="bold red"))
+        return {
+            "content": error_message,
+            "is_error": True
+        }
 
 def list_files(path="."):
     try:
@@ -740,6 +748,8 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
             )
         elif tool_name == "read_file":
             result = read_file(tool_input["path"])
+            is_error = result["is_error"]
+            result = result["content"]
         elif tool_name == "list_files":
             result = list_files(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
