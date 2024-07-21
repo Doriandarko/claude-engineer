@@ -58,9 +58,9 @@ def setup_virtual_environment() -> Tuple[str, str]:
             activate_script = os.path.join(venv_path, "bin", "activate")
         
         return venv_path, activate_script
-        except Exception as e:
+    except Exception as e:
         logging.error(f"Error setting up virtual environment: {str(e)}")
-        raise
+        raise e
 
 
 # Load environment variables from .env file
