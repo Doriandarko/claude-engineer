@@ -1074,6 +1074,14 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 console.print(Panel(tool_result["content"], title="Tool Execution Error", style="bold red"))
             else:
                 console.print(Panel(tool_result["content"], title_align="left", title="Tool Result", style="green"))
+                if tool_name in ['create_file', 'edit_and_apply', 'read_file'] and 'path' in tool_input:
+                    file_path = tool_input['path']
+                    if any(phrase in tool_result["content"] for phrase in [
+                        "File contents updated in system prompt",
+                        "File created and added to system prompt",
+                        "has been read and stored in the system prompt"
+                    ]):
+                        console.print(Panel(f"File '{file_path}' has been processed and its contents are now in the system context.", title="File Processed", style="cyan"))
 
             # Add tool use to the conversation
             current_conversation.append({
@@ -1100,16 +1108,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     }
                 ]
             })
-
-            # Update the file_contents dictionary if applicable
-            if tool_name in ['create_file', 'edit_and_apply', 'read_file'] and not tool_result["is_error"]:
-                if 'path' in tool_input:
-                    file_path = tool_input['path']
-                    if "File contents updated in system prompt" in tool_result["content"] or \
-                       "File created and added to system prompt" in tool_result["content"] or \
-                       "has been read and stored in the system prompt" in tool_result["content"]:
-                        # The file_contents dictionary is already updated in the tool function
-                        pass
     else:
         console.print(Panel("No tool uses in this response.", title="Tool Usage", style="yellow"))
 
