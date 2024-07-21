@@ -1052,61 +1052,64 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         files_in_context = "No files in context. Read, create, or edit files to add."
     console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
 
-    for tool_use in tool_uses:
-        if AI_PROVIDER == 'anthropic':
-            tool_name = tool_use.name
-            tool_input = tool_use.input
-            tool_use_id = tool_use.id
-        else:
-            tool_name = tool_use.function.name
-            tool_input = json.loads(tool_use.function.arguments)
-            tool_use_id = tool_use.id
+    if tool_uses:
+        for tool_use in tool_uses:
+            if AI_PROVIDER == 'anthropic':
+                tool_name = tool_use.name
+                tool_input = tool_use.input
+                tool_use_id = tool_use.id
+            else:
+                tool_name = tool_use.function.name
+                tool_input = json.loads(tool_use.function.arguments)
+                tool_use_id = tool_use.id
 
-        console.print(Panel(f"Tool Used: {tool_name}", style="green"))
-        console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
+            console.print(Panel(f"Tool Used: {tool_name}", style="green"))
+            console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
 
-        tool_result = await execute_tool(tool_name, tool_input)
-        
-        if tool_result["is_error"]:
-            console.print(Panel(tool_result["content"], title="Tool Execution Error", style="bold red"))
-        else:
-            console.print(Panel(tool_result["content"], title_align="left", title="Tool Result", style="green"))
+            tool_result = await execute_tool(tool_name, tool_input)
+            
+            if tool_result["is_error"]:
+                console.print(Panel(tool_result["content"], title="Tool Execution Error", style="bold red"))
+            else:
+                console.print(Panel(tool_result["content"], title_align="left", title="Tool Result", style="green"))
 
-        # Add tool use to the conversation
-        current_conversation.append({
-            "role": "assistant",
-            "content": [
-                {
-                    "type": "tool_use",
-                    "id": tool_use_id,
-                    "name": tool_name,
-                    "input": tool_input
-                }
-            ]
-        })
+            # Add tool use to the conversation
+            current_conversation.append({
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": tool_use_id,
+                        "name": tool_name,
+                        "input": tool_input
+                    }
+                ]
+            })
 
-        # Add tool result to the conversation
-        current_conversation.append({
-            "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": tool_use_id,
-                    "content": tool_result["content"],
-                    "is_error": tool_result["is_error"]
-                }
-            ]
-        })
+            # Add tool result to the conversation
+            current_conversation.append({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_use_id,
+                        "content": tool_result["content"],
+                        "is_error": tool_result["is_error"]
+                    }
+                ]
+            })
 
-        # Update the file_contents dictionary if applicable
-        if tool_name in ['create_file', 'edit_and_apply', 'read_file'] and not tool_result["is_error"]:
-            if 'path' in tool_input:
-                file_path = tool_input['path']
-                if "File contents updated in system prompt" in tool_result["content"] or \
-                   "File created and added to system prompt" in tool_result["content"] or \
-                   "has been read and stored in the system prompt" in tool_result["content"]:
-                    # The file_contents dictionary is already updated in the tool function
-                    pass
+            # Update the file_contents dictionary if applicable
+            if tool_name in ['create_file', 'edit_and_apply', 'read_file'] and not tool_result["is_error"]:
+                if 'path' in tool_input:
+                    file_path = tool_input['path']
+                    if "File contents updated in system prompt" in tool_result["content"] or \
+                       "File created and added to system prompt" in tool_result["content"] or \
+                       "has been read and stored in the system prompt" in tool_result["content"]:
+                        # The file_contents dictionary is already updated in the tool function
+                        pass
+    else:
+        console.print(Panel("No tool uses in this response.", title="Tool Usage", style="yellow"))
 
     messages = filtered_conversation_history + current_conversation
 
