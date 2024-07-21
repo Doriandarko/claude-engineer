@@ -1010,7 +1010,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             
             console.print(Panel(f"Debug: Full Open Router response:\n{response}", title="Open Router Response", style="dim"))
             
-            if response.error:
+            if hasattr(response, 'error'):
                 error_msg = f"Open Router API Error: {response.error.get('message', 'Unknown error')}"
                 console.print(Panel(error_msg, title="API Error", style="bold red"))
                 if "The model produced invalid content" in error_msg:
@@ -1019,14 +1019,15 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
             
             if response.choices:
-                if hasattr(response.choices[0], 'message'):
-                    assistant_response = response.choices[0].message.content or ""
+                choice = response.choices[0]
+                if hasattr(choice, 'message'):
+                    assistant_response = choice.message.content or ""
                     if CONTINUATION_EXIT_PHRASE in assistant_response:
                         exit_continuation = True
-                    if hasattr(response.choices[0].message, 'tool_calls'):
-                        tool_uses = response.choices[0].message.tool_calls
+                    if hasattr(choice.message, 'tool_calls'):
+                        tool_uses = choice.message.tool_calls
                 else:
-                    error_msg = f"Error: Response does not contain a message. Response structure: {response.choices[0]}"
+                    error_msg = f"Error: Response does not contain a message. Response structure: {choice}"
                     console.print(Panel(error_msg, title="API Error", style="bold red"))
                     return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
             else:
@@ -1119,12 +1120,12 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     
         if AI_PROVIDER == 'anthropic':
             # Update token usage for tool checker (only for Anthropic)
-            if tool_response.usage:
+            if hasattr(tool_response, 'usage'):
                 tool_checker_tokens['input'] += tool_response.usage.prompt_tokens
                 tool_checker_tokens['output'] += tool_response.usage.completion_tokens
 
         if tool_response is not None and tool_response.choices:
-            tool_checker_response = tool_response.choices[0].message.content or ""
+            tool_checker_response = tool_response.choices[0].message.content if hasattr(tool_response.choices[0], 'message') else ""
         else:
             console.print(Panel("Error: Tool response is None or has no choices.", title="Tool Response Error", style="bold red"))
             tool_checker_response = ""
