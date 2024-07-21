@@ -955,6 +955,9 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     # Combine filtered history with current conversation to maintain context
     messages = filtered_conversation_history + current_conversation
 
+    assistant_response = ""
+    tool_uses = []
+
     try:
         if AI_PROVIDER == 'anthropic':
             # MAINMODEL call for Anthropic, which maintains context
