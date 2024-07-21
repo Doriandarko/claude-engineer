@@ -45,3 +45,4 @@ Progreso actual:
 - Se ha transformado la llamada al cliente para que coincida con el SDK de OpenAI.
 - Se ha comenzado a transformar la estructura de las funciones para que coincida con el formato de OpenAI.
 - Se ha asegurado que el uso de las tools ocurra correctamente.
+- Se ha corregido el manejo de herramientas y la gestión de respuestas en `pa/main.py` para compatibilidad con OpenAI y Open Router.
