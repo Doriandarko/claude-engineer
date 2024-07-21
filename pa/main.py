@@ -886,7 +886,7 @@ def save_chat():
 
 
 
-async def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
+async def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None, retry=False):
     global conversation_history, automode, main_model_tokens
 
     # This function uses MAINMODEL, which maintains context across calls
@@ -992,14 +992,31 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     tool_uses.append(content_block)
         else:
             # OpenAI call for Open Router
-            response = client.chat.completions.create(
-                model="openai/gpt-4o-mini",
-                messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
-                tools=get_openai_tools(tools),
-                tool_choice="auto"
-            )
+            if retry:
+                # Simplify the prompt for retry
+                simplified_messages = [{"role": "system", "content": "You are a helpful AI assistant."}, {"role": "user", "content": user_input}]
+                response = client.chat.completions.create(
+                    model="openai/gpt-4o-mini",
+                    messages=simplified_messages,
+                    max_tokens=150  # Limit the response length
+                )
+            else:
+                response = client.chat.completions.create(
+                    model="openai/gpt-4o-mini",
+                    messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
+                    tools=get_openai_tools(tools),
+                    tool_choice="auto"
+                )
             
             console.print(Panel(f"Debug: Full Open Router response:\n{response}", title="Open Router Response", style="dim"))
+            
+            if response.error:
+                error_msg = f"Open Router API Error: {response.error.get('message', 'Unknown error')}"
+                console.print(Panel(error_msg, title="API Error", style="bold red"))
+                if "The model produced invalid content" in error_msg:
+                    console.print(Panel("Retrying the request with a simplified prompt...", title="Retry", style="yellow"))
+                    return await chat_with_claude(user_input, image_path, current_iteration, max_iterations, retry=True)
+                return f"Lo siento, hubo un error al procesar la respuesta de la API: {error_msg}. Por favor, intenta de nuevo.", False
             
             if response.choices:
                 if hasattr(response.choices[0], 'message'):
