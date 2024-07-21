@@ -907,7 +907,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             console.print(Panel(f"Error encoding image: {image_base64}", title="Error", style="bold red"))
             return "I'm sorry, there was an error processing the image. Please try again.", False
 
-        tool_response = None  # Initialize tool_response
         if AI_PROVIDER == 'anthropic':
             image_message = {
                 "role": "user",
@@ -955,7 +954,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 content for content in message['content']
                 if content.get('type') != 'tool_result' or (
                     content.get('type') == 'tool_result' and
-                    not any(keyword in content.get('output', '') for keyword in [
+                    not any(keyword in content.get('content', '') for keyword in [
                         "File contents updated in system prompt",
                         "File created and added to system prompt",
                         "has been read and stored in the system prompt"
@@ -1115,44 +1114,19 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     }
                 ]
             })
+
+            # Process the tool result with the AI
+            tool_response = await process_tool_result(tool_result, current_iteration, max_iterations)
+            if tool_response:
+                assistant_response += "\n\n" + tool_response
+
     else:
         console.print(Panel("No tool uses in this response.", title="Tool Usage", style="yellow"))
-
-    messages = filtered_conversation_history + current_conversation
-
-    try:
-        tool_response = client.chat.completions.create(
-            model="openai/gpt-4o-mini",
-            messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
-            tools=get_openai_tools(tools),
-            tool_choice="auto"
-        )
-    
-        if AI_PROVIDER == 'anthropic':
-            # Update token usage for tool checker (only for Anthropic)
-            if hasattr(tool_response, 'usage'):
-                tool_checker_tokens['input'] += tool_response.usage.prompt_tokens
-                tool_checker_tokens['output'] += tool_response.usage.completion_tokens
-
-        if tool_response is not None and tool_response.choices:
-            tool_checker_response = tool_response.choices[0].message.content if hasattr(tool_response.choices[0], 'message') else ""
-        else:
-            console.print(Panel("Error: Tool response is None or has no choices.", title="Tool Response Error", style="bold red"))
-            tool_checker_response = ""
-        if tool_checker_response:
-            console.print(Panel(Markdown(tool_checker_response), title="AI's Response to Tool Result", title_align="left", border_style="blue", expand=False))
-            assistant_response += "\n\n" + tool_checker_response
-        else:
-            console.print(Panel("No additional response from AI after tool use.", title="AI's Response to Tool Result", title_align="left", border_style="yellow", expand=False))
-    except (APIStatusError, APIError) as e:
-        error_message = f"Error in tool response: {str(e)}"
-        console.print(Panel(error_message, title="Error", style="bold red"))
-        assistant_response += f"\n\n{error_message}"
 
     if assistant_response:
         current_conversation.append({"role": "assistant", "content": assistant_response})
 
-    conversation_history = messages + [{"role": "assistant", "content": assistant_response}]
+    conversation_history = filtered_conversation_history + current_conversation
 
     # Display token usage at the end (only for Anthropic)
     if AI_PROVIDER == 'anthropic':
@@ -1164,6 +1138,36 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         return await chat_with_claude(user_input, current_iteration=current_iteration, max_iterations=max_iterations)
     else:
         return assistant_response, exit_continuation
+
+async def process_tool_result(tool_result, current_iteration, max_iterations):
+    try:
+        tool_response = client.chat.completions.create(
+            model=TOOLCHECKERMODEL,
+            messages=[
+                {"role": "system", "content": update_system_prompt(current_iteration, max_iterations)},
+                {"role": "user", "content": f"Process this tool result and provide any necessary follow-up or analysis:\n\n{tool_result['content']}"}
+            ],
+            max_tokens=1000
+        )
+    
+        if AI_PROVIDER == 'anthropic':
+            # Update token usage for tool checker (only for Anthropic)
+            if hasattr(tool_response, 'usage'):
+                tool_checker_tokens['input'] += tool_response.usage.prompt_tokens
+                tool_checker_tokens['output'] += tool_response.usage.completion_tokens
+
+        tool_checker_response = tool_response.choices[0].message.content if tool_response.choices else ""
+        
+        if tool_checker_response:
+            console.print(Panel(Markdown(tool_checker_response), title="AI's Response to Tool Result", title_align="left", border_style="blue", expand=False))
+            return tool_checker_response
+        else:
+            console.print(Panel("No additional response from AI after tool use.", title="AI's Response to Tool Result", title_align="left", border_style="yellow", expand=False))
+            return ""
+    except Exception as e:
+        error_message = f"Error in processing tool result: {str(e)}"
+        console.print(Panel(error_message, title="Error", style="bold red"))
+        return error_message
 
 def reset_code_editor_memory():
     global code_editor_memory
