@@ -975,7 +975,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             main_model_tokens['output'] += response.usage.output_tokens
         else:
             # OpenAI call for Open Router
-            response = await openai.ChatCompletion.acreate(
+            response = await openai.chat.completions.create(
                 model="openai/gpt-4o-mini",
                 messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
                 functions=get_openai_tools(tools),
