@@ -698,7 +698,8 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
                 tool_input["path"],
                 tool_input["instructions"],
                 tool_input["project_context"],
-                is_automode=automode
+                is_automode=automode,
+                timeout=30
             )
         elif tool_name == "read_file":
             result = read_file(tool_input["path"])
