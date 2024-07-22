@@ -4,3 +4,4 @@ tavily-python
 Pillow
 rich
 aiohttp
+prompt_toolkit
