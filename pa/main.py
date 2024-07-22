@@ -1356,3 +1356,30 @@ def display_status():
 
 if __name__ == "__main__":
     asyncio.run(main())
+async def edit_and_apply(path, instructions, project_context, is_automode=False):
+    global file_contents
+    try:
+        original_content = read_file(path)
+        file_contents[path] = original_content
+
+        edit_instructions = await asyncio.wait_for(
+            generate_edit_instructions(original_content, instructions, project_context, file_contents),
+            timeout=30  # 30 segundos de tiempo de espera
+        )
+
+        if not edit_instructions:
+            return "No changes were necessary based on the provided instructions."
+
+        new_content = original_content
+        for edit in edit_instructions:
+            new_content = new_content.replace(edit['search'], edit['replace'])
+
+        diff_result = generate_and_apply_diff(original_content, new_content, path)
+
+        file_contents[path] = new_content
+
+        return f"Changes applied successfully to {path}.\n\n{diff_result}"
+    except asyncio.TimeoutError:
+        return f"Error: The operation timed out while trying to edit {path}. Please try again or simplify your instructions."
+    except Exception as e:
+        return f"Error in edit_and_apply: {str(e)}"
