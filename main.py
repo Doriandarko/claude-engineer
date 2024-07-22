@@ -151,11 +151,10 @@ Available tools and their optimal use cases:
    - Anticipate potential issues or conflicts that might arise from the changes and provide guidance on how to handle them.
 4. execute_code: Run Python code exclusively in the 'code_execution_env' virtual environment and analyze its output. Use this when you need to test code functionality or diagnose issues. Remember that all code execution happens in this isolated environment. This tool now returns a process ID for long-running processes.
 5. stop_process: Stop a running process by its ID. Use this when you need to terminate a long-running process started by the execute_code tool.
-6. execute_code: Run Python code exclusively in the 'code_execution_env' virtual environment and analyze its output.
-7. stop_process: Stop a running process by its ID.
-8. read_file: Read the contents of an existing file.
-9. list_files: List all files and directories in a specified folder.
-10. tavily_search: Perform a web search using the Tavily API for up-to-date information.
+6. read_file: Read the contents of an existing file.
+7. read_multiple_files: Read the contents of multiple existing files at once. Use this when you need to examine or work with multiple files simultaneously.
+8. list_files: List all files and directories in a specified folder.
+9. tavily_search: Perform a web search using the Tavily API for up-to-date information.
 
 Tool Usage Guidelines:
 - Always use the most appropriate tool for the task at hand.
@@ -164,6 +163,7 @@ Tool Usage Guidelines:
 - Use execute_code to run and test code within the 'code_execution_env' virtual environment, then analyze the results.
 - For long-running processes, use the process ID returned by execute_code to stop them later if needed.
 - Proactively use tavily_search when you need up-to-date information or additional context.
+- When working with multiple files, consider using read_multiple_files for efficiency.
 
 Error Handling and Recovery:
 - If a tool operation fails, carefully analyze the error message and attempt to resolve the issue.
@@ -556,6 +556,19 @@ def read_file(path):
     except Exception as e:
         return f"Error reading file: {str(e)}"
 
+def read_multiple_files(paths):
+    global file_contents
+    results = []
+    for path in paths:
+        try:
+            with open(path, 'r') as f:
+                content = f.read()
+            file_contents[path] = content
+            results.append(f"File '{path}' has been read and stored in the system prompt.")
+        except Exception as e:
+            results.append(f"Error reading file '{path}': {str(e)}")
+    return "\n".join(results)
+
 def list_files(path="."):
     try:
         files = os.listdir(path)
@@ -695,6 +708,23 @@ tools = [
         }
     },
     {
+        "name": "read_multiple_files",
+        "description": "Read the contents of multiple files at the specified paths. This tool should be used when you need to examine the contents of multiple existing files at once. It will return the status of reading each file, and store the contents of successfully read files in the system prompt. If a file doesn't exist or can't be read, an appropriate error message will be returned for that file.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "paths": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "An array of absolute or relative paths of the files to read. Use forward slashes (/) for path separation, even on Windows systems."
+                }
+            },
+            "required": ["paths"]
+        }
+    },
+    {
         "name": "list_files",
         "description": "List all files and directories in the specified folder. This tool should be used when you need to see the contents of a directory. It will return a list of all files and subdirectories in the specified path. If the directory doesn't exist or can't be read, an appropriate error message will be returned.",
         "input_schema": {
@@ -743,6 +773,8 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
             )
         elif tool_name == "read_file":
             result = read_file(tool_input["path"])
+        elif tool_name == "read_multiple_files":
+            result = read_multiple_files(tool_input["paths"])
         elif tool_name == "list_files":
             result = list_files(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
