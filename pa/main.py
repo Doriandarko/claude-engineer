@@ -755,6 +755,9 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
     # Add a delay to prevent the system from getting stuck
     await asyncio.sleep(0.1)
 
+    # Add a delay to prevent the system from getting stuck
+    await asyncio.sleep(0.1)
+
 def encode_image_to_base64(image_path):
     try:
         with Image.open(image_path) as img:
