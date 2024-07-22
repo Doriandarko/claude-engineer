@@ -423,48 +423,6 @@ def parse_search_replace_blocks(response_text):
     return blocks
 
 
-async def edit_and_apply(path, instructions, project_context, is_automode=False):
-    global file_contents
-    try:
-        original_content = file_contents.get(path, "")
-        if not original_content:
-            with open(path, 'r') as file:
-                original_content = file.read()
-            file_contents[path] = original_content
-
-        edit_instructions = await generate_edit_instructions(original_content, instructions, project_context, file_contents)
-        
-        if edit_instructions:
-            console.print(Panel("The following SEARCH/REPLACE blocks have been generated:", title="Edit Instructions", style="cyan"))
-            for i, block in enumerate(edit_instructions, 1):
-                console.print(f"Block {i}:")
-                console.print(Panel(f"SEARCH:\n{block['search']}\n\nREPLACE:\n{block['replace']}", expand=False))
-
-            edited_content, changes_made = await apply_edits(path, edit_instructions, original_content)
-
-            if changes_made:
-                diff_result = generate_and_apply_diff(original_content, edited_content, path)
-
-                console.print(Panel("The following changes will be applied:", title="File Changes", style="cyan"))
-                console.print(diff_result)
-
-                if not is_automode:
-                    confirm = console.input("[bold yellow]Do you want to apply these changes? (yes/no): [/bold yellow]")
-                    if confirm.lower() != 'yes':
-                        return "Changes were not applied."
-
-                with open(path, 'w') as file:
-                    file.write(edited_content)
-                file_contents[path] = edited_content  # Update the file_contents with the new content
-                console.print(Panel(f"File contents updated in system prompt: {path}", style="green"))
-                return f"Changes applied to {path}:\n{diff_result}"
-            else:
-                return f"No changes needed for {path}"
-        else:
-            return f"No changes suggested for {path}"
-    except Exception as e:
-        console.print(Panel(f"Error editing/applying to file: {str(e)}", title="Error", style="bold red"))
-        return f"Error editing/applying to file: {str(e)}"
 
 
 
