@@ -35,25 +35,19 @@ from prompt_toolkit.shortcuts import radiolist_dialog
 from prompt_toolkit.styles import Style
 
 def select_ai_provider():
-    result = radiolist_dialog(
-        title="Select AI Provider",
-        text="Choose your AI provider:",
-        values=[
-            ("anthropic", "Anthropic"),
-            ("open_router", "Open Router")
-        ],
-        style=Style.from_dict({
-            'dialog': 'bg:#88ff88',
-            'button': 'bg:#ffffff #000000',
-            'checkbox': '#666666',
-            'dialog.body': 'bg:#00ff00 #000000',
-            'dialog shadow': 'bg:#00aa00',
-            'frame.label': '#00ff00',
-            'radio-selected': 'bg:#ffffff #000000',
-        })
-    ).run()
+    console = Console()
+    console.print(Panel("Seleccione el proveedor de IA:", title="Selección de Proveedor", expand=False))
+    console.print("[1] Anthropic")
+    console.print("[2] Open Router")
     
-    return result
+    while True:
+        choice = console.input("Ingrese el número de su elección (1 o 2): ")
+        if choice == "1":
+            return "anthropic"
+        elif choice == "2":
+            return "open_router"
+        else:
+            console.print("Opción inválida. Por favor, ingrese 1 o 2.", style="bold red")
 
 def select_model(ai_provider):
     if ai_provider == 'anthropic':
@@ -1460,7 +1454,7 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False,
         )
 
         if not edit_instructions:
-            return "No changes were necessary based on the provided instructions."
+            return "No se necesitaron cambios basados en las instrucciones proporcionadas."
 
         new_content = original_content
         changes_made = False
@@ -1469,17 +1463,21 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False,
                 new_content = new_content.replace(edit['search'], edit['replace'])
                 changes_made = True
             else:
-                console.print(Panel(f"Warning: Could not find the following content to replace in {path}:\n{edit['search']}", title="Edit Warning", style="yellow"))
+                console.print(Panel(f"Advertencia: No se pudo encontrar el siguiente contenido para reemplazar en {path}:\n{edit['search']}", title="Advertencia de Edición", style="yellow"))
 
         if not changes_made:
-            return f"No changes were applied to {path}. The specified content to replace was not found."
+            return f"No se aplicaron cambios a {path}. No se encontró el contenido especificado para reemplazar."
+
+        # Aplicar los cambios al archivo
+        with open(path, 'w') as file:
+            file.write(new_content)
 
         diff_result = generate_and_apply_diff(original_content, new_content, path)
 
         file_contents[path] = new_content
 
-        return f"Changes applied successfully to {path}.\n\n{diff_result}"
+        return f"Cambios aplicados exitosamente a {path}.\n\n{diff_result}"
     except asyncio.TimeoutError:
-        return f"Error: The operation timed out while trying to edit {path}. Please try again or simplify your instructions."
+        return f"Error: La operación se agotó mientras se intentaba editar {path}. Por favor, intente de nuevo o simplifique sus instrucciones."
     except Exception as e:
-        return f"Error in edit_and_apply: {str(e)}"
+        return f"Error en edit_and_apply: {str(e)}"
