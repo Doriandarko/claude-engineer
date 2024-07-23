@@ -63,7 +63,7 @@ def select_model(ai_provider):
                 return choice
             print("Please enter a valid model name.")
     else:
-        openrouter_models = ['openai/gpt-4o-mini', 'anthropic/claude-3-sonnet', 'meta-llama/llama-2-70b-chat', 'openai/gpt-3.5-turbo']
+        openrouter_models = ['deepseek/deepseek-coder', 'openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet', 'cognitivecomputations/dolphin-llama-3-70b', 'qwen/qwen-2-7b-instruct']
         completer = WordCompleter(openrouter_models, ignore_case=True)
         while True:
             choice = prompt(
