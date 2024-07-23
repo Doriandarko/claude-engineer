@@ -1097,7 +1097,15 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                             console.print(Panel("Error decoding JSON response from DeepSeek Coder", title="JSON Error", style="bold red"))
                             tool_uses = []
                     elif hasattr(choice.message, 'tool_calls') and choice.message.tool_calls:
-                        tool_uses = choice.message.tool_calls
+                        tool_uses = []
+                        for tool_call in choice.message.tool_calls:
+                            if isinstance(tool_call, ChatCompletionMessageToolCall):
+                                tool_uses.append({
+                                    'function': {
+                                        'name': tool_call.function.name,
+                                        'arguments': tool_call.function.arguments
+                                    }
+                                })
                     else:
                         tool_uses = []  # Ensure tool_uses is always a list, even if empty
                 else:
