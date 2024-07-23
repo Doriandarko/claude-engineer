@@ -1448,27 +1448,32 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False,
         original_content = read_file(path)
         file_contents[path] = original_content
 
-        edit_instructions = await asyncio.wait_for(
-            generate_edit_instructions(original_content, instructions, project_context, file_contents),
-            timeout=timeout
-        )
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            console=console
+        ) as progress:
+            edit_task = progress.add_task("[cyan]Generating edit instructions...", total=100)
 
-        if not edit_instructions:
-            return "No se necesitaron cambios basados en las instrucciones proporcionadas."
+            edit_instructions = await asyncio.wait_for(
+                generate_edit_instructions(original_content, instructions, project_context, file_contents),
+                timeout=timeout
+            )
+            progress.update(edit_task, advance=50)
 
-        new_content = original_content
-        changes_made = False
-        for edit in edit_instructions:
-            if edit['search'] in new_content:
-                new_content = new_content.replace(edit['search'], edit['replace'])
-                changes_made = True
-            else:
-                console.print(Panel(f"Advertencia: No se pudo encontrar el siguiente contenido para reemplazar en {path}:\n{edit['search']}", title="Advertencia de Edición", style="yellow"))
+            if not edit_instructions:
+                return "No changes were needed based on the provided instructions."
+
+            progress.update(edit_task, description="[cyan]Applying changes...")
+
+            new_content, changes_made = await apply_edits(path, edit_instructions, original_content)
+            progress.update(edit_task, advance=50)
 
         if not changes_made:
-            return f"No se aplicaron cambios a {path}. No se encontró el contenido especificado para reemplazar."
+            return f"No changes were applied to {path}. The specified content to replace was not found."
 
-        # Aplicar los cambios al archivo
         with open(path, 'w') as file:
             file.write(new_content)
 
@@ -1476,8 +1481,37 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False,
 
         file_contents[path] = new_content
 
-        return f"Cambios aplicados exitosamente a {path}.\n\n{diff_result}"
+        return f"Changes successfully applied to {path}.\n\n{diff_result}"
     except asyncio.TimeoutError:
-        return f"Error: La operación se agotó mientras se intentaba editar {path}. Por favor, intente de nuevo o simplifique sus instrucciones."
+        return f"Error: The operation timed out while trying to edit {path}. Please try again or simplify your instructions."
     except Exception as e:
-        return f"Error en edit_and_apply: {str(e)}"
+        return f"Error in edit_and_apply: {str(e)}"
+async def apply_edits(file_path, edit_instructions, original_content):
+    new_content = original_content
+    changes_made = False
+    total_edits = len(edit_instructions)
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        console=console
+    ) as progress:
+        edit_task = progress.add_task("[cyan]Applying edits...", total=total_edits)
+
+        for i, edit in enumerate(edit_instructions, 1):
+            search_content = edit['search']
+            replace_content = edit['replace']
+            
+            if search_content in new_content:
+                new_content = new_content.replace(search_content, replace_content)
+                changes_made = True
+                
+                # Display the diff for this edit
+                diff_result = generate_and_apply_diff(search_content, replace_content, file_path)
+                console.print(Panel(diff_result, title=f"Changes in {file_path} ({i}/{total_edits})", style="cyan"))
+
+            progress.update(edit_task, advance=1)
+
+    return new_content, changes_made
