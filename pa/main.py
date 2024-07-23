@@ -1446,6 +1446,9 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False,
     global file_contents
     try:
         original_content = read_file(path)
+        if original_content.startswith("Error"):
+            return f"Error: Unable to read file {path}. {original_content}"
+        
         file_contents[path] = original_content
 
         with Progress(
@@ -1457,14 +1460,18 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False,
         ) as progress:
             edit_task = progress.add_task("[cyan]Generating edit instructions...", total=100)
 
-            edit_instructions = await asyncio.wait_for(
-                generate_edit_instructions(original_content, instructions, project_context, file_contents),
-                timeout=timeout
-            )
+            try:
+                edit_instructions = await asyncio.wait_for(
+                    generate_edit_instructions(original_content, instructions, project_context, file_contents),
+                    timeout=timeout
+                )
+            except asyncio.TimeoutError:
+                return f"Error: The operation timed out while generating edit instructions for {path}. Please try again or simplify your instructions."
+            
             progress.update(edit_task, advance=50)
 
             if not edit_instructions:
-                return "No changes were needed based on the provided instructions."
+                return f"No changes were needed for {path} based on the provided instructions."
 
             progress.update(edit_task, description="[cyan]Applying changes...")
 
@@ -1474,16 +1481,17 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False,
         if not changes_made:
             return f"No changes were applied to {path}. The specified content to replace was not found."
 
-        with open(path, 'w') as file:
-            file.write(new_content)
+        try:
+            with open(path, 'w') as file:
+                file.write(new_content)
+        except IOError as e:
+            return f"Error: Unable to write changes to {path}. {str(e)}"
 
         diff_result = generate_and_apply_diff(original_content, new_content, path)
 
         file_contents[path] = new_content
 
         return f"Changes successfully applied to {path}.\n\n{diff_result}"
-    except asyncio.TimeoutError:
-        return f"Error: The operation timed out while trying to edit {path}. Please try again or simplify your instructions."
     except Exception as e:
         return f"Error in edit_and_apply: {str(e)}"
 async def apply_edits(file_path, edit_instructions, original_content):
