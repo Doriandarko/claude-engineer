@@ -8,6 +8,7 @@ import io
 import re
 from anthropic import Anthropic, APIStatusError, APIError
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageToolCall
 import difflib
 import time
 from rich.console import Console
