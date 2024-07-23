@@ -119,6 +119,7 @@ MAX_CONTEXT_TOKENS = 200000  # Reduced to 200k tokens for context window
 # Models
 # Models that maintain context memory across interactions
 MAINMODEL = "claude-3-5-sonnet-20240620"  # Maintains conversation history and file contents
+OPENROUTER_MAINMODEL = "deepseek/deepseek-coder"  # Maintains conversation history and file contents
 
 # Models that don't maintain context (memory is reset after each call)
 TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
@@ -987,7 +988,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 # Simplify the prompt for retry
                 simplified_messages = [{"role": "system", "content": "You are a helpful AI assistant."}, {"role": "user", "content": user_input}]
                 response = client.chat.completions.create(
-                    model="openai/gpt-4o-mini",
+                    model=OPENROUTER_MAINMODEL,
                     messages=simplified_messages,
                     max_tokens=150  # Limit the response length
                 )
@@ -995,7 +996,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 try:
                     try:
                         response = client.chat.completions.create(
-                            model="openai/gpt-4o-mini",
+                            model=OPENROUTER_MAINMODEL,
                             messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
                             tools=get_openai_tools(tools),
                             tool_choice="auto"
@@ -1005,7 +1006,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                         console.print(Panel("Retrying the request with a simplified prompt...", title="Retry", style="yellow"))
                         simplified_messages = [{"role": "system", "content": "You are a helpful AI assistant."}, {"role": "user", "content": user_input}]
                         response = client.chat.completions.create(
-                            model="openai/gpt-4o-mini",
+                            model=OPENROUTER_MAINMODEL,
                             messages=simplified_messages,
                             max_tokens=150  # Limit the response length
                         )
@@ -1014,7 +1015,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     console.print(Panel("Retrying the request with a simplified prompt...", title="Retry", style="yellow"))
                     simplified_messages = [{"role": "system", "content": "You are a helpful AI assistant."}, {"role": "user", "content": user_input}]
                     response = client.chat.completions.create(
-                        model="openai/gpt-4o-mini",
+                        model=OPENROUTER_MAINMODEL,
                         messages=simplified_messages,
                         max_tokens=150  # Limit the response length
                     )
@@ -1155,7 +1156,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 async def process_tool_result(tool_result, current_iteration, max_iterations):
     try:
         tool_response = client.chat.completions.create(
-            model="openai/gpt-4o-mini",
+            model=OPENROUTER_MAINMODEL,
             messages=[
                 {"role": "system", "content": update_system_prompt(current_iteration, max_iterations)},
                 {"role": "user", "content": f"Process this tool result and provide any necessary follow-up or analysis:\n\n{tool_result['content']}"}
