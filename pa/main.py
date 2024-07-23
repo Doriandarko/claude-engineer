@@ -126,7 +126,7 @@ def get_model_name():
     if AI_PROVIDER == 'anthropic':
         return SELECTED_MODEL
     else:
-        return f"openrouter/{SELECTED_MODEL}"
+        return f"{SELECTED_MODEL}"
 
 # Initialize the Tavily client
 tavily_api_key = os.getenv("TAVILY_API_KEY")
