@@ -44,7 +44,7 @@ def select_model():
     if AI_PROVIDER == 'anthropic':
         return "claude-3-5-sonnet-20240620"
     else:
-        options = ['gpt-4o-mini', 'deepseek/deepseek-coder', 'anthropic/claude-3-sonnet', 'meta-llama/llama-2-70b-chat']
+        options = ['gpt-4o-mini', 'anthropic/claude-3-sonnet', 'meta-llama/llama-2-70b-chat', 'openai/gpt-3.5-turbo']
         completer = WordCompleter(options)
         while True:
             choice = prompt("Select Open Router model: ", completer=completer).strip()
@@ -140,7 +140,7 @@ MAX_CONTEXT_TOKENS = 200000  # Reduced to 200k tokens for context window
 # Models
 # Models that maintain context memory across interactions
 MAINMODEL = "claude-3-5-sonnet-20240620"  # Maintains conversation history and file contents
-OPENROUTER_MAINMODEL = "deepseek/deepseek-coder"  # Maintains conversation history and file contents
+OPENROUTER_MAINMODEL = "anthropic/claude-3-sonnet"  # Maintains conversation history and file contents
 
 # Models that don't maintain context (memory is reset after each call)
 TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
