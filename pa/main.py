@@ -1048,6 +1048,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                                         'arguments': json.dumps(json_content.get('parameters', {}))
                                     }
                                 }]
+                                # Set assistant_response to an empty string as we've extracted the function call
+                                assistant_response = ""
                             else:
                                 tool_uses = []
                         except json.JSONDecodeError:
@@ -1098,9 +1100,9 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 tool_input = tool_use.input
                 tool_use_id = tool_use.id
             else:
-                tool_name = tool_use.function.name
-                tool_input = json.loads(tool_use.function.arguments)
-                tool_use_id = tool_use.id
+                tool_name = tool_use['function']['name']
+                tool_input = json.loads(tool_use['function']['arguments'])
+                tool_use_id = 'tool_use_' + str(time.time())  # Generate a unique ID
 
             console.print(Panel(f"Tool Used: {tool_name}", style="green"))
             console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
