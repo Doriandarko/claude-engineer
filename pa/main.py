@@ -28,31 +28,60 @@ from prompt_toolkit.completion import WordCompleter
 from aiohttp import ClientSession
 from aiohttp_sse_client import client as sse_client
 
+from prompt_toolkit import prompt
+from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.shortcuts import radiolist_dialog
+from prompt_toolkit.styles import Style
+
 def select_ai_provider():
-    options = ['Anthropic', 'Open Router']
-    completer = WordCompleter(options)
+    result = radiolist_dialog(
+        title="Select AI Provider",
+        text="Choose your AI provider:",
+        values=[
+            ("anthropic", "Anthropic"),
+            ("open_router", "Open Router")
+        ],
+        style=Style.from_dict({
+            'dialog': 'bg:#88ff88',
+            'button': 'bg:#ffffff #000000',
+            'checkbox': '#666666',
+            'dialog.body': 'bg:#00ff00 #000000',
+            'dialog shadow': 'bg:#00aa00',
+            'frame.label': '#00ff00',
+            'radio-selected': 'bg:#ffffff #000000',
+        })
+    ).run()
     
-    while True:
-        choice = prompt("Select AI provider (Anthropic/Open Router): ", completer=completer).strip().lower()
-        if choice in ['anthropic', 'open router']:
-            return choice
-        print("Invalid choice. Please select either Anthropic or Open Router.")
+    return result
+
+def select_model(ai_provider):
+    if ai_provider == 'anthropic':
+        anthropic_models = ['claude-3-5-sonnet-20240620', 'claude-3-opus-20240229']
+        completer = WordCompleter(anthropic_models, ignore_case=True)
+        while True:
+            choice = prompt(
+                "Select Anthropic model (or enter your own): ",
+                completer=completer,
+                complete_while_typing=True
+            ).strip()
+            if choice in anthropic_models or choice:
+                return choice
+            print("Please enter a valid model name.")
+    else:
+        openrouter_models = ['gpt-4o-mini', 'anthropic/claude-3-sonnet', 'meta-llama/llama-2-70b-chat', 'openai/gpt-3.5-turbo']
+        completer = WordCompleter(openrouter_models, ignore_case=True)
+        while True:
+            choice = prompt(
+                "Select Open Router model (or enter your own): ",
+                completer=completer,
+                complete_while_typing=True
+            ).strip()
+            if choice in openrouter_models or choice:
+                return choice
+            print("Please enter a valid model name.")
 
 AI_PROVIDER = select_ai_provider()
-
-def select_model():
-    if AI_PROVIDER == 'anthropic':
-        return "claude-3-5-sonnet-20240620"
-    else:
-        options = ['gpt-4o-mini', 'anthropic/claude-3-sonnet', 'meta-llama/llama-2-70b-chat', 'openai/gpt-3.5-turbo']
-        completer = WordCompleter(options)
-        while True:
-            choice = prompt("Select Open Router model: ", completer=completer).strip()
-            if choice in options:
-                return choice
-            print("Invalid choice. Please select a valid model.")
-
-SELECTED_MODEL = select_model()
+SELECTED_MODEL = select_model(AI_PROVIDER)
 
 
 def setup_virtual_environment() -> Tuple[str, str]:
