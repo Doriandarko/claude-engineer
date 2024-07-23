@@ -768,7 +768,13 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
                 timeout=30
             )
         elif tool_name == "read_file":
-            result = read_file(tool_input["path"])
+            try:
+                result = read_file(tool_input["path"])
+                if isinstance(result, str) and result.startswith("Error"):
+                    is_error = True
+            except Exception as e:
+                is_error = True
+                result = f"Error reading file: {str(e)}"
         elif tool_name == "list_files":
             result = list_files(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
@@ -1087,6 +1093,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     if CONTINUATION_EXIT_PHRASE in assistant_response:
                         exit_continuation = True
                     
+                    tool_uses = []
+                    
                     # Check if the response is a JSON string (DeepSeek Coder or Qwen format)
                     if assistant_response.strip().startswith('```json') or assistant_response.strip().startswith('{'):
                         try:
@@ -1104,12 +1112,11 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                                 }]
                                 # Set assistant_response to an empty string as we've extracted the function call
                                 assistant_response = ""
-                            else:
-                                tool_uses = []
                         except json.JSONDecodeError:
                             console.print(Panel("Error decoding JSON response", title="JSON Error", style="bold red"))
-                            tool_uses = []
-                    elif hasattr(choice.message, 'tool_calls') and choice.message.tool_calls:
+                    
+                    # Handle tool_calls for GPT models
+                    if hasattr(choice.message, 'tool_calls') and choice.message.tool_calls:
                         tool_uses = []
                         for tool_call in choice.message.tool_calls:
                             if isinstance(tool_call, ChatCompletionMessageToolCall):
@@ -1119,8 +1126,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                                         'arguments': tool_call.function.arguments
                                     }
                                 })
-                    else:
-                        tool_uses = []  # Ensure tool_uses is always a list, even if empty
+                        # If we have tool_calls, set assistant_response to empty string
+                        assistant_response = ""
                 else:
                     error_msg = f"Error: Response does not contain a message. Response structure: {choice}"
                     console.print(Panel(error_msg, title="API Error", style="bold red"))
@@ -1465,7 +1472,7 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False,
     try:
         console.print(f"[bold cyan]Starting edit_and_apply for {path}[/bold cyan]")
         original_content = read_file(path)
-        if original_content.startswith("Error"):
+        if isinstance(original_content, str) and original_content.startswith("Error"):
             console.print(f"[bold red]Error reading file: {original_content}[/bold red]")
             return f"Error: Unable to read file {path}. {original_content}"
         
