@@ -362,11 +362,15 @@ def generate_and_apply_diff(original_content, new_content, path):
 async def generate_edit_instructions(file_content, instructions, project_context, full_file_contents):
     global code_editor_tokens, code_editor_memory
     try:
+        console.print("[bold cyan]Starting generate_edit_instructions[/bold cyan]")
+        
         # Prepare memory context (this is the only part that maintains some context between calls)
         memory_context = "\n".join([f"Memory {i+1}:\n{mem}" for i, mem in enumerate(code_editor_memory)])
+        console.print(f"[green]Memory context prepared: {len(code_editor_memory)} items[/green]")
 
         # Prepare full file contents context
         full_file_contents_context = "\n\n".join([f"--- {path} ---\n{content}" for path, content in full_file_contents.items()])
+        console.print(f"[green]Full file contents context prepared: {len(full_file_contents)} files[/green]")
 
         system_prompt = f"""
         You are an AI coding agent that generates edit instructions for code files. Your task is to analyze the provided code and generate SEARCH/REPLACE blocks for necessary changes. Follow these steps:
@@ -416,6 +420,7 @@ async def generate_edit_instructions(file_content, instructions, project_context
         If no changes are needed, return an empty list.
         """
 
+        console.print("[yellow]Preparing to make API call to CODEEDITORMODEL...[/yellow]")
         # Make the API call to CODEEDITORMODEL (context is not maintained except for code_editor_memory)
         response = client.chat.completions.create(
             model=CODEEDITORMODEL,
@@ -426,20 +431,25 @@ async def generate_edit_instructions(file_content, instructions, project_context
                 {"role": "user", "content": "Generate SEARCH/REPLACE blocks with explanations for the necessary changes."},
             ]
         )
+        console.print("[green]API call to CODEEDITORMODEL completed[/green]")
+
         # Update token usage for code editor
         code_editor_tokens['input'] += response.usage.input_tokens
         code_editor_tokens['output'] += response.usage.output_tokens
+        console.print(f"[blue]Token usage updated: Input {response.usage.input_tokens}, Output {response.usage.output_tokens}[/blue]")
 
         # Parse the response to extract SEARCH/REPLACE blocks with explanations
         edit_instructions = parse_search_replace_blocks_with_explanations(response.content[0].text)
+        console.print(f"[green]Edit instructions parsed: {len(edit_instructions)} blocks[/green]")
 
         # Update code editor memory (this is the only part that maintains some context between calls)
         code_editor_memory.append(f"Edit Instructions:\n{response.content[0].text}")
+        console.print("[green]Code editor memory updated[/green]")
 
         return edit_instructions
 
     except Exception as e:
-        console.print(f"Error in generating edit instructions: {str(e)}", style="bold red")
+        console.print(f"[bold red]Error in generating edit instructions: {str(e)}[/bold red]")
         return []  # Return empty list if any exception occurs
 
 
@@ -1445,11 +1455,14 @@ if __name__ == "__main__":
 async def edit_and_apply(path, instructions, project_context, is_automode=False, timeout=30):
     global file_contents
     try:
+        console.print(f"[bold cyan]Starting edit_and_apply for {path}[/bold cyan]")
         original_content = read_file(path)
         if original_content.startswith("Error"):
+            console.print(f"[bold red]Error reading file: {original_content}[/bold red]")
             return f"Error: Unable to read file {path}. {original_content}"
         
         file_contents[path] = original_content
+        console.print(f"[green]File contents stored for {path}[/green]")
 
         with Progress(
             SpinnerColumn(),
@@ -1461,38 +1474,50 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False,
             edit_task = progress.add_task("[cyan]Generating edit instructions...", total=100)
 
             try:
+                console.print("[yellow]Calling generate_edit_instructions...[/yellow]")
                 edit_instructions = await asyncio.wait_for(
                     generate_edit_instructions(original_content, instructions, project_context, file_contents),
                     timeout=timeout
                 )
+                console.print(f"[green]Edit instructions generated: {edit_instructions}[/green]")
             except asyncio.TimeoutError:
+                console.print("[bold red]Timeout occurred while generating edit instructions[/bold red]")
                 return f"Error: The operation timed out while generating edit instructions for {path}. Please try again or simplify your instructions."
             
             progress.update(edit_task, advance=50)
 
             if not edit_instructions:
+                console.print("[yellow]No changes needed based on instructions[/yellow]")
                 return f"No changes were needed for {path} based on the provided instructions."
 
             progress.update(edit_task, description="[cyan]Applying changes...")
 
+            console.print("[yellow]Calling apply_edits...[/yellow]")
             new_content, changes_made = await apply_edits(path, edit_instructions, original_content)
+            console.print(f"[green]Changes applied: {changes_made}[/green]")
             progress.update(edit_task, advance=50)
 
         if not changes_made:
+            console.print("[yellow]No changes were applied[/yellow]")
             return f"No changes were applied to {path}. The specified content to replace was not found."
 
         try:
             with open(path, 'w') as file:
                 file.write(new_content)
+            console.print(f"[green]Changes written to {path}[/green]")
         except IOError as e:
+            console.print(f"[bold red]Error writing to file: {str(e)}[/bold red]")
             return f"Error: Unable to write changes to {path}. {str(e)}"
 
         diff_result = generate_and_apply_diff(original_content, new_content, path)
+        console.print(f"[green]Diff generated: {diff_result}[/green]")
 
         file_contents[path] = new_content
+        console.print(f"[green]Updated file contents stored for {path}[/green]")
 
         return f"Changes successfully applied to {path}.\n\n{diff_result}"
     except Exception as e:
+        console.print(f"[bold red]Unexpected error in edit_and_apply: {str(e)}[/bold red]")
         return f"Error in edit_and_apply: {str(e)}"
 async def apply_edits(file_path, edit_instructions, original_content):
     new_content = original_content
