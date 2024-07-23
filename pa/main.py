@@ -40,6 +40,20 @@ def select_ai_provider():
 
 AI_PROVIDER = select_ai_provider()
 
+def select_model():
+    if AI_PROVIDER == 'anthropic':
+        return "claude-3-5-sonnet-20240620"
+    else:
+        options = ['gpt-4o-mini', 'deepseek/deepseek-coder', 'anthropic/claude-3-sonnet', 'meta-llama/llama-2-70b-chat']
+        completer = WordCompleter(options)
+        while True:
+            choice = prompt("Select Open Router model: ", completer=completer).strip()
+            if choice in options:
+                return choice
+            print("Invalid choice. Please select a valid model.")
+
+SELECTED_MODEL = select_model()
+
 
 def setup_virtual_environment() -> Tuple[str, str]:
     venv_name = "code_execution_env"
@@ -77,6 +91,13 @@ else:
     if not openrouter_api_key:
         raise ValueError("OPENROUTER_API_KEY not found in environment variables")
     client = OpenAI(api_key=openrouter_api_key, base_url="https://openrouter.ai/api/v1")
+
+# Function to get the appropriate model name
+def get_model_name():
+    if AI_PROVIDER == 'anthropic':
+        return SELECTED_MODEL
+    else:
+        return f"openrouter/{SELECTED_MODEL}"
 
 # Initialize the Tavily client
 tavily_api_key = os.getenv("TAVILY_API_KEY")
@@ -882,7 +903,7 @@ def save_chat():
 async def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None, retry=False):
     global conversation_history, automode, main_model_tokens
 
-    # This function uses MAINMODEL, which maintains context across calls
+    # This function uses the selected model, which maintains context across calls
     current_conversation = []
 
     if image_path:
@@ -960,10 +981,11 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     tool_uses = []
 
     try:
+        model = get_model_name()
         if AI_PROVIDER == 'anthropic':
-            # MAINMODEL call for Anthropic, which maintains context
+            # Anthropic API call
             response = client.chat.completions.create(
-                model=MAINMODEL,
+                model=model,
                 max_tokens=8000,
                 system=update_system_prompt(current_iteration, max_iterations),
                 extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
@@ -988,34 +1010,24 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 # Simplify the prompt for retry
                 simplified_messages = [{"role": "system", "content": "You are a helpful AI assistant."}, {"role": "user", "content": user_input}]
                 response = client.chat.completions.create(
-                    model=OPENROUTER_MAINMODEL,
+                    model=model,
                     messages=simplified_messages,
                     max_tokens=150  # Limit the response length
                 )
             else:
                 try:
-                    try:
-                        response = client.chat.completions.create(
-                            model=OPENROUTER_MAINMODEL,
-                            messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
-                            tools=get_openai_tools(tools),
-                            tool_choice="auto"
-                        )
-                    except Exception as e:
-                        console.print(Panel(f"Error: {str(e)}", title="API Error", style="bold red"))
-                        console.print(Panel("Retrying the request with a simplified prompt...", title="Retry", style="yellow"))
-                        simplified_messages = [{"role": "system", "content": "You are a helpful AI assistant."}, {"role": "user", "content": user_input}]
-                        response = client.chat.completions.create(
-                            model=OPENROUTER_MAINMODEL,
-                            messages=simplified_messages,
-                            max_tokens=150  # Limit the response length
-                        )
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
+                        tools=get_openai_tools(tools),
+                        tool_choice="auto"
+                    )
                 except Exception as e:
                     console.print(Panel(f"Error: {str(e)}", title="API Error", style="bold red"))
                     console.print(Panel("Retrying the request with a simplified prompt...", title="Retry", style="yellow"))
                     simplified_messages = [{"role": "system", "content": "You are a helpful AI assistant."}, {"role": "user", "content": user_input}]
                     response = client.chat.completions.create(
-                        model=OPENROUTER_MAINMODEL,
+                        model=model,
                         messages=simplified_messages,
                         max_tokens=150  # Limit the response length
                     )
@@ -1174,8 +1186,9 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 
 async def process_tool_result(tool_result, current_iteration, max_iterations):
     try:
+        model = get_model_name()
         tool_response = client.chat.completions.create(
-            model=OPENROUTER_MAINMODEL,
+            model=model,
             messages=[
                 {"role": "system", "content": update_system_prompt(current_iteration, max_iterations)},
                 {"role": "user", "content": f"Process this tool result and provide any necessary follow-up or analysis:\n\n{tool_result['content']}"}
@@ -1392,6 +1405,7 @@ def display_status():
     status += f"Conversation length: {len(conversation_history)} messages\n"
     status += f"Files in context: {len(file_contents)}\n"
     status += f"Current AI Provider: {AI_PROVIDER}\n"
+    status += f"Current Model: {SELECTED_MODEL}\n"
     console.print(Panel(status, title="Current Status", expand=False, border_style="cyan"))
 
 if __name__ == "__main__":
