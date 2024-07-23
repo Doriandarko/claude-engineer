@@ -993,12 +993,22 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 )
             else:
                 try:
-                    response = client.chat.completions.create(
-                        model="openai/gpt-4o-mini",
-                        messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
-                        tools=get_openai_tools(tools),
-                        tool_choice="auto"
-                    )
+                    try:
+                        response = client.chat.completions.create(
+                            model="openai/gpt-4o-mini",
+                            messages=[{"role": "system", "content": update_system_prompt(current_iteration, max_iterations)}] + messages,
+                            tools=get_openai_tools(tools),
+                            tool_choice="auto"
+                        )
+                    except Exception as e:
+                        console.print(Panel(f"Error: {str(e)}", title="API Error", style="bold red"))
+                        console.print(Panel("Retrying the request with a simplified prompt...", title="Retry", style="yellow"))
+                        simplified_messages = [{"role": "system", "content": "You are a helpful AI assistant."}, {"role": "user", "content": user_input}]
+                        response = client.chat.completions.create(
+                            model="openai/gpt-4o-mini",
+                            messages=simplified_messages,
+                            max_tokens=150  # Limit the response length
+                        )
                 except Exception as e:
                     console.print(Panel(f"Error: {str(e)}", title="API Error", style="bold red"))
                     console.print(Panel("Retrying the request with a simplified prompt...", title="Retry", style="yellow"))
