@@ -1068,6 +1068,10 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             
             console.print(Panel(f"Debug: Full Open Router response:\n{response}", title="Open Router Response", style="dim"))
             
+            # Add debug logging for the response content
+            if response.choices:
+                console.print(Panel(f"Debug: Response content:\n{response.choices[0].message.content}", title="Response Content", style="dim"))
+            
             if hasattr(response, 'error'):
                 error_msg = f"Open Router API Error: {response.error.get('message', 'Unknown error')}"
                 console.print(Panel(error_msg, title="API Error", style="bold red"))
@@ -1083,10 +1087,14 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     if CONTINUATION_EXIT_PHRASE in assistant_response:
                         exit_continuation = True
                     
-                    # Check if the response is a JSON string (DeepSeek Coder format)
-                    if assistant_response.strip().startswith('```json'):
+                    # Check if the response is a JSON string (DeepSeek Coder or Qwen format)
+                    if assistant_response.strip().startswith('```json') or assistant_response.strip().startswith('{'):
                         try:
-                            json_content = json.loads(assistant_response.strip().split('```json')[1].strip().split('```')[0])
+                            if assistant_response.strip().startswith('```json'):
+                                json_content = json.loads(assistant_response.strip().split('```json')[1].strip().split('```')[0])
+                            else:
+                                json_content = json.loads(assistant_response.strip())
+                            
                             if 'function' in json_content:
                                 tool_uses = [{
                                     'function': {
@@ -1099,7 +1107,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                             else:
                                 tool_uses = []
                         except json.JSONDecodeError:
-                            console.print(Panel("Error decoding JSON response from DeepSeek Coder", title="JSON Error", style="bold red"))
+                            console.print(Panel("Error decoding JSON response", title="JSON Error", style="bold red"))
                             tool_uses = []
                     elif hasattr(choice.message, 'tool_calls') and choice.message.tool_calls:
                         tool_uses = []
