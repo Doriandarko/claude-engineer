@@ -353,9 +353,13 @@ async def generate_edit_instructions(file_content, instructions, project_context
            - Maintain consistency with the project context and previous edits
            - Take into account the full context of all files in the project
 
-        IMPORTANT: RETURN ONLY THE SEARCH/REPLACE BLOCKS. NO EXPLANATIONS OR COMMENTS.
-        USE THE FOLLOWING FORMAT FOR EACH BLOCK:
+        8. For each SEARCH/REPLACE block, provide a brief explanation of the change and its purpose.
 
+        IMPORTANT: USE THE FOLLOWING FORMAT FOR EACH BLOCK:
+
+        <EXPLANATION>
+        Brief explanation of the change and its purpose
+        </EXPLANATION>
         <SEARCH>
         Code to be replaced
         </SEARCH>
@@ -373,15 +377,15 @@ async def generate_edit_instructions(file_content, instructions, project_context
             system=system_prompt,
             extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=[
-                {"role": "user", "content": "Generate SEARCH/REPLACE blocks for the necessary changes."},
+                {"role": "user", "content": "Generate SEARCH/REPLACE blocks with explanations for the necessary changes."},
             ]
         )
         # Update token usage for code editor
         code_editor_tokens['input'] += response.usage.input_tokens
         code_editor_tokens['output'] += response.usage.output_tokens
 
-        # Parse the response to extract SEARCH/REPLACE blocks
-        edit_instructions = parse_search_replace_blocks(response.content[0].text)
+        # Parse the response to extract SEARCH/REPLACE blocks with explanations
+        edit_instructions = parse_search_replace_blocks_with_explanations(response.content[0].text)
 
         # Update code editor memory (this is the only part that maintains some context between calls)
         code_editor_memory.append(f"Edit Instructions:\n{response.content[0].text}")
@@ -394,14 +398,19 @@ async def generate_edit_instructions(file_content, instructions, project_context
 
 
 
-def parse_search_replace_blocks(response_text):
+def parse_search_replace_blocks_with_explanations(response_text):
     blocks = []
     lines = response_text.split('\n')
     current_block = {}
     current_section = None
 
     for line in lines:
-        if line.strip() == '<SEARCH>':
+        if line.strip() == '<EXPLANATION>':
+            current_section = 'explanation'
+            current_block['explanation'] = []
+        elif line.strip() == '</EXPLANATION>':
+            current_section = None
+        elif line.strip() == '<SEARCH>':
             current_section = 'search'
             current_block['search'] = []
         elif line.strip() == '</SEARCH>':
@@ -411,8 +420,9 @@ def parse_search_replace_blocks(response_text):
             current_block['replace'] = []
         elif line.strip() == '</REPLACE>':
             current_section = None
-            if 'search' in current_block and 'replace' in current_block:
+            if 'explanation' in current_block and 'search' in current_block and 'replace' in current_block:
                 blocks.append({
+                    'explanation': '\n'.join(current_block['explanation']),
                     'search': '\n'.join(current_block['search']),
                     'replace': '\n'.join(current_block['replace'])
                 })
@@ -1356,7 +1366,7 @@ def display_status():
 
 if __name__ == "__main__":
     asyncio.run(main())
-async def edit_and_apply(path, instructions, project_context, is_automode=False):
+async def edit_and_apply(path, instructions, project_context, is_automode=False, timeout=30):
     global file_contents
     try:
         original_content = read_file(path)
@@ -1364,15 +1374,23 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False)
 
         edit_instructions = await asyncio.wait_for(
             generate_edit_instructions(original_content, instructions, project_context, file_contents),
-            timeout=30  # 30 segundos de tiempo de espera
+            timeout=timeout
         )
 
         if not edit_instructions:
             return "No changes were necessary based on the provided instructions."
 
         new_content = original_content
+        changes_made = False
         for edit in edit_instructions:
-            new_content = new_content.replace(edit['search'], edit['replace'])
+            if edit['search'] in new_content:
+                new_content = new_content.replace(edit['search'], edit['replace'])
+                changes_made = True
+            else:
+                console.print(Panel(f"Warning: Could not find the following content to replace in {path}:\n{edit['search']}", title="Edit Warning", style="yellow"))
+
+        if not changes_made:
+            return f"No changes were applied to {path}. The specified content to replace was not found."
 
         diff_result = generate_and_apply_diff(original_content, new_content, path)
 
