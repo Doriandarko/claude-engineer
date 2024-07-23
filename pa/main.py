@@ -1036,7 +1036,24 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     assistant_response = choice.message.content or ""
                     if CONTINUATION_EXIT_PHRASE in assistant_response:
                         exit_continuation = True
-                    if hasattr(choice.message, 'tool_calls') and choice.message.tool_calls:
+                    
+                    # Check if the response is a JSON string (DeepSeek Coder format)
+                    if assistant_response.strip().startswith('```json'):
+                        try:
+                            json_content = json.loads(assistant_response.strip().split('```json')[1].strip().split('```')[0])
+                            if 'function' in json_content:
+                                tool_uses = [{
+                                    'function': {
+                                        'name': json_content['function'],
+                                        'arguments': json.dumps(json_content.get('parameters', {}))
+                                    }
+                                }]
+                            else:
+                                tool_uses = []
+                        except json.JSONDecodeError:
+                            console.print(Panel("Error decoding JSON response from DeepSeek Coder", title="JSON Error", style="bold red"))
+                            tool_uses = []
+                    elif hasattr(choice.message, 'tool_calls') and choice.message.tool_calls:
                         tool_uses = choice.message.tool_calls
                     else:
                         tool_uses = []  # Ensure tool_uses is always a list, even if empty
