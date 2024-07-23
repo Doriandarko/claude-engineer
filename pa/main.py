@@ -36,18 +36,18 @@ from prompt_toolkit.styles import Style
 
 def select_ai_provider():
     console = Console()
-    console.print(Panel("Seleccione el proveedor de IA:", title="Selección de Proveedor", expand=False))
+    console.print(Panel("Select the AI provider:", title="Provider Selection", expand=False))
     console.print("[1] Anthropic")
     console.print("[2] Open Router")
     
     while True:
-        choice = console.input("Ingrese el número de su elección (1 o 2): ")
+        choice = console.input("Enter your choice (1 or 2): ")
         if choice == "1":
             return "anthropic"
         elif choice == "2":
             return "open_router"
         else:
-            console.print("Opción inválida. Por favor, ingrese 1 o 2.", style="bold red")
+            console.print("Invalid option. Please enter 1 or 2.", style="bold red")
 
 def select_model(ai_provider):
     if ai_provider == 'anthropic':
