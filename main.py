@@ -38,14 +38,22 @@ openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 if not anthropic_api_key and not openrouter_api_key:
     raise ValueError("No API keys found. Please set either ANTHROPIC_API_KEY or OPENROUTER_API_KEY in your .env file.")
 
-use_openrouter = False
-if anthropic_api_key:
+use_openrouter = None
+while use_openrouter is None:
+    choice = input("Choose API (1 for Anthropic, 2 for OpenRouter): ").strip()
+    if choice == "1" and anthropic_api_key:
+        use_openrouter = False
+    elif choice == "2" and openrouter_api_key:
+        use_openrouter = True
+    else:
+        print("Invalid choice or API key not available. Please try again.")
+
+if not use_openrouter:
     from anthropic import Anthropic
     anthropic_client = Anthropic(api_key=anthropic_api_key)
     print("Using Anthropic API with claude-3-5-sonnet-20240620 model")
 else:
-    use_openrouter = True
-    print("Anthropic API key not found. Will use OpenRouter API.")
+    print("Using OpenRouter API")
 
 # Initialize the Tavily client
 tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
