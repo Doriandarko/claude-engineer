@@ -13,7 +13,7 @@ import io
 import re
 import difflib
 from dotenv import load_dotenv
-from openai import OpenAI
+import requests
 
 # Load environment variables from .env file
 load_dotenv()
@@ -38,11 +38,9 @@ openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 if not anthropic_api_key and not openrouter_api_key:
     raise ValueError("No API keys found. Please set either ANTHROPIC_API_KEY or OPENROUTER_API_KEY in your .env file.")
 
-import requests
-from anthropic import Anthropic
-
 use_openrouter = False
 if anthropic_api_key:
+    from anthropic import Anthropic
     anthropic_client = Anthropic(api_key=anthropic_api_key)
     print("Using Anthropic API with claude-3-5-sonnet-20240620 model")
 else:
@@ -421,15 +419,23 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-3.5-sonnet",
+                        "model": "anthropic/claude-3-sonnet-20240620",
                         "messages": messages,
                         "max_tokens": 4000,
                         "temperature": 0.7,
+                        "tools": tools,
                     }
                 )
                 response_json = response.json()
                 assistant_response = response_json['choices'][0]['message']['content']
-                function_call = None  # OpenRouter doesn't support function calling in the same way
+                function_call = response_json['choices'][0]['message'].get('function_call')
+                
+                if function_call:
+                    tool_name = function_call['name']
+                    tool_input = json.loads(function_call['arguments'])
+                    tool_response = execute_tool(tool_name, tool_input)
+                    conversation_history.append({"role": "function", "name": tool_name, "content": tool_response})
+                    return chat_with_claude(f"Tool response: {tool_response}")
             except Exception as e:
                 print_colored(f"Error calling OpenRouter API: {str(e)}", TOOL_COLOR)
                 return "I'm sorry, there was an error communicating with the AI. Please try again.", False
