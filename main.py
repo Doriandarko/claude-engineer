@@ -17,6 +17,8 @@ import asyncio
 import aiohttp
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
+from prompt_toolkit.completion import WordCompleter
+
 
 async def get_user_input(prompt="You: "):
     style = Style.from_dict({
@@ -24,6 +26,20 @@ async def get_user_input(prompt="You: "):
     })
     session = PromptSession(style=style)
     return await session.prompt_async(prompt, multiline=False)
+
+async def get_format_choice():
+    completer = WordCompleter(['Markdown', 'JSON'], ignore_case=True)
+    style = Style.from_dict({
+        'completion-menu.completion': 'bg:#008888 #ffffff',
+        'completion-menu.completion.current': 'bg:#00aaaa #000000',
+        'scrollbar.background': 'bg:#88aaaa',
+        'scrollbar.button': 'bg:#222222',
+    })
+
+    session = PromptSession(completer=completer, style=style, complete_while_typing=True)
+
+    result = await session.prompt_async('Choose format [Markdown/JSON] (Tab to select): ', multiline=False)
+    return result.lower()
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 import datetime
 import venv
@@ -877,35 +893,70 @@ async def send_to_ai_for_executing(code, execution_result):
         return f"Error analyzing code execution from 'code_execution_env': {str(e)}"
 
 
-def save_chat():
+def save_chat(format):
     # Generate filename
     now = datetime.datetime.now()
-    filename = f"Chat_{now.strftime('%H%M')}.md"
+    filename = f"Chat_{now.strftime('%H%M')}.{'md' if format == 'markdown' else 'json'}"
     
-    # Format conversation history
-    formatted_chat = "# Claude-3-Sonnet Engineer Chat Log\n\n"
-    for message in conversation_history:
-        if message['role'] == 'user':
-            formatted_chat += f"## User\n\n{message['content']}\n\n"
-        elif message['role'] == 'assistant':
-            if isinstance(message['content'], str):
-                formatted_chat += f"## Claude\n\n{message['content']}\n\n"
-            elif isinstance(message['content'], list):
+    if format == 'markdown':
+        # Format conversation history for Markdown
+        formatted_chat = "# Claude-3-Sonnet Engineer Chat Log\n\n"
+        for message in conversation_history:
+            if message['role'] == 'user':
+                formatted_chat += f"## User\n\n{message['content']}\n\n"
+            elif message['role'] == 'assistant':
+                if isinstance(message['content'], str):
+                    formatted_chat += f"## Claude\n\n{message['content']}\n\n"
+                elif isinstance(message['content'], list):
+                    for content in message['content']:
+                        if content['type'] == 'tool_use':
+                            formatted_chat += f"### Tool Use: {content['name']}\n\n```json\n{json.dumps(content['input'], indent=2)}\n```\n\n"
+                        elif content['type'] == 'text':
+                            formatted_chat += f"## Claude\n\n{content['text']}\n\n"
+            elif message['role'] == 'user' and isinstance(message['content'], list):
                 for content in message['content']:
-                    if content['type'] == 'tool_use':
-                        formatted_chat += f"### Tool Use: {content['name']}\n\n```json\n{json.dumps(content['input'], indent=2)}\n```\n\n"
-                    elif content['type'] == 'text':
-                        formatted_chat += f"## Claude\n\n{content['text']}\n\n"
-        elif message['role'] == 'user' and isinstance(message['content'], list):
-            for content in message['content']:
-                if content['type'] == 'tool_result':
-                    formatted_chat += f"### Tool Result\n\n```\n{content['content']}\n```\n\n"
-    
-    # Save to file
-    with open(filename, 'w', encoding='utf-8') as f:
-        f.write(formatted_chat)
+                    if content['type'] == 'tool_result':
+                        formatted_chat += f"### Tool Result\n\n```\n{content['content']}\n```\n\n"
+        
+        # Save to file
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(formatted_chat)
+    else:
+        # Save as JSON
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(conversation_history, f, indent=2, ensure_ascii=False)
     
     return filename
+
+def load_chat(filename):
+    global conversation_history, main_model_tokens, tool_checker_tokens, code_editor_tokens, code_execution_tokens
+    try:
+        with open(filename, 'r', encoding='utf-8') as f:
+            loaded_data = json.load(f)
+        
+        # Validate the loaded data structure
+        if not isinstance(loaded_data, list) or not all(isinstance(item, dict) for item in loaded_data):
+            raise ValueError("Invalid chat file format")
+        
+        conversation_history = loaded_data
+        
+        # Reset token counts
+        main_model_tokens = {'input': 0, 'output': 0}
+        tool_checker_tokens = {'input': 0, 'output': 0}
+        code_editor_tokens = {'input': 0, 'output': 0}
+        code_execution_tokens = {'input': 0, 'output': 0}
+        
+        console.print(Panel(f"Chat loaded from {filename}", title="Chat Loaded", style="bold green"))
+        console.print(Panel("Token usage information will be recalculated.", title="Recalculation", style="bold yellow"))
+        display_token_usage()
+        return True
+    except FileNotFoundError:
+        console.print(Panel(f"File not found: {filename}", title="Error", style="bold red"))
+    except json.JSONDecodeError:
+        console.print(Panel(f"Invalid JSON in file: {filename}", title="Error", style="bold red"))
+    except Exception as e:
+        console.print(Panel(f"Error loading chat: {str(e)}", title="Error", style="bold red"))
+    return False
 
 
 
@@ -1200,7 +1251,8 @@ async def main():
     console.print("Type 'image' to include an image in your message.")
     console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
     console.print("Type 'reset' to clear the conversation history.")
-    console.print("Type 'save chat' to save the conversation to a Markdown file.")
+    console.print("Type 'save chat' to save the conversation (you'll be prompted to choose between Markdown and JSON formats).")
+    console.print("Type 'load' to load a previously saved JSON chat file.")
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
     while True:
@@ -1215,8 +1267,24 @@ async def main():
             continue
 
         if user_input.lower() == 'save chat':
-            filename = save_chat()
+            format_choice = await get_format_choice()
+            if format_choice is None:
+                console.print(Panel("Chat save cancelled.", title="Save Cancelled", style="yellow"))
+                continue
+            filename = save_chat(format=format_choice)
             console.print(Panel(f"Chat saved to {filename}", title="Chat Saved", style="bold green"))
+            continue
+
+        if user_input.lower() == 'load':
+            load_path = (await get_user_input("Drag and drop your JSON file here, then press enter: ")).strip().replace("'", "")
+
+            if os.path.isfile(load_path):
+                if load_chat(load_path):
+                    console.print(Panel(f"Chat loaded from {load_path}", title="Chat Loaded", style="bold green"))
+                else:
+                    console.print(Panel("Failed to load chat. Please check the file and try again.", title="Load Error", style="bold red"))
+            else:
+                console.print(Panel("Invalid file path. Please try again.", title="Error", style="bold red"))
             continue
 
         if user_input.lower() == 'image':
