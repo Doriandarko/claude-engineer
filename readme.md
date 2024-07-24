@@ -1,10 +1,11 @@
 # 🤖 Claude Engineer
 
-Claude Engineer is an interactive command-line interface (CLI) that leverages the power of Anthropic's Claude-3.5-Sonnet model to assist with software development tasks. This tool combines the capabilities of a large language model with practical file system operations and web search functionality.
+Claude Engineer is an interactive command-line interface (CLI) that leverages the power of Anthropic's Claude-3.5-Sonnet model or OpenRouter API to assist with software development tasks. This tool combines the capabilities of advanced language models with practical file system operations and web search functionality.
 
 ## ✨ Features
 
-- 💬 Interactive chat interface with Claude-3.5-Sonnet
+- 💬 Interactive chat interface with Claude-3.5-Sonnet or OpenRouter models
+- 🔀 Choice between Anthropic and OpenRouter APIs at startup
 - 📁 File system operations (create folders, files, read/write files)
 - 🔍 Web search capabilities using Tavily API
 - 🌈 Syntax highlighting for code snippets
@@ -15,7 +16,7 @@ Claude Engineer is an interactive command-line interface (CLI) that leverages th
 - 🔄 Iteration tracking in automode
 - 📊 Diff-based file editing for precise code modifications
 - 🔐 Environment variable management for secure configuration
-- 🔄 OpenRouter API integration for improved AI capabilities
+- 🔄 OpenRouter API integration for improved AI capabilities and model flexibility
 
 ## 🛠️ Installation
 
@@ -47,6 +48,11 @@ Run the main script to start the Claude Engineer interface:
 python main.py
 ```
 
+When starting the script, you'll be prompted to choose between the Anthropic API and OpenRouter API:
+```
+Choose API (1 for Anthropic, 2 for OpenRouter):
+```
+
 Once started, you can interact with Claude Engineer by typing your queries or commands. Some example interactions:
 
 - "Create a new Python project structure for a web application"
@@ -57,7 +63,7 @@ Once started, you can interact with Claude Engineer by typing your queries or co
 Special commands:
 - Type 'exit' to end the conversation and close the application.
 - Type 'image' to include an image in your message.
-- Type 'automode' plus the max amount of iterations to enter Autonomous mode.
+- Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.
 - Press Ctrl+C at any time to exit the automode to return to regular chat.
 
 ### 🤖 Automode
@@ -70,7 +76,7 @@ Automode allows Claude to work autonomously on complex tasks. When in automode:
 4. Automode continues until goals are completed or the maximum number of iterations is reached.
 
 To use automode:
-1. Type 'automode' when prompted for input.
+1. Type 'automode [number]' when prompted for input, where [number] is the maximum number of iterations.
 2. Provide your request when prompted.
 3. Claude will work autonomously, providing updates after each iteration.
 4. Automode exits when the task is completed or after reaching the maximum number of iterations.
@@ -85,11 +91,11 @@ Claude Engineer supports diff-based file editing, allowing for more precise and 
 
 This feature enhances Claude's ability to make targeted improvements to your codebase while maintaining the integrity of existing functionality.
 
-### 🔐 Environment Variables and OpenRouter Integration
+### 🔐 Environment Variables and API Integration
 
-Claude Engineer now uses environment variables for secure configuration management. The `.env` file stores sensitive information like API keys, which are loaded using the `python-dotenv` library.
+Claude Engineer uses environment variables for secure configuration management. The `.env` file stores sensitive information like API keys, which are loaded using the `python-dotenv` library.
 
-The integration with OpenRouter API provides improved AI capabilities and flexibility in choosing different language models.
+The integration with both Anthropic and OpenRouter APIs provides improved AI capabilities and flexibility in choosing different language models. You can switch between these APIs at the start of each session, allowing you to leverage the strengths of different models as needed.
 
 Note: Claude will only have access to the files in the root folders of the script or any folder path you provide it.
 
