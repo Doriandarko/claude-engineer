@@ -427,7 +427,7 @@ def chat_with_claude(user_input, image_path=None, current_iteration=None, max_it
                         "Content-Type": "application/json"
                     },
                     json={
-                        "model": "anthropic/claude-3-sonnet-20240620",
+                        "model": "anthropic/claude-3.5-sonnet",
                         "messages": messages,
                         "max_tokens": 4000,
                         "temperature": 0.7,
