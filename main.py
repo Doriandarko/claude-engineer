@@ -60,6 +60,16 @@ load_dotenv()
 anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 if not anthropic_api_key:
     raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
+
+# Read TEMPERATURE from environment variables
+temperature = os.getenv("TEMPERATURE")
+if temperature is not None:
+    try:
+        temperature = float(temperature)
+    except ValueError:
+        print("Invalid TEMPERATURE value in .env file. Using API default.")
+        temperature = None
+
 client = Anthropic(api_key=anthropic_api_key)
 
 # Initialize the Tavily client
@@ -362,7 +372,8 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
             extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=[
                 {"role": "user", "content": "Generate SEARCH/REPLACE blocks for the necessary changes."}
-            ]
+            ],
+            **({'temperature': temperature} if temperature is not None else {})
         )
         # Update token usage for code editor
         code_editor_tokens['input'] += response.usage.input_tokens
@@ -861,7 +872,8 @@ async def send_to_ai_for_executing(code, execution_result):
             system=system_prompt,
             messages=[
                 {"role": "user", "content": f"Analyze this code execution from the 'code_execution_env' virtual environment:\n\nCode:\n{code}\n\nExecution Result:\n{execution_result}"}
-            ]
+            ],
+            **({'temperature': temperature} if temperature is not None else {})
         )
 
         # Update token usage for code execution
@@ -977,7 +989,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=messages,
             tools=tools,
-            tool_choice={"type": "auto"}
+            tool_choice={"type": "auto"},
+            **({'temperature': temperature} if temperature is not None else {})
         )
         # Update token usage for MAINMODEL
         main_model_tokens['input'] += response.usage.input_tokens
@@ -1074,7 +1087,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
                 messages=messages,
                 tools=tools,
-                tool_choice={"type": "auto"}
+                tool_choice={"type": "auto"},
+                **({'temperature': temperature} if temperature is not None else {})
             )
             # Update token usage for tool checker
             tool_checker_tokens['input'] += tool_response.usage.input_tokens
@@ -1202,6 +1216,8 @@ async def main():
     console.print("Type 'reset' to clear the conversation history.")
     console.print("Type 'save chat' to save the conversation to a Markdown file.")
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
+    if temperature is not None:
+        console.print(f"Model temperature set to: {temperature}")
 
     while True:
         user_input = await get_user_input()
