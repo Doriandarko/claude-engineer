@@ -1,5 +1,6 @@
 import os
 import openrouter
+import openrouter
 from dotenv import load_dotenv
 import json
 from tavily import TavilyClient
@@ -55,6 +56,7 @@ def setup_virtual_environment() -> Tuple[str, str]:
 
 
 openrouter.setup()
+openrouter.setup()
 # Load environment variables from .env file
 load_dotenv()
 
@@ -63,6 +65,7 @@ anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 if not anthropic_api_key:
     raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
 client = Anthropic(api_key=anthropic_api_key)
+openrouter_client = openrouter.Client(api_key=os.getenv("OPENROUTER_API_KEY"))
 openrouter_client = openrouter.Client(api_key=os.getenv("OPENROUTER_API_KEY"))
 # Initialize the Tavily client
 tavily_api_key = os.getenv("TAVILY_API_KEY")
@@ -307,7 +310,11 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
         if openrouter.is_active():
             memory_context = openrouter.prepare_context([f"Memory {i+1}:\n{mem}" for i, mem in enumerate(code_editor_memory)])
         else:
+            if openrouter.is_active():
+            memory_context = openrouter.prepare_context([f"Memory {i+1}:\n{mem}" for i, mem in enumerate(code_editor_memory)])
+        else:
             memory_context = "\n".join([f"Memory {i+1}:\n{mem}" for i, mem in enumerate(code_editor_memory)])
+
 
 
         # Prepare full file contents context, excluding the file being edited if it's already in code_editor_files
@@ -324,6 +331,10 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
 
         2. Carefully analyze the specific instructions:
         {instructions}
+        """
+        if openrouter.is_active():
+            system_prompt = openrouter.adapt_prompt(system_prompt)
+
         """
         if openrouter.is_active():
             system_prompt = openrouter.adapt_prompt(system_prompt)
@@ -397,7 +408,11 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
         if openrouter.is_active():
             openrouter.add_file(file_path)
         else:
+            if openrouter.is_active():
+            openrouter.add_file(file_path)
+        else:
             code_editor_files.add(file_path)
+
 
 
         return edit_instructions
@@ -589,7 +604,11 @@ def read_multiple_files(paths):
     global file_contents
     results = []
     for path in paths:
-        try:
+        if openrouter.is_active():
+            response = openrouter_client.messages.create(
+                model=openrouter.get_model(),
+                max_tokens=openrouter.get_max_tokens(),
+                system=openrouter.update_system_prompt(current_iteration, max_iterations),
             with open(path, 'r') as f:
                 content = f.read()
             file_contents[path] = content
@@ -995,7 +1014,12 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         # MAINMODEL call, which maintains context
         response = client.messages.create(
             model=MAINMODEL,
-            max_tokens=8000,
+            max_tokens=openrouter.get_max_tokens() if openrouter.is_active() else 8000,
+            system=system_prompt,
+            extra_headers=openrouter.get_extra_headers() if openrouter.is_active() else {"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
+            messages=openrouter.prepare_messages([
+                {"role": "user", "content": "Generate SEARCH/REPLACE blocks for the necessary changes."}
+            ]) if openrouter.is_active() else [
             system=update_system_prompt(current_iteration, max_iterations),
             extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
             messages=messages,
@@ -1096,7 +1120,12 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 system=openrouter.update_system_prompt(current_iteration, max_iterations),
             tool_response = client.messages.create(
                 model=TOOLCHECKERMODEL,
-                max_tokens=8000,
+                max_tokens=openrouter.get_max_tokens() if openrouter.is_active() else 8000,
+            system=system_prompt,
+            extra_headers=openrouter.get_extra_headers() if openrouter.is_active() else {"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
+            messages=openrouter.prepare_messages([
+                {"role": "user", "content": "Generate SEARCH/REPLACE blocks for the necessary changes."}
+            ]) if openrouter.is_active() else [
                 system=update_system_prompt(current_iteration, max_iterations),
                 extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
                 messages=messages,
