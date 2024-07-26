@@ -360,7 +360,7 @@ Then
 python ollama-eng.py
 ```
 
-### 🚨IMPORTANT NOTE on Safety when using OLLAMA ENGINEER!!
+### 🚨Important note on safety when using Ollama Engineer!
 
 Be extra careful if you ever let these local models run code on your machine, especially using the executing code tool. It may brick your machine. I disabled the tool execution completely for OLLAMA engineer but if you want to implement it again based on the original script use at your own discretion.
 
