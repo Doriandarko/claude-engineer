@@ -1,5 +1,7 @@
+anthropic
+python-dotenv
 tavily-python
 Pillow
-requests
-anthropic
 rich
+aiohttp
+prompt_toolkit
