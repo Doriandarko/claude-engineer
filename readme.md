@@ -362,7 +362,7 @@ python ollama-eng.py
 
 ### 🚨IMPORTANT NOTE on Safety when using OLLAMA ENGINEER!!
 
-Be extra careful if you ever let these models run code on your machine, especially using the executing code tool. It may brick your machine (I would disable that tool completely but leave it out for people to experiment). Use at your own discretion.
+Be extra careful if you ever let these local models run code on your machine, especially using the executing code tool. It may brick your machine. I disabled the tool execution completely for OLLAMA engineer but if you want to implement it again based on the original script use at your own discretion.
 
 ## Star History
 
