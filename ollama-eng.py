@@ -4,10 +4,11 @@ import json
 from tavily import TavilyClient
 import re
 import ollama
-import json
 import asyncio
 import difflib
 import time
+import logging
+from typing import Optional, Dict, Any
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -25,33 +26,6 @@ async def get_user_input(prompt="You: "):
     return await session.prompt_async(prompt, multiline=False)
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 import datetime
-import venv
-import subprocess
-import sys
-import signal
-import logging
-from typing import Tuple, Optional
-
-
-def setup_virtual_environment() -> Tuple[str, str]:
-    venv_name = "code_execution_env"
-    venv_path = os.path.join(os.getcwd(), venv_name)
-    try:
-        if not os.path.exists(venv_path):
-            venv.create(venv_path, with_pip=True)
-        
-        # Activate the virtual environment
-        if sys.platform == "win32":
-            activate_script = os.path.join(venv_path, "Scripts", "activate.bat")
-        else:
-            activate_script = os.path.join(venv_path, "bin", "activate")
-        
-        return venv_path, activate_script
-    except Exception as e:
-        logging.error(f"Error setting up virtual environment: {str(e)}")
-        raise
-
-
 # Load environment variables from .env file
 load_dotenv()
 
@@ -101,11 +75,10 @@ MAINMODEL = "mistral-nemo"  # Maintains conversation history and file contents
 # Models that don't maintain context (memory is reset after each call)
 TOOLCHECKERMODEL = "mistral-nemo"
 CODEEDITORMODEL = "mistral-nemo"
-CODEEXECUTIONMODEL = "mistral-nemo"
 
 # System prompts
 BASE_SYSTEM_PROMPT = """
-You are Ollama Engineer, an AI assistant powered by Meta's Llama 3.1 model, specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
+You are Ollama Engineer, an AI assistant powered Ollama models, specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
 
 1. Creating and managing project structures
 2. Writing, debugging, and improving code across multiple languages
@@ -499,50 +472,6 @@ def generate_diff(original, new, path):
 
     return highlighted_diff
 
-async def execute_code(code, timeout=10):
-    global running_processes
-    venv_path, activate_script = setup_virtual_environment()
-    
-    # Generate a unique identifier for this process
-    process_id = f"process_{len(running_processes)}"
-    
-    # Write the code to a temporary file
-    with open(f"{process_id}.py", "w") as f:
-        f.write(code)
-    
-    # Prepare the command to run the code
-    if sys.platform == "win32":
-        command = f'"{activate_script}" && python3 {process_id}.py'
-    else:
-        command = f'source "{activate_script}" && python3 {process_id}.py'
-    
-    # Create a process to run the command
-    process = await asyncio.create_subprocess_shell(
-        command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        shell=True,
-        preexec_fn=None if sys.platform == "win32" else os.setsid
-    )
-    
-    # Store the process in our global dictionary
-    running_processes[process_id] = process
-    
-    try:
-        # Wait for initial output or timeout
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
-        stdout = stdout.decode()
-        stderr = stderr.decode()
-        return_code = process.returncode
-    except asyncio.TimeoutError:
-        # If we timeout, it means the process is still running
-        stdout = "Process started and running in the background."
-        stderr = ""
-        return_code = "Running"
-    
-    execution_result = f"Process ID: {process_id}\n\nStdout:\n{stdout}\n\nStderr:\n{stderr}\n\nReturn Code: {return_code}"
-    return process_id, execution_result
-
 def read_file(path):
     global file_contents
     try:
@@ -579,20 +508,6 @@ def tavily_search(query):
         return response
     except Exception as e:
         return f"Error performing search: {str(e)}"
-
-def stop_process(process_id):
-    global running_processes
-    if process_id in running_processes:
-        process = running_processes[process_id]
-        if sys.platform == "win32":
-            process.terminate()
-        else:
-            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-        del running_processes[process_id]
-        return f"Process {process_id} has been stopped."
-    else:
-        return f"No running process found with ID {process_id}."
-
 
 tools = [
     {
@@ -655,40 +570,6 @@ tools = [
                     }
                 },
                 "required": ["path", "instructions", "project_context"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "execute_code",
-            "description": "Execute Python code in the 'code_execution_env' virtual environment and return the output",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "The Python code to execute in the 'code_execution_env' virtual environment"
-                    }
-                },
-                "required": ["code"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "stop_process",
-            "description": "Stop a running process by its ID",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "process_id": {
-                        "type": "string",
-                        "description": "The ID of the process to stop"
-                    }
-                },
-                "required": ["process_id"]
             }
         }
     },
@@ -808,15 +689,6 @@ async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
             result = list_files(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
             result = tavily_search(tool_input["query"])
-        elif tool_name == "stop_process":
-            result = stop_process(tool_input["process_id"])
-        elif tool_name == "execute_code":
-            process_id, execution_result = await execute_code(tool_input["code"])
-            analysis_task = asyncio.create_task(send_to_ai_for_executing(tool_input["code"], execution_result))
-            analysis = await analysis_task
-            result = f"{execution_result}\n\nAnalysis:\n{analysis}"
-            if process_id in running_processes:
-                result += "\n\nNote: The process is still running in the background."
         else:
             is_error = True
             result = f"Unknown tool: {tool_name}"
@@ -826,15 +698,17 @@ async def execute_tool(tool_call: Dict[str, Any]) -> Dict[str, Any]:
             "is_error": is_error
         }
     except KeyError as e:
-        logging.error(f"Missing required parameter {str(e)} for tool {tool_name}")
+        error_message = f"Missing required parameter {str(e)} for tool {tool_name}"
+        logging.error(error_message)
         return {
-            "content": f"Error: Missing required parameter {str(e)} for tool {tool_name}",
+            "content": f"Error: {error_message}",
             "is_error": True
         }
     except Exception as e:
-        logging.error(f"Error executing tool {tool_name}: {str(e)}")
+        error_message = f"Error executing tool {tool_name}: {str(e)}"
+        logging.error(error_message)
         return {
-            "content": f"Error executing tool {tool_name}: {str(e)}",
+            "content": f"Error: {error_message}",
             "is_error": True
         }
 
@@ -856,53 +730,6 @@ async def execute_goals(goals):
 async def run_goals(response):
     goals = parse_goals(response)
     await execute_goals(goals)
-
-
-async def send_to_ai_for_executing(code, execution_result):
-    global code_execution_tokens
-
-    try:
-        system_prompt = f"""
-        You are an AI code execution agent. Your task is to analyze the provided code and its execution result from the 'code_execution_env' virtual environment, then provide a concise summary of what worked, what didn't work, and any important observations. Follow these steps:
-
-        1. Review the code that was executed in the 'code_execution_env' virtual environment:
-        {code}
-
-        2. Analyze the execution result from the 'code_execution_env' virtual environment:
-        {execution_result}
-
-        3. Provide a brief summary of:
-           - What parts of the code executed successfully in the virtual environment
-           - Any errors or unexpected behavior encountered in the virtual environment
-           - Potential improvements or fixes for issues, considering the isolated nature of the environment
-           - Any important observations about the code's performance or output within the virtual environment
-           - If the execution timed out, explain what this might mean (e.g., long-running process, infinite loop)
-
-        Be concise and focus on the most important aspects of the code execution within the 'code_execution_env' virtual environment.
-
-        IMPORTANT: PROVIDE ONLY YOUR ANALYSIS AND OBSERVATIONS. DO NOT INCLUDE ANY PREFACING STATEMENTS OR EXPLANATIONS OF YOUR ROLE.
-        """
-
-        response = client.messages.create(
-            model=CODEEXECUTIONMODEL,
-            max_tokens=2000,
-            system=system_prompt,
-            messages=[
-                {"role": "user", "content": f"Analyze this code execution from the 'code_execution_env' virtual environment:\n\nCode:\n{code}\n\nExecution Result:\n{execution_result}"}
-            ]
-        )
-
-        # Update token usage for code execution
-        code_execution_tokens['input'] += response.usage.input_tokens
-        code_execution_tokens['output'] += response.usage.output_tokens
-
-        analysis = response.content[0].text
-
-        return analysis
-
-    except Exception as e:
-        console.print(f"Error in AI code execution analysis: {str(e)}", style="bold red")
-        return f"Error analyzing code execution from 'code_execution_env': {str(e)}"
 
 
 def save_chat():
@@ -1184,4 +1011,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
