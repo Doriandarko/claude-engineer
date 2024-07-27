@@ -1,0 +1,5 @@
+.env*
+!.env.example
+
+.python-version
+*.pyc
