@@ -340,6 +340,30 @@ graph TD
 
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
 
+## 🦙 Ollama eng is here
+
+You can now have the power of this script, completely locally using Ollama and any of the supported function calling models:
+Llama 3.1
+Mistral Nemo
+Firefunction v2
+Command-R +
+
+Before running make sure you install the latest version of the Ollama app and 
+
+```
+pip install ollama
+```
+
+Then
+
+```
+python ollama-eng.py
+```
+
+### 🚨Important note on safety when using Ollama Engineer!
+
+Be extra careful if you ever let these local models run code on your machine, especially using the executing code tool. It may brick your machine. I disabled the tool execution completely for OLLAMA engineer but if you want to implement it again based on the original script use at your own discretion.
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Doriandarko/claude-engineer&type=Date)](https://star-history.com/#Doriandarko/claude-engineer&Date)
