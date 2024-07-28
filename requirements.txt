@@ -1,6 +1,7 @@
 anthropic
-colorama
-pygments
-tavily-python
 python-dotenv
+tavily-python
 Pillow
+rich
+aiohttp
+prompt_toolkit
