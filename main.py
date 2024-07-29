@@ -14,6 +14,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 from dotenv import load_dotenv
+import asyncio
 
 # Add these constants at the top of the file
 CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
