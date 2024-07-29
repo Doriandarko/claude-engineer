@@ -352,6 +352,16 @@ aws sso login
 
 Make sure to **remove** the `ANTHROPIC_API_KEY` from your `.env` file. If an `ANTHROPIC_API_KEY`, it'll always default to using the API Key first.
 
+You can customize the model that Amazon Bedrock uses by editing the following lines in the `main.py` file. Claude models used by Amazon Bedrock will start with `anthropic.`:
+```
+MAINMODEL = "claude-3-5-sonnet-20240620" if anthropic_api_key else "anthropic.claude-3-5-sonnet-20240620-v1:0"  # Maintains conversation history and file contents
+
+# Models that don't maintain context (memory is reset after each call)
+TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620" if anthropic_api_key else "anthropic.claude-3-5-sonnet-20240620-v1:0"
+CODEEDITORMODEL = "claude-3-5-sonnet-20240620" if anthropic_api_key else "anthropic.claude-3-5-sonnet-20240620-v1:0"
+CODEEXECUTIONMODEL = "claude-3-5-sonnet-20240620" if anthropic_api_key else "anthropic.claude-3-5-sonnet-20240620-v1:0"
+```
+
 ## 🦙 Ollama eng is here
 
 You can now have the power of this script, completely locally using Ollama and any of the supported function calling models:
