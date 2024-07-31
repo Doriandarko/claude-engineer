@@ -244,52 +244,6 @@ def create_file(path, content=""):
 def highlight_diff(diff_text):
     return Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
 
-def generate_and_apply_diff(original_content, new_content, path):
-    diff = list(difflib.unified_diff(
-        original_content.splitlines(keepends=True),
-        new_content.splitlines(keepends=True),
-        fromfile=f"a/{path}",
-        tofile=f"b/{path}",
-        n=3
-    ))
-
-    if not diff:
-        return "No changes detected."
-
-    try:
-        with open(path, 'w') as f:
-            f.writelines(new_content)
-
-        diff_text = ''.join(diff)
-        highlighted_diff = highlight_diff(diff_text)
-
-        diff_panel = Panel(
-            highlighted_diff,
-            title=f"Changes in {path}",
-            expand=False,
-            border_style="cyan"
-        )
-
-        console.print(diff_panel)
-
-        added_lines = sum(1 for line in diff if line.startswith('+') and not line.startswith('+++'))
-        removed_lines = sum(1 for line in diff if line.startswith('-') and not line.startswith('---'))
-
-        summary = f"Changes applied to {path}:\n"
-        summary += f"  Lines added: {added_lines}\n"
-        summary += f"  Lines removed: {removed_lines}\n"
-
-        return summary
-
-    except Exception as e:
-        error_panel = Panel(
-            f"Error: {str(e)}",
-            title="Error Applying Changes",
-            style="bold red"
-        )
-        console.print(error_panel)
-        return f"Error applying changes: {str(e)}"
-
 
 async def generate_edit_instructions(file_path, file_content, instructions, project_context, full_file_contents):
     global code_editor_tokens, code_editor_memory, code_editor_files
@@ -807,20 +761,6 @@ def encode_image_to_base64(image_path):
             return base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
     except Exception as e:
         return f"Error encoding image: {str(e)}"
-
-def parse_goals(response):
-    goals = re.findall(r'Goal \d+: (.+)', response)
-    return goals
-
-def execute_goals(goals):
-    global automode
-    for i, goal in enumerate(goals, 1):
-        console.print(Panel(f"Executing Goal {i}: {goal}", title="Goal Execution", style="bold yellow"))
-        response, _ = chat_with_claude(f"Continue working on goal: {goal}")
-        if CONTINUATION_EXIT_PHRASE in response:
-            automode = False
-            console.print(Panel("Exiting automode.", title="Automode", style="bold green"))
-            break
 
 
 async def send_to_ai_for_executing(code, execution_result):
