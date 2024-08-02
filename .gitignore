@@ -1,0 +1,3 @@
+# Project-specific ignores
+.env
+code_execution_env/
