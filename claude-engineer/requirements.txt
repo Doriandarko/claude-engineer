@@ -5,3 +5,5 @@ Pillow
 rich
 aiohttp
 prompt_toolkit
+pymongo
+ollama

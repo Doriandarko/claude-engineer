@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  tinyproxy:
+    build: ./tinyproxy
+    networks:
+      - proxy_network
+    environment:
+      - ALLOW=host.docker.internal
+      - OLLAMA_HOST
+
+  claude-engineer:
+    build: ./claude-engineer
+    volumes:
+      - ./data:/app/data
+    networks:
+      - isolated_network
+      - proxy_network
+    ports:
+      - "8080:7681"  # Expose ttyd on port 8080 (or any other port you choose)
+    depends_on:
+      - tinyproxy
+    environment:
+      - HTTP_PROXY=http://tinyproxy:8888
+      - HTTPS_PROXY=http://tinyproxy:8888
+      - OLLAMA_MAIN_MODEL
+      - OLLAMA_TOOLCHECKER_MODEL
+      - OLLAMA_CODE_MODEL
+      - OLLAMA_CTX_WINDOW
+      - ANTHROPIC_API_KEY
+      - TAVILY_API_KEY
+      - OLLAMA_HOST
+    tty: true
+    stdin_open: true
+
+networks:
+  isolated_network:
+    driver: bridge
+
+  proxy_network:
+    driver: bridge
