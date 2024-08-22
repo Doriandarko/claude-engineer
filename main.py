@@ -96,11 +96,7 @@ CONTINUATION_EXIT_PHRASE = "AUTOMODE_COMPLETE"
 MAX_CONTINUATION_ITERATIONS = 25
 MAX_CONTEXT_TOKENS = 200000  # Reduced to 200k tokens for context window
 
-# Models
-# Models that maintain context memory across interactions
-MAINMODEL = "claude-3-5-sonnet-20240620"  # Maintains conversation history and file contents
-
-# Models that don't maintain context (memory is reset after each call)
+MAINMODEL = "claude-3-5-sonnet-20240620"
 TOOLCHECKERMODEL = "claude-3-5-sonnet-20240620"
 CODEEDITORMODEL = "claude-3-5-sonnet-20240620"
 CODEEXECUTIONMODEL = "claude-3-5-sonnet-20240620"
@@ -301,19 +297,26 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
         If no changes are needed, return an empty list.
         """
 
-        # Make the API call to CODEEDITORMODEL (context is not maintained except for code_editor_memory)
-        response = client.messages.create(
+        response = client.beta.prompt_caching.messages.create(
             model=CODEEDITORMODEL,
             max_tokens=8000,
-            system=system_prompt,
-            extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"}
+                }
+            ],
             messages=[
                 {"role": "user", "content": "Generate SEARCH/REPLACE blocks for the necessary changes."}
-            ]
+            ],
+            extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
         )
         # Update token usage for code editor
         code_editor_tokens['input'] += response.usage.input_tokens
         code_editor_tokens['output'] += response.usage.output_tokens
+        code_editor_tokens['cache_creation'] = response.usage.cache_creation_input_tokens
+        code_editor_tokens['cache_read'] = response.usage.cache_read_input_tokens
 
         # Parse the response to extract SEARCH/REPLACE blocks
         edit_instructions = parse_search_replace_blocks(response.content[0].text)
@@ -788,18 +791,27 @@ async def send_to_ai_for_executing(code, execution_result):
         IMPORTANT: PROVIDE ONLY YOUR ANALYSIS AND OBSERVATIONS. DO NOT INCLUDE ANY PREFACING STATEMENTS OR EXPLANATIONS OF YOUR ROLE.
         """
 
-        response = client.messages.create(
+        response = client.beta.prompt_caching.messages.create(
             model=CODEEXECUTIONMODEL,
             max_tokens=2000,
-            system=system_prompt,
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"}
+                }
+            ],
             messages=[
                 {"role": "user", "content": f"Analyze this code execution from the 'code_execution_env' virtual environment:\n\nCode:\n{code}\n\nExecution Result:\n{execution_result}"}
-            ]
+            ],
+            extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
         )
 
         # Update token usage for code execution
         code_execution_tokens['input'] += response.usage.input_tokens
         code_execution_tokens['output'] += response.usage.output_tokens
+        code_execution_tokens['cache_creation'] = response.usage.cache_creation_input_tokens
+        code_execution_tokens['cache_read'] = response.usage.cache_read_input_tokens
 
         analysis = response.content[0].text
 
@@ -845,7 +857,6 @@ def save_chat():
 async def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
     global conversation_history, automode, main_model_tokens
 
-    # This function uses MAINMODEL, which maintains context across calls
     current_conversation = []
 
     if image_path:
@@ -902,19 +913,27 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     messages = filtered_conversation_history + current_conversation
 
     try:
-        # MAINMODEL call, which maintains context
-        response = client.messages.create(
+        # MAINMODEL call with prompt caching
+        response = client.beta.prompt_caching.messages.create(
             model=MAINMODEL,
             max_tokens=8000,
-            system=update_system_prompt(current_iteration, max_iterations),
-            extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
+            system=[
+                {
+                    "type": "text",
+                    "text": update_system_prompt(current_iteration, max_iterations),
+                    "cache_control": {"type": "ephemeral"}
+                }
+            ],
             messages=messages,
             tools=tools,
-            tool_choice={"type": "auto"}
+            tool_choice={"type": "auto"},
+            extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
         )
         # Update token usage for MAINMODEL
         main_model_tokens['input'] += response.usage.input_tokens
         main_model_tokens['output'] += response.usage.output_tokens
+        main_model_tokens['cache_creation'] = response.usage.cache_creation_input_tokens
+        main_model_tokens['cache_read'] = response.usage.cache_read_input_tokens
     except APIStatusError as e:
         if e.status_code == 429:
             console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
@@ -1062,19 +1081,23 @@ def display_token_usage():
     table.add_column("Model", style="cyan")
     table.add_column("Input", style="magenta")
     table.add_column("Output", style="magenta")
+    table.add_column("Cache Write", style="blue")
+    table.add_column("Cache Read", style="blue")
     table.add_column("Total", style="green")
     table.add_column(f"% of Context ({MAX_CONTEXT_TOKENS:,})", style="yellow")
     table.add_column("Cost ($)", style="red")
 
     model_costs = {
-        "Main Model": {"input": 3.00, "output": 15.00, "has_context": True},
-        "Tool Checker": {"input": 3.00, "output": 15.00, "has_context": False},
-        "Code Editor": {"input": 3.00, "output": 15.00, "has_context": True},
-        "Code Execution": {"input": 3.00, "output": 15.00, "has_context": False}
+        "Main Model": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": True},
+        "Tool Checker": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": False},
+        "Code Editor": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": True},
+        "Code Execution": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": False}
     }
 
     total_input = 0
     total_output = 0
+    total_cache_write = 0
+    total_cache_read = 0
     total_cost = 0
     total_context_tokens = 0
 
@@ -1084,14 +1107,20 @@ def display_token_usage():
                           ("Code Execution", code_execution_tokens)]:
         input_tokens = tokens['input']
         output_tokens = tokens['output']
-        total_tokens = input_tokens + output_tokens
+        cache_write_tokens = tokens.get('cache_creation', 0)
+        cache_read_tokens = tokens.get('cache_read', 0)
+        total_tokens = input_tokens + output_tokens + cache_write_tokens + cache_read_tokens
 
         total_input += input_tokens
         total_output += output_tokens
+        total_cache_write += cache_write_tokens
+        total_cache_read += cache_read_tokens
 
         input_cost = (input_tokens / 1_000_000) * model_costs[model]["input"]
         output_cost = (output_tokens / 1_000_000) * model_costs[model]["output"]
-        model_cost = input_cost + output_cost
+        cache_write_cost = (cache_write_tokens / 1_000_000) * model_costs[model]["cache_write"]
+        cache_read_cost = (cache_read_tokens / 1_000_000) * model_costs[model]["cache_read"]
+        model_cost = input_cost + output_cost + cache_write_cost + cache_read_cost
         total_cost += model_cost
 
         if model_costs[model]["has_context"]:
@@ -1104,18 +1133,22 @@ def display_token_usage():
             model,
             f"{input_tokens:,}",
             f"{output_tokens:,}",
+            f"{cache_write_tokens:,}",
+            f"{cache_read_tokens:,}",
             f"{total_tokens:,}",
             f"{percentage:.2f}%" if model_costs[model]["has_context"] else "Doesn't save context",
             f"${model_cost:.3f}"
         )
 
-    grand_total = total_input + total_output
+    grand_total = total_input + total_output + total_cache_write + total_cache_read
     total_percentage = (total_context_tokens / MAX_CONTEXT_TOKENS) * 100
 
     table.add_row(
         "Total",
         f"{total_input:,}",
         f"{total_output:,}",
+        f"{total_cache_write:,}",
+        f"{total_cache_read:,}",
         f"{grand_total:,}",
         "",  # Empty string for the "% of Context" column
         f"${total_cost:.3f}",
