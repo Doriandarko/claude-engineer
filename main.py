@@ -17,6 +17,7 @@ import asyncio
 import aiohttp
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
+import difflib
 
 async def get_user_input(prompt="You: "):
     style = Style.from_dict({
@@ -76,6 +77,8 @@ main_model_tokens = {'input': 0, 'output': 0}
 tool_checker_tokens = {'input': 0, 'output': 0}
 code_editor_tokens = {'input': 0, 'output': 0}
 code_execution_tokens = {'input': 0, 'output': 0}
+
+USE_FUZZY_SEARCH = True
 
 # Set up the conversation memory (maintains context for MAINMODEL)
 conversation_history = []
@@ -342,18 +345,41 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
 
 
 
-def parse_search_replace_blocks(response_text):
+def parse_search_replace_blocks(response_text, use_fuzzy=USE_FUZZY_SEARCH):
+    """
+    Parse the response text for SEARCH/REPLACE blocks.
+    
+    Args:
+    response_text (str): The text containing SEARCH/REPLACE blocks.
+    use_fuzzy (bool): Whether to use fuzzy matching for search blocks.
+    
+    Returns:
+    list: A list of dictionaries, each containing 'search', 'replace', and 'similarity' keys.
+    """
     blocks = []
-    pattern = r'<SEARCH>\n(.*?)\n</SEARCH>\n<REPLACE>\n(.*?)\n</REPLACE>'
+    pattern = r'<SEARCH>\s*(.*?)\s*</SEARCH>\s*<REPLACE>\s*(.*?)\s*</REPLACE>'
     matches = re.findall(pattern, response_text, re.DOTALL)
     
     for search, replace in matches:
+        search = search.strip()
+        replace = replace.strip()
+        similarity = 1.0  # Default to exact match
+        
+        if use_fuzzy and search not in response_text:
+            # Implement fuzzy matching logic here
+            best_match = difflib.get_close_matches(search, [response_text], n=1, cutoff=0.6)
+            if best_match:
+                similarity = difflib.SequenceMatcher(None, search, best_match[0]).ratio()
+            else:
+                similarity = 0.0
+        
         blocks.append({
-            'search': search.strip(),
-            'replace': replace.strip()
+            'search': search,
+            'replace': replace,
+            'similarity': similarity
         })
     
-    return json.dumps(blocks)  # Keep returning JSON string
+    return blocks
 
 
 async def edit_and_apply(path, instructions, project_context, is_automode=False, max_retries=3):
@@ -366,14 +392,13 @@ async def edit_and_apply(path, instructions, project_context, is_automode=False,
             file_contents[path] = original_content
 
         for attempt in range(max_retries):
-            edit_instructions_json = await generate_edit_instructions(path, original_content, instructions, project_context, file_contents)
+            edit_instructions = await generate_edit_instructions(path, original_content, instructions, project_context, file_contents)
             
-            if edit_instructions_json:
-                edit_instructions = json.loads(edit_instructions_json)  # Parse JSON here
+            if edit_instructions:
                 console.print(Panel(f"Attempt {attempt + 1}/{max_retries}: The following SEARCH/REPLACE blocks have been generated:", title="Edit Instructions", style="cyan"))
                 for i, block in enumerate(edit_instructions, 1):
                     console.print(f"Block {i}:")
-                    console.print(Panel(f"SEARCH:\n{block['search']}\n\nREPLACE:\n{block['replace']}", expand=False))
+                    console.print(Panel(f"SEARCH:\n{block['search']}\n\nREPLACE:\n{block['replace']}\nSimilarity: {block['similarity']:.2f}", expand=False))
 
                 edited_content, changes_made, failed_edits = await apply_edits(path, edit_instructions, original_content)
 
@@ -419,24 +444,35 @@ async def apply_edits(file_path, edit_instructions, original_content):
         for i, edit in enumerate(edit_instructions, 1):
             search_content = edit['search'].strip()
             replace_content = edit['replace'].strip()
+            similarity = edit['similarity']
             
             # Use regex to find the content, ignoring leading/trailing whitespace
             pattern = re.compile(re.escape(search_content), re.DOTALL)
             match = pattern.search(edited_content)
             
-            if match:
-                # Replace the content, preserving the original whitespace
-                start, end = match.span()
-                # Strip <SEARCH> and <REPLACE> tags from replace_content
-                replace_content_cleaned = re.sub(r'</?SEARCH>|</?REPLACE>', '', replace_content)
-                edited_content = edited_content[:start] + replace_content_cleaned + edited_content[end:]
-                changes_made = True
+            if match or (USE_FUZZY_SEARCH and similarity >= 0.8):
+                if not match:
+                    # If using fuzzy search and no exact match, find the best match
+                    best_match = difflib.get_close_matches(search_content, [edited_content], n=1, cutoff=0.6)
+                    if best_match:
+                        match = re.search(re.escape(best_match[0]), edited_content)
                 
-                # Display the diff for this edit
-                diff_result = generate_diff(search_content, replace_content, file_path)
-                console.print(Panel(diff_result, title=f"Changes in {file_path} ({i}/{total_edits})", style="cyan"))
+                if match:
+                    # Replace the content, preserving the original whitespace
+                    start, end = match.span()
+                    # Strip <SEARCH> and <REPLACE> tags from replace_content
+                    replace_content_cleaned = re.sub(r'</?SEARCH>|</?REPLACE>', '', replace_content)
+                    edited_content = edited_content[:start] + replace_content_cleaned + edited_content[end:]
+                    changes_made = True
+                    
+                    # Display the diff for this edit
+                    diff_result = generate_diff(search_content, replace_content, file_path)
+                    console.print(Panel(diff_result, title=f"Changes in {file_path} ({i}/{total_edits}) - Similarity: {similarity:.2f}", style="cyan"))
+                else:
+                    console.print(Panel(f"Edit {i}/{total_edits} not applied: content not found (Similarity: {similarity:.2f})", style="yellow"))
+                    failed_edits.append(f"Edit {i}: {search_content}")
             else:
-                console.print(Panel(f"Edit {i}/{total_edits} not applied: content not found", style="yellow"))
+                console.print(Panel(f"Edit {i}/{total_edits} not applied: content not found (Similarity: {similarity:.2f})", style="yellow"))
                 failed_edits.append(f"Edit {i}: {search_content}")
 
             progress.update(edit_task, advance=1)
