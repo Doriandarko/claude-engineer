@@ -965,6 +965,11 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     "type": "text",
                     "text": update_system_prompt(current_iteration, max_iterations),
                     "cache_control": {"type": "ephemeral"}
+                },
+                {
+                    "type": "text",
+                    "text": json.dumps(tools),
+                    "cache_control": {"type": "ephemeral"}
                 }
             ],
             messages=messages,
@@ -1193,7 +1198,7 @@ def display_token_usage():
         f"{total_cache_write:,}",
         f"{total_cache_read:,}",
         f"{grand_total:,}",
-        "",  # Empty string for the "% of Context" column
+        f"{total_percentage:.2f}%",
         f"${total_cost:.3f}",
         style="bold"
     )
