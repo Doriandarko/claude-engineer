@@ -447,7 +447,7 @@ async def edit_and_apply_multiple(files, project_context, is_automode=False, max
             results.append(error_message)
             console_outputs.append(error_message)
     
-    return "\n".join(results) + "\n\nConsole Output:\n" + "\n".join(console_outputs)
+    return "\n".join(results), "\n".join(console_outputs)
 
 
 
