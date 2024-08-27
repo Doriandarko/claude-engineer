@@ -4,7 +4,7 @@ Claude Engineer is an advanced interactive command-line interface (CLI) that har
 
 ## NEW
 
-Prompt caching. Make sure you udpate your Anthropic python package before running the script.
+Prompt caching. Make sure you update your Anthropic python package before running the script.
 
 ```
 pip install --upgrade anthropic
