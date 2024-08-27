@@ -245,7 +245,9 @@ def create_files(files):
         try:
             path = file['path']
             content = file['content']
-            os.makedirs(os.path.dirname(path), exist_ok=True)
+            dir_name = os.path.dirname(path)
+            if dir_name:
+                os.makedirs(dir_name, exist_ok=True)
             with open(path, 'w') as f:
                 f.write(content)
             file_contents[path] = content
@@ -253,9 +255,6 @@ def create_files(files):
         except Exception as e:
             results.append(f"Error creating file {path}: {str(e)}")
     return "\n".join(results)
-
-def highlight_diff(diff_text):
-    return Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
 
 
 async def generate_edit_instructions(file_path, file_content, instructions, project_context, full_file_contents):
