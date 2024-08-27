@@ -1,4 +1,5 @@
 .git
 Dockerfile
 readme.md
-.venv.example
+.env.example
+.env
