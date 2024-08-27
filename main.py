@@ -502,6 +502,11 @@ async def apply_edits(file_path, edit_instructions, original_content):
 
     return edited_content, changes_made, "\n".join(failed_edits)
 
+
+def highlight_diff(diff_text):
+    return Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
+
+
 def generate_diff(original, new, path):
     diff = list(difflib.unified_diff(
         original.splitlines(keepends=True),
