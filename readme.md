@@ -3,7 +3,9 @@
 Claude Engineer is an advanced interactive command-line interface (CLI) that harnesses the power of Anthropic's Claude 3 and Claude 3.5 models to assist with a wide range of software development tasks. This tool seamlessly combines the capabilities of state-of-the-art large language models with practical file system operations, web search functionality, intelligent code analysis, and execution capabilities.
 
 ## NEW
+
 Prompt caching. Make sure you udpate your Anthropic python package before running the script.
+
 ```
 pip install --upgrade anthropic
 ```
@@ -38,17 +40,20 @@ pip install --upgrade anthropic
 ## 🛠️ Installation
 
 1. Clone this repository:
+
    ```
    git clone https://github.com/doriandarko/claude-engineer.git
    cd claude-engineer
    ```
 
 2. Install the required dependencies:
+
    ```
    pip install -r requirements.txt
    ```
 
 3. Set up your environment variables:
+
    - Create a `.env` file in the project root directory
    - Add the following environment variables:
      ```
@@ -61,31 +66,34 @@ pip install --upgrade anthropic
    This is just for you if you want to run the main script in a virtual environment rather than in your default one.
    ```
    python -m venv code_execution_env
-   source code_execution_env/bin/activate  # On Windows, use: code_execution_env\Scripts\activate
+   . code_execution_env/bin/activate  # On Windows, use: code_execution_env\Scripts\activate
    pip install -r requirements.txt
    deactivate
    ```
 
-## 🔧 Virtual Environment Setup
+### 🔧 Virtual Environment Setup
 
 Claude Engineer uses a dedicated virtual environment for code execution to ensure isolation and security. The virtual environment is automatically created the first time you run a piece of code. However, if you want to set it up manually or customize it, follow these steps:
 
 1. Create the virtual environment:
+
    ```
    python -m venv code_execution_env
    ```
 
 2. Activate the virtual environment:
+
    - On Windows:
      ```
      code_execution_env\Scripts\activate
      ```
    - On macOS and Linux:
      ```
-     source code_execution_env/bin/activate
+     . code_execution_env/bin/activate
      ```
 
 3. Install the required dependencies:
+
    ```
    pip install -r requirements.txt
    ```
@@ -96,6 +104,16 @@ Claude Engineer uses a dedicated virtual environment for code execution to ensur
    ```
 
 The code_execution_env virtual environment will be used for all code execution tasks, ensuring a consistent and isolated environment for running user code.
+
+## Running using docker
+
+```console
+docker build -t claude-engineer .
+# Use this to pass the required environment variables directly, and mount the working directly on the host in a subdirectory claude-engineer
+docker run -e ANTHROPIC_API_KEY="abcd" -e TAVILY_API_KEY="abc" --name claude-engineer  -v"$(pwd)/claude-engineer:/usr/arc/app/" -it claude-engineer
+# Or using the .env file
+docker run --name claude-engineer  -v"$(pwd)/.env:/usr/arc/app/.env" -it claude-engineer
+```
 
 ## 🚀 Usage
 
@@ -116,6 +134,7 @@ Once started, you can interact with Claude Engineer by typing your queries or co
 - "Read multiple files: file1.py, file2.py, file3.py"
 
 Special commands:
+
 - Type 'exit' to end the conversation and close the application.
 - Type 'image' to include an image in your message for analysis.
 - Type 'reset' to reset the entire conversation without restarting the script.
@@ -124,6 +143,7 @@ Special commands:
 - Press Ctrl+C at any time to exit the automode and return to regular chat.
 
 After each interaction, Claude Engineer will display:
+
 - Token usage (input, output, and total) for the current model
 - Remaining context window size
 
@@ -159,6 +179,7 @@ The enhanced automode allows Claude to work autonomously on complex tasks with g
 7. The TOOLCHECKERMODEL validates tool usage and outputs for increased reliability.
 
 To use automode:
+
 1. Type 'automode number' when prompted for input, where number is the maximum number of iterations.
 2. Provide your request when prompted.
 3. Claude will work autonomously, providing updates after each iteration.
@@ -273,44 +294,44 @@ These models work together to provide a comprehensive and intelligent developmen
 graph TD
     A[Start] --> B[Initialize]
     B --> C{User Input}
-    
+
     C -->|"exit"| D[End]
     C -->|"reset"| E[Reset Conversation]
     C -->|"save chat"| F[Save Chat to Markdown]
     C -->|"image"| G[Process Image]
     C -->|"automode"| H[Enter Automode]
     C -->|Other| I[Regular Chat]
-    
+
     E --> C
     F --> C
     G --> J[chat_with_claude]
     H --> K[Automode Loop]
     I --> J
-    
+
     J --> L{Tool Use?}
     L -->|Yes| M[Execute Tool]
     L -->|No| N[Generate Response]
-    
+
     M --> O[Tool Checker]
     O --> N
-    
+
     N --> P[Update Conversation History]
     P --> Q[Display Token Usage]
     Q --> C
-    
+
     subgraph Memory Management
         R[Conversation History]
         S[File Contents]
         T[Code Editor Memory]
     end
-    
+
     subgraph Models
         U[MAINMODEL - Claude-3.5-Sonnet]
         V[TOOLCHECKERMODEL - Claude-3.5-Sonnet]
         W[CODEEDITORMODEL - Claude-3.5-Sonnet]
         X[CODEEXECUTIONMODEL - Claude-3-Haiku]
     end
-    
+
     subgraph Tools
         Y[create_folder]
         Z[create_file]
@@ -322,7 +343,7 @@ graph TD
         AF[tavily_search]
         AG[read_multiple_files]
     end
-    
+
     J --> R
     J --> S
     J --> T
@@ -341,7 +362,6 @@ graph TD
     M --> AG
 ```
 
-
 ## 👥 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
@@ -354,7 +374,7 @@ Mistral Nemo
 Firefunction v2
 Command-R +
 
-Before running make sure you install the latest version of the Ollama app and 
+Before running make sure you install the latest version of the Ollama app and
 
 ```
 pip install ollama

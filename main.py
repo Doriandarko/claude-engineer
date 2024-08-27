@@ -556,7 +556,7 @@ async def execute_code(code, timeout=10):
     if sys.platform == "win32":
         command = f'"{activate_script}" && python3 {process_id}.py'
     else:
-        command = f'source "{activate_script}" && python3 {process_id}.py'
+        command = f'. "{activate_script}" && python3 {process_id}.py'
     
     # Create a process to run the command
     process = await asyncio.create_subprocess_shell(
