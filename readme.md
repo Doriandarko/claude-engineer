@@ -112,7 +112,7 @@ docker build -t claude-engineer .
 # Use this to pass the required environment variables directly, and mount the working directly on the host in a subdirectory claude-engineer
 docker run -e ANTHROPIC_API_KEY="abcd" -e TAVILY_API_KEY="abc" --name claude-engineer  -v"$(pwd)/claude-engineer:/usr/arc/app/" -it claude-engineer
 # Or using the .env file
-docker run --name claude-engineer  -v"$(pwd)/.env:/usr/arc/app/.env" -it claude-engineer
+docker run --name claude-engineer  -v"$(pwd)/.env:/usr/src/app/.env" -it claude-engineer
 ```
 
 ## 🚀 Usage
