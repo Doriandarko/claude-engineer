@@ -126,30 +126,28 @@ You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, 
 
 Available tools and their optimal use cases:
 
-1. create_folder: Create new directories in the project structure.
-2. create_files: Generate multiple new files with specified content. Strive to make the files as complete and useful as possible.
-3. edit_and_apply_multiple: Examine and modify multiple existing files by instructing a separate AI coding agent. You are responsible for providing clear, detailed instructions for each file. When using this tool:
+1. create_folders: Create new directories in the project structure.
+2. create_files: Generate one or more new files with specified content. Strive to make the files as complete and useful as possible.
+3. edit_and_apply_multiple: Examine and modify one or more existing files by instructing a separate AI coding agent. You are responsible for providing clear, detailed instructions for each file. When using this tool:
    - Provide comprehensive context about the project, including recent changes, new variables or functions, and how files are interconnected.
    - Clearly state the specific changes or improvements needed for each file, explaining the reasoning behind each modification.
    - Include ALL the snippets of code to change, along with the desired modifications.
    - Specify coding standards, naming conventions, or architectural patterns to be followed.
    - Anticipate potential issues or conflicts that might arise from the changes and provide guidance on how to handle them.
-   - Anticipate potential issues or conflicts that might arise from the changes and provide guidance on how to handle them.
-4. execute_code: Run Python code exclusively in the 'code_execution_env' virtual environment and analyze its output. Use this when you need to test code functionality or diagnose issues. Remember that all code execution happens in this isolated environment. This tool now returns a process ID for long-running processes.
+4. execute_code: Run Python code exclusively in the 'code_execution_env' virtual environment and analyze its output. Use this when you need to test code functionality or diagnose issues. Remember that all code execution happens in this isolated environment. This tool returns a process ID for long-running processes.
 5. stop_process: Stop a running process by its ID. Use this when you need to terminate a long-running process started by the execute_code tool.
-6. read_file: Read the contents of an existing file.
-7. read_multiple_files: Read the contents of multiple existing files at once. Use this when you need to examine or work with multiple files simultaneously.
-8. list_files: List all files and directories in a specified folder.
-9. tavily_search: Perform a web search using the Tavily API for up-to-date information.
+6. read_multiple_files: Read the contents of one or more existing files at once. This tool now handles both single and multiple file reads. Use this when you need to examine or work with file contents.
+7. list_files: List all files and directories in a specified folder.
+8. tavily_search: Perform a web search using the Tavily API for up-to-date information.
 
 Tool Usage Guidelines:
 - Always use the most appropriate tool for the task at hand.
-- Provide detailed and clear instructions when using tools, especially for edit_and_apply.
+- Provide detailed and clear instructions when using tools, especially for edit_and_apply_multiple.
 - After making changes, always review the output to ensure accuracy and alignment with intentions.
 - Use execute_code to run and test code within the 'code_execution_env' virtual environment, then analyze the results.
 - For long-running processes, use the process ID returned by execute_code to stop them later if needed.
 - Proactively use tavily_search when you need up-to-date information or additional context.
-- When working with multiple files, consider using read_multiple_files for efficiency.
+- When working with files, use read_multiple_files for both single and multiple file reads.
 
 Error Handling and Recovery:
 - If a tool operation fails, carefully analyze the error message and attempt to resolve the issue.
@@ -192,7 +190,7 @@ You are currently in automode. Follow these guidelines:
 
 4. Tool Usage:
    - Leverage all available tools to accomplish your goals efficiently.
-   - Prefer edit_and_apply for file modifications, applying changes in chunks for large edits.
+   - Prefer edit_and_apply_multiple for file modifications, applying changes in chunks for large edits.
    - Use tavily_search proactively for up-to-date information.
 
 5. Error Handling:
@@ -398,6 +396,11 @@ async def edit_and_apply_multiple(files, project_context, is_automode=False, max
     global file_contents
     results = []
     console_outputs = []
+    
+    # Convert single file input to list format
+    if isinstance(files, dict):
+        files = [files]
+    
     for file in files:
         path = file['path']
         instructions = file['instructions']
@@ -585,19 +588,15 @@ async def execute_code(code, timeout=10):
     execution_result = f"Process ID: {process_id}\n\nStdout:\n{stdout}\n\nStderr:\n{stderr}\n\nReturn Code: {return_code}"
     return process_id, execution_result
 
-def read_file(path):
-    global file_contents
-    try:
-        with open(path, 'r') as f:
-            content = f.read()
-        file_contents[path] = content
-        return f"File '{path}' has been read and stored in the system prompt."
-    except Exception as e:
-        return f"Error reading file: {str(e)}"
-
+# Update the read_multiple_files function to handle both single and multiple files
 def read_multiple_files(paths):
     global file_contents
     results = []
+    
+    # Convert single path to list if necessary
+    if isinstance(paths, str):
+        paths = [paths]
+    
     for path in paths:
         try:
             with open(path, 'r') as f:
@@ -740,31 +739,26 @@ tools = [
         }
     },
     {
-        "name": "read_file",
-        "description": "Read the contents of a file at the specified path. This tool should be used when you need to examine the contents of an existing file. It will return the entire contents of the file as a string. If the file doesn't exist or can't be read, an appropriate error message will be returned.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "The absolute or relative path of the file to read. Use forward slashes (/) for path separation, even on Windows systems."
-                }
-            },
-            "required": ["path"]
-        }
-    },
-    {
         "name": "read_multiple_files",
-        "description": "Read the contents of multiple files at the specified paths. This tool should be used when you need to examine the contents of multiple existing files at once. It will return the status of reading each file, and store the contents of successfully read files in the system prompt. If a file doesn't exist or can't be read, an appropriate error message will be returned for that file.",
+        "description": "Read the contents of one or more existing files at once. This tool now handles both single and multiple file reads. Use this when you need to examine or work with file contents.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "paths": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "description": "An array of absolute or relative paths of the files to read. Use forward slashes (/) for path separation, even on Windows systems."
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "description": "The absolute or relative path of a single file to read."
+                        },
+                        {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            },
+                            "description": "An array of absolute or relative paths of the files to read."
+                        }
+                    ],
+                    "description": "The path(s) of the file(s) to read. Use forward slashes (/) for path separation, even on Windows systems."
                 }
             },
             "required": ["paths"]
@@ -808,17 +802,16 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
         console_output = None
 
         if tool_name == "create_files":
-            # Handle both single file and multiple files
             files = tool_input.get("files", [tool_input])
             result = create_files(files)
         elif tool_name == "edit_and_apply_multiple":
-            result, console_output = await edit_and_apply_multiple(tool_input["files"], tool_input["project_context"], is_automode=automode)
+            files = tool_input.get("files", [tool_input])
+            result, console_output = await edit_and_apply_multiple(files, tool_input["project_context"], is_automode=automode)
         elif tool_name == "create_folders":
             result = create_folders(tool_input["paths"])
-        elif tool_name == "read_file":
-            result = read_file(tool_input["path"])
         elif tool_name == "read_multiple_files":
-            result = read_multiple_files(tool_input["paths"])
+            paths = tool_input.get("paths", tool_input.get("path"))
+            result = read_multiple_files(paths)
         elif tool_name == "list_files":
             result = list_files(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
@@ -1116,7 +1109,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         })
 
         # Update the file_contents dictionary if applicable
-        if tool_name in ['create_files', 'edit_and_apply_multiple', 'read_file', 'read_multiple_files'] and not tool_result["is_error"]:
+        if tool_name in ['create_files', 'edit_and_apply_multiple', 'read_multiple_files'] and not tool_result["is_error"]:
             if tool_name == 'create_files':
                 for file in tool_input['files']:
                     if "File created and added to system prompt" in tool_result["content"]:
@@ -1126,10 +1119,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     if f"Changes applied to {file['path']}" in tool_result["content"]:
                         # The file_contents dictionary is already updated in the edit_and_apply_multiple function
                         pass
-            elif tool_name == 'read_file':
-                if "has been read and stored in the system prompt" in tool_result["content"]:
-                    # The file_contents dictionary is already updated in the read_file function
-                    pass
             elif tool_name == 'read_multiple_files':
                 # The file_contents dictionary is already updated in the read_multiple_files function
                 pass
