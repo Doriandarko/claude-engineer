@@ -56,16 +56,6 @@ pip install --upgrade anthropic
      TAVILY_API_KEY=your_tavily_api_key
      ```
 
-4. Set up the virtual environment for code execution:
-   Engineer will create a virtual environment to run code the first time it executes a piece of code.
-   This is just for you if you want to run the main script in a virtual environment rather than in your default one.
-   ```
-   python -m venv code_execution_env
-   source code_execution_env/bin/activate  # On Windows, use: code_execution_env\Scripts\activate
-   pip install -r requirements.txt
-   deactivate
-   ```
-
 ## 🔧 Virtual Environment Setup
 
 Claude Engineer uses a dedicated virtual environment for code execution to ensure isolation and security. The virtual environment is automatically created the first time you run a piece of code. However, if you want to set it up manually or customize it, follow these steps:
