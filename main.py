@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from datetime import datetime
 import json
 from tavily import TavilyClient
 import base64
@@ -59,7 +60,10 @@ def setup_virtual_environment() -> Tuple[str, str]:
 # Load environment variables from .env file
 load_dotenv()
 
+load_dotenv()
+
 # Initialize the Anthropic client
+
 anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 if not anthropic_api_key:
     raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
@@ -72,6 +76,7 @@ if not tavily_api_key:
 tavily = TavilyClient(api_key=tavily_api_key)
 
 console = Console()
+
 
 
 # Token tracking variables
