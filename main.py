@@ -599,6 +599,8 @@ def read_multiple_files(paths):
     # Convert single path to list if necessary
     if isinstance(paths, str):
         paths = [paths]
+    elif paths is None:
+        return "Error: No file paths provided"
     
     for path in paths:
         try:
@@ -834,7 +836,11 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
             result = create_folders(tool_input["paths"])
         elif tool_name == "read_multiple_files":
             paths = tool_input.get("paths", tool_input.get("path"))
-            result = read_multiple_files(paths)
+            if paths is None:
+                result = "Error: No file paths provided"
+                is_error = True
+            else:
+                result = read_multiple_files(paths)
         elif tool_name == "list_files":
             result = list_files(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
