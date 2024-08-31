@@ -33,6 +33,8 @@ import sys
 import signal
 import logging
 from typing import Tuple, Optional
+import mimetypes
+import mimetypes
 
 
 def setup_virtual_environment() -> Tuple[str, str]:
@@ -139,6 +141,7 @@ Available tools and their optimal use cases:
 6. read_multiple_files: Read the contents of one or more existing files at once. This tool now handles both single and multiple file reads. Use this when you need to examine or work with file contents.
 7. list_files: List all files and directories in a specified folder.
 8. tavily_search: Perform a web search using the Tavily API for up-to-date information.
+9. Scan project folders to turn them into an .md file for better context.
 
 Tool Usage Guidelines:
 - Always use the most appropriate tool for the task at hand.
@@ -654,6 +657,24 @@ tools = [
         }
     },
     {
+        "name": "scan_folder",
+        "description": "Scan a specified folder and create a Markdown file with the contents of all coding text files, excluding binary files and common ignored folders.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "folder_path": {
+                    "type": "string",
+                    "description": "The absolute or relative path of the folder to scan. Use forward slashes (/) for path separation, even on Windows systems."
+                },
+                "output_file": {
+                    "type": "string",
+                    "description": "The name of the output Markdown file to create with the scanned contents."
+                }
+            },
+            "required": ["folder_path", "output_file"]
+        }
+    },
+    {
         "name": "create_files",
         "description": "Create one or more new files with the given contents. This tool should be used when you need to create files in the project structure. It will create all necessary parent directories if they don't exist.",
         "input_schema": {
@@ -794,6 +815,8 @@ tools = [
 ]
 
 from typing import Dict, Any
+import os
+import mimetypes
 
 async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
     try:
@@ -825,6 +848,8 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
             result = f"{execution_result}\n\nAnalysis:\n{analysis}"
             if process_id in running_processes:
                 result += "\n\nNote: The process is still running in the background."
+        elif tool_name == "scan_folder":
+            result = scan_folder(tool_input["folder_path"], tool_input["output_file"])
         else:
             is_error = True
             result = f"Unknown tool: {tool_name}"
@@ -848,6 +873,52 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
             "is_error": True,
             "console_output": None
         }
+
+def scan_folder(folder_path: str, output_file: str) -> str:
+    ignored_folders = {'.git', '__pycache__', 'node_modules', 'venv', 'env'}
+    markdown_content = f"# Folder Scan: {folder_path}\n\n"
+    total_chars = len(markdown_content)
+    max_chars = 600000  # Approximating 150,000 tokens
+
+    for root, dirs, files in os.walk(folder_path):
+        dirs[:] = [d for d in dirs if d not in ignored_folders]
+        
+        for file in files:
+            file_path = os.path.join(root, file)
+            relative_path = os.path.relpath(file_path, folder_path)
+            
+            mime_type, _ = mimetypes.guess_type(file_path)
+            if mime_type and mime_type.startswith('text'):
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    
+                    file_content = f"## {relative_path}\n\n```\n{content}\n```\n\n"
+                    if total_chars + len(file_content) > max_chars:
+                        remaining_chars = max_chars - total_chars
+                        if remaining_chars > 0:
+                            truncated_content = file_content[:remaining_chars]
+                            markdown_content += truncated_content
+                            markdown_content += "\n\n... Content truncated due to size limitations ...\n"
+                        else:
+                            markdown_content += "\n\n... Additional files omitted due to size limitations ...\n"
+                        break
+                    else:
+                        markdown_content += file_content
+                        total_chars += len(file_content)
+                except Exception as e:
+                    error_msg = f"## {relative_path}\n\nError reading file: {str(e)}\n\n"
+                    if total_chars + len(error_msg) <= max_chars:
+                        markdown_content += error_msg
+                        total_chars += len(error_msg)
+        
+        if total_chars >= max_chars:
+            break
+    
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(markdown_content)
+    
+    return f"Folder scan complete. Markdown file created at: {output_file}. Total characters: {total_chars}"
 
 def encode_image_to_base64(image_path):
     try:
