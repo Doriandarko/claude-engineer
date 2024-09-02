@@ -245,9 +245,11 @@ def create_folders(paths):
 def create_files(files):
     global file_contents
     results = []
+    
     # Ensure files is always a list
-    if isinstance(files, dict):
+    if not isinstance(files, list):
         files = [files]
+    
     for file in files:
         try:
             path = file.get('path')
@@ -1209,15 +1211,15 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
 
         if tool_name == 'create_files':
-            tool_result = create_files(tool_input)
+            tool_result = create_files(tool_input.get('files', [tool_input]))
         else:
             tool_result = await execute_tool(tool_name, tool_input)
 
-        if tool_result["is_error"]:
+        if isinstance(tool_result, dict) and tool_result.get("is_error"):
             console.print(Panel(tool_result["content"], title="Tool Execution Error", style="bold red"))
         else:
             # Format the tool result content for proper rendering
-            formatted_result = json.dumps(tool_result["content"], indent=2) if isinstance(tool_result["content"], (dict, list)) else tool_result["content"]
+            formatted_result = json.dumps(tool_result, indent=2) if isinstance(tool_result, (dict, list)) else str(tool_result)
             console.print(Panel(formatted_result, title_align="left", title="Tool Result", style="green"))
 
         current_conversation.append({
@@ -1235,7 +1237,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         # Modify this part to ensure correct structure
         tool_result_content = {
             "type": "text",
-            "text": json.dumps(tool_result["content"]) if isinstance(tool_result["content"], (dict, list)) else tool_result["content"]
+            "text": json.dumps(tool_result) if isinstance(tool_result, (dict, list)) else str(tool_result)
         }
 
         current_conversation.append({
@@ -1245,21 +1247,21 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
                     "content": [tool_result_content],  # Wrap the content in a list
-                    "is_error": tool_result["is_error"]
+                    "is_error": tool_result.get("is_error", False) if isinstance(tool_result, dict) else False
                 }
             ]
         })
 
         # Update the file_contents dictionary if applicable
-        if tool_name in ['create_files', 'edit_and_apply_multiple', 'read_multiple_files'] and not tool_result["is_error"]:
+        if tool_name in ['create_files', 'edit_and_apply_multiple', 'read_multiple_files'] and not (isinstance(tool_result, dict) and tool_result.get("is_error")):
             if tool_name == 'create_files':
                 for file in tool_input['files']:
-                    if "File created and added to system prompt" in tool_result["content"]:
+                    if "File created and added to system prompt" in str(tool_result):
                         file_contents[file['path']] = file['content']
             elif tool_name == 'edit_and_apply_multiple':
-                edit_results = tool_result["content"]  # This is already a list, no need for json.loads
+                edit_results = tool_result if isinstance(tool_result, list) else [tool_result]
                 for result in edit_results:
-                    if result["status"] in ["success", "partial_success"]:
+                    if isinstance(result, dict) and result.get("status") in ["success", "partial_success"]:
                         file_contents[result["path"]] = result.get("edited_content", file_contents.get(result["path"], ""))
             elif tool_name == 'read_multiple_files':
                 # The file_contents dictionary is already updated in the read_multiple_files function
