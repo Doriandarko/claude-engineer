@@ -19,6 +19,79 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
 import difflib
 import glob
+import speech_recognition as sr
+
+# Create a recognizer object
+recognizer = sr.Recognizer()
+
+# Define a list of voice commands
+VOICE_COMMANDS = {
+    "exit voice mode": "exit_voice_mode",
+    "save chat": "save_chat",
+    "reset conversation": "reset_conversation"
+}
+
+
+# Global variables
+recognizer = None
+microphone = None
+
+def initialize_speech_recognition():
+    global recognizer, microphone
+    recognizer = sr.Recognizer()
+    microphone = sr.Microphone()
+    
+    # Adjust for ambient noise
+    with microphone as source:
+        recognizer.adjust_for_ambient_noise(source, duration=1)
+
+async def voice_input(max_retries=3):
+    global recognizer, microphone
+    
+    if recognizer is None or microphone is None:
+        initialize_speech_recognition()
+
+    for attempt in range(max_retries):
+        try:
+            with microphone as source:
+                console.print("Listening... Speak now.", style="bold green")
+                audio = recognizer.listen(source, timeout=5)
+                
+            console.print("Processing speech...", style="bold yellow")
+            text = recognizer.recognize_google(audio)
+            console.print(f"You said: {text}", style="cyan")
+            return text.lower()
+        except sr.WaitTimeoutError:
+            console.print(f"No speech detected. Attempt {attempt + 1} of {max_retries}.", style="bold red")
+        except sr.UnknownValueError:
+            console.print(f"Speech was unintelligible. Attempt {attempt + 1} of {max_retries}.", style="bold red")
+        except sr.RequestError as e:
+            console.print(f"Could not request results from speech recognition service; {e}", style="bold red")
+            return None
+        except Exception as e:
+            console.print(f"Unexpected error in voice input: {str(e)}", style="bold red")
+            return None
+    
+    console.print("Max retries reached. Returning to text input mode.", style="bold red")
+    return None
+
+def cleanup_speech_recognition():
+    global recognizer, microphone
+    recognizer = None
+    microphone = None
+
+def process_voice_command(command):
+    if command in VOICE_COMMANDS:
+        action = VOICE_COMMANDS[command]
+        if action == "exit_voice_mode":
+            return False, "Exiting voice mode."
+        elif action == "save_chat":
+            filename = save_chat()
+            return True, f"Chat saved to {filename}"
+        elif action == "reset_conversation":
+            reset_conversation()
+            return True, "Conversation has been reset."
+    return True, None
 
 async def get_user_input(prompt="You: "):
     style = Style.from_dict({
@@ -1495,16 +1568,33 @@ def display_token_usage():
 
 async def main():
     global automode, conversation_history
-    console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Multi-Agent and Image Support!", title="Welcome", style="bold green"))
+    console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Multi-Agent, Image, and Voice Support!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
     console.print("Type 'image' to include an image in your message.")
+    console.print("Type 'voice' to enter voice input mode.")
     console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
     console.print("Type 'reset' to clear the conversation history.")
     console.print("Type 'save chat' to save the conversation to a Markdown file.")
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
+    voice_mode = False
+
     while True:
-        user_input = await get_user_input()
+        if voice_mode:
+            user_input = await voice_input()
+            if user_input is None:
+                voice_mode = False
+                cleanup_speech_recognition()
+                console.print(Panel("Exited voice input mode due to error. Returning to text input.", style="bold yellow"))
+                continue
+            
+            if user_input.lower() == 'exit voice mode':
+                voice_mode = False
+                cleanup_speech_recognition()
+                console.print(Panel("Exited voice input mode. Returning to text input.", style="bold green"))
+                continue
+        else:
+            user_input = await get_user_input()
 
         if user_input.lower() == 'exit':
             console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
@@ -1517,6 +1607,12 @@ async def main():
         if user_input.lower() == 'save chat':
             filename = save_chat()
             console.print(Panel(f"Chat saved to {filename}", title="Chat Saved", style="bold green"))
+            continue
+
+        if user_input.lower() == 'voice':
+            voice_mode = True
+            initialize_speech_recognition()
+            console.print(Panel("Entering voice input mode. Say 'exit voice mode' to return to text input.", style="bold green"))
             continue
 
         if user_input.lower() == 'image':
