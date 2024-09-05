@@ -359,26 +359,41 @@ def create_files(files):
     global file_contents
     results = []
     
-    # Ensure files is always a list
-    if not isinstance(files, list):
+    # Handle different input types
+    if isinstance(files, str):
+        # If a string is passed, assume it's a single file path
+        files = [{"path": files, "content": ""}]
+    elif isinstance(files, dict):
+        # If a single dictionary is passed, wrap it in a list
         files = [files]
+    elif not isinstance(files, list):
+        return "Error: Invalid input type for create_files. Expected string, dict, or list."
     
     for file in files:
         try:
-            path = file.get('path')
-            content = file.get('content')
-            if path is None or content is None:
-                results.append(f"Error: Missing 'path' or 'content' for file")
+            if not isinstance(file, dict):
+                results.append(f"Error: Invalid file specification: {file}")
                 continue
+            
+            path = file.get('path')
+            content = file.get('content', '')
+            
+            if path is None:
+                results.append(f"Error: Missing 'path' for file")
+                continue
+            
             dir_name = os.path.dirname(path)
             if dir_name:
                 os.makedirs(dir_name, exist_ok=True)
+            
             with open(path, 'w') as f:
                 f.write(content)
+            
             file_contents[path] = content
             results.append(f"File created and added to system prompt: {path}")
         except Exception as e:
             results.append(f"Error creating file: {str(e)}")
+    
     return "\n".join(results)
 
 
@@ -828,23 +843,34 @@ tools = [
             "type": "object",
             "properties": {
                 "files": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "path": {
-                                "type": "string",
-                                "description": "The absolute or relative path where the file should be created. Use forward slashes (/) for path separation, even on Windows systems."
-                            },
-                            "content": {
-                                "type": "string",
-                                "description": "The content of the file. This should include all necessary code, comments, and formatting."
-                            }
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "description": "A single file path to create an empty file."
                         },
-                        "required": ["path", "content"]
-                    }
+                        {
+                            "type": "object",
+                            "properties": {
+                                "path": {"type": "string"},
+                                "content": {"type": "string"}
+                            },
+                            "required": ["path"]
+                        },
+                        {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "path": {"type": "string"},
+                                    "content": {"type": "string"}
+                                },
+                                "required": ["path"]
+                            }
+                        }
+                    ]
                 }
-            }
+            },
+            "required": ["files"]
         }
     },
     {
@@ -1016,7 +1042,10 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
         console_output = None
 
         if tool_name == "create_files":
-            files = tool_input.get("files", [tool_input])
+            if isinstance(tool_input, dict) and 'files' in tool_input:
+                files = tool_input['files']
+            else:
+                files = tool_input
             result = create_files(files)
         elif tool_name == "edit_and_apply_multiple":
             files = tool_input.get("files", [tool_input])
