@@ -3,6 +3,17 @@
 Claude Engineer is an advanced interactive command-line interface (CLI) that harnesses the power of Anthropic's Claude 3 and Claude 3.5 models to assist with a wide range of software development tasks. This tool seamlessly combines the capabilities of state-of-the-art large language models with practical file system operations, web search functionality, intelligent code analysis, and execution capabilities.
 
 ## NEW
+
+Voice mode 🗣️: Now you can talk to the Engineer directly without even touching your keyboard.
+
+Type
+```
+voice
+```
+to enter voice mode.
+
+Say "exit voice mode" to return to regular text.
+
 Prompt caching. Make sure you udpate your Anthropic python package before running the script.
 ```
 pip install --upgrade anthropic
