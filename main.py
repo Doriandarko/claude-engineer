@@ -192,6 +192,43 @@ You are currently in automode. Follow these guidelines:
    - Provide regular updates on goal completion and overall progress.
    - Use the iteration information to pace your work effectively.
 
+Break Down Complex Tasks:
+When faced with a complex task or project, break it down into smaller, manageable steps. Provide a clear outline of the steps involved, potential challenges, and how to approach each part of the task.
+
+Prefer Answering Without Code:
+When explaining concepts or providing solutions, prioritize clear explanations and pseudocode over full code implementations. Only provide full code snippets when explicitly requested or when it's essential for understanding.
+
+Code Review Process:
+When reviewing code, follow these steps:
+1. Understand the context and purpose of the code
+2. Check for clarity and readability
+3. Identify potential bugs or errors
+4. Suggest optimizations or improvements
+5. Ensure adherence to best practices and coding standards
+6. Consider security implications
+7. Provide constructive feedback with explanations
+
+Project Planning:
+When planning a project, consider the following:
+1. Define clear project goals and objectives
+2. Break down the project into manageable tasks and subtasks
+3. Estimate time and resources required for each task
+4. Identify potential risks and mitigation strategies
+5. Suggest appropriate tools and technologies
+6. Outline a testing and quality assurance strategy
+7. Consider scalability and future maintenance
+
+Security Review:
+When conducting a security review, focus on:
+1. Identifying potential vulnerabilities in the code
+2. Checking for proper input validation and sanitization
+3. Ensuring secure handling of sensitive data
+4. Reviewing authentication and authorization mechanisms
+5. Checking for secure communication protocols
+6. Identifying any use of deprecated or insecure functions
+7. Suggesting security best practices and improvements
+
+Remember to apply these additional skills and processes when assisting users with their software development tasks and projects.
 4. Tool Usage:
    - Leverage all available tools to accomplish your goals efficiently.
    - Prefer edit_and_apply_multiple for file modifications, applying changes in chunks for large edits.
@@ -285,7 +322,7 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
         ])
 
         system_prompt = f"""
-        You are an AI coding agent that generates edit instructions for code files. Your task is to analyze the provided code and generate edit blocks for necessary changes. Follow these steps:
+        You are an AI coding agent that generates edit instructions for code files. Your task is to analyze the provided code and generate SEARCH/REPLACE blocks for necessary changes. Follow these steps:
 
         1. Review the entire file content to understand the context:
         {file_content}
@@ -302,35 +339,28 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
         5. Consider the full context of all files in the project:
         {full_file_contents_context}
 
-        6. Generate edit blocks for each necessary change. Each block should use one of the following formats:
+        6. Generate SEARCH/REPLACE blocks for each necessary change. Each block should:
+           - Include enough context to uniquely identify the code to be changed
+           - Provide the exact replacement code, maintaining correct indentation and formatting
+           - Focus on specific, targeted changes rather than large, sweeping modifications
 
-           <SEARCH [LINE=number] [REGEX]>
-           Content to search for
-           </SEARCH>
-           <REPLACE [LINE=number] [REGEX]>
-           New content to insert
-           </REPLACE>
-
-           <INSERT LINE=number>
-           Content to insert
-           </INSERT>
-
-           <DELETE LINE=number>
-           </DELETE>
-
-           - Use LINE=number to specify operations on specific lines
-           - Use REGEX flag for regex-based search and replace
-           - For non-line-specific SEARCH/REPLACE, provide enough context to uniquely identify the code to be changed
-           - Ensure correct indentation and formatting in the replacement code
-
-        7. Ensure that your edit blocks:
+        7. Ensure that your SEARCH/REPLACE blocks:
            - Address all relevant aspects of the instructions
            - Maintain or enhance code readability and efficiency
            - Consider the overall structure and purpose of the code
            - Follow best practices and coding standards for the language
            - Maintain consistency with the project context and previous edits
+           - Take into account the full context of all files in the project
 
-        IMPORTANT: RETURN ONLY THE EDIT BLOCKS. NO EXPLANATIONS OR COMMENTS.
+        IMPORTANT: RETURN ONLY THE SEARCH/REPLACE BLOCKS. NO EXPLANATIONS OR COMMENTS.
+        USE THE FOLLOWING FORMAT FOR EACH BLOCK:
+
+        <SEARCH>
+        Code to be replaced
+        </SEARCH>
+        <REPLACE>
+        New code to insert
+        </REPLACE>
 
         If no changes are needed, return an empty list.
         """
@@ -346,7 +376,7 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
                 }
             ],
             messages=[
-                {"role": "user", "content": "Generate edit blocks for the necessary changes."}
+                {"role": "user", "content": "Generate SEARCH/REPLACE blocks for the necessary changes."}
             ],
             extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
         )
@@ -356,7 +386,7 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
         code_editor_tokens['cache_creation'] = response.usage.cache_creation_input_tokens
         code_editor_tokens['cache_read'] = response.usage.cache_read_input_tokens
 
-        # Parse the response to extract edit blocks
+        # Parse the response to extract SEARCH/REPLACE blocks
         edit_instructions = parse_search_replace_blocks(response.content[0].text)
 
         # Update code editor memory (this is the only part that maintains some context between calls)
@@ -374,27 +404,38 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
 
 
 def parse_search_replace_blocks(response_text, use_fuzzy=USE_FUZZY_SEARCH):
+    """
+    Parse the response text for SEARCH/REPLACE blocks.
+
+    Args:
+    response_text (str): The text containing SEARCH/REPLACE blocks.
+    use_fuzzy (bool): Whether to use fuzzy matching for search blocks.
+
+    Returns:
+    list: A list of dictionaries, each containing 'search', 'replace', and 'similarity' keys.
+    """
     blocks = []
-    pattern = r'<(SEARCH|REPLACE|INSERT|DELETE)(?:\s+LINE=(\d+))?(?:\s+REGEX)?\s*>\s*(.*?)\s*</\1>'
+    pattern = r'<SEARCH>\s*(.*?)\s*</SEARCH>\s*<REPLACE>\s*(.*?)\s*</REPLACE>'
     matches = re.findall(pattern, response_text, re.DOTALL)
 
-    for operation, line_num, content in matches:
-        block = {
-            'operation': operation,
-            'content': content.strip(),
-            'line': int(line_num) if line_num else None,
-            'regex': 'REGEX' in operation,
-            'similarity': 1.0
-        }
+    for search, replace in matches:
+        search = search.strip()
+        replace = replace.strip()
+        similarity = 1.0  # Default to exact match
 
-        if operation in ['SEARCH', 'REPLACE'] and use_fuzzy and not block['regex']:
-            best_match = difflib.get_close_matches(content, [response_text], n=1, cutoff=0.6)
+        if use_fuzzy and search not in response_text:
+            # Implement fuzzy matching logic here
+            best_match = difflib.get_close_matches(search, [response_text], n=1, cutoff=0.6)
             if best_match:
-                block['similarity'] = difflib.SequenceMatcher(None, content, best_match[0]).ratio()
+                similarity = difflib.SequenceMatcher(None, search, best_match[0]).ratio()
             else:
-                block['similarity'] = 0.0
+                similarity = 0.0
 
-        blocks.append(block)
+        blocks.append({
+            'search': search,
+            'replace': replace,
+            'similarity': similarity
+        })
 
     return blocks
 
@@ -421,10 +462,10 @@ async def edit_and_apply_multiple(files, project_context, is_automode=False):
             edit_instructions = await generate_edit_instructions(path, original_content, instructions, project_context, file_contents)
 
             if edit_instructions:
-                console.print(Panel(f"File: {path}\nThe following edit blocks have been generated:", title="Edit Instructions", style="cyan"))
+                console.print(Panel(f"File: {path}\nThe following SEARCH/REPLACE blocks have been generated:", title="Edit Instructions", style="cyan"))
                 for i, block in enumerate(edit_instructions, 1):
                     console.print(f"Block {i}:")
-                    console.print(Panel(f"Operation: {block['operation']}\nContent: {block['content']}\nLine: {block['line']}\nRegex: {block['regex']}\nSimilarity: {block['similarity']:.2f}", expand=False))
+                    console.print(Panel(f"SEARCH:\n{block['search']}\n\nREPLACE:\n{block['replace']}\nSimilarity: {block['similarity']:.2f}", expand=False))
 
                 edited_content, changes_made, failed_edits, console_output = await apply_edits(path, edit_instructions, original_content)
                 console_outputs.append(console_output)
@@ -473,24 +514,9 @@ async def edit_and_apply_multiple(files, project_context, is_automode=False):
 
 
 
-
-def generate_diff(original, new, path):
-    diff = list(difflib.unified_diff(
-        original.splitlines(keepends=True),
-        new.splitlines(keepends=True),
-        fromfile=f"a/{path}",
-        tofile=f"b/{path}",
-        lineterm="",
-        n=5  # Increased context to 5 lines
-    ))
-    return ''.join(diff)
-
-def highlight_diff(diff_text):
-    return Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
-
 async def apply_edits(file_path, edit_instructions, original_content):
     changes_made = False
-    edited_content = original_content.splitlines()
+    edited_content = original_content
     total_edits = len(edit_instructions)
     failed_edits = []
     console_output = []
@@ -505,84 +531,43 @@ async def apply_edits(file_path, edit_instructions, original_content):
         edit_task = progress.add_task("[cyan]Applying edits...", total=total_edits)
 
         for i, edit in enumerate(edit_instructions, 1):
-            operation = edit['operation']
-            content = edit['content']
-            line_num = edit['line']
-            is_regex = edit['regex']
-            similarity = edit.get('similarity', 1.0)
+            search_content = edit['search'].strip()
+            replace_content = edit['replace'].strip()
+            similarity = edit['similarity']
 
-            try:
-                if operation == 'INSERT':
-                    if line_num is not None:
-                        edited_content.insert(line_num - 1, content)
-                        changes_made = True
-                        console_output.append(f"Inserted at line {line_num}: {content}")
-                    else:
-                        edited_content.append(content)
-                        changes_made = True
-                        console_output.append(f"Appended: {content}")
+            # Use regex to find the content, ignoring leading/trailing whitespace
+            pattern = re.compile(re.escape(search_content), re.DOTALL)
+            match = pattern.search(edited_content)
 
-                elif operation == 'DELETE':
-                    if line_num is not None:
-                        deleted_content = edited_content.pop(line_num - 1)
-                        changes_made = True
-                        console_output.append(f"Deleted line {line_num}: {deleted_content}")
-                    else:
-                        raise ValueError("Line number required for DELETE operation")
+            if match or (USE_FUZZY_SEARCH and similarity >= 0.8):
+                if not match:
+                    # If using fuzzy search and no exact match, find the best match
+                    best_match = difflib.get_close_matches(search_content, [edited_content], n=1, cutoff=0.6)
+                    if best_match:
+                        match = re.search(re.escape(best_match[0]), edited_content)
 
-                elif operation in ['SEARCH', 'REPLACE']:
-                    if is_regex:
-                        pattern = re.compile(content)
-                        for j, line in enumerate(edited_content):
-                            if pattern.search(line):
-                                if operation == 'REPLACE':
-                                    replacement = edit['replace']
-                                    new_line = pattern.sub(replacement, line)
-                                    if new_line != line:
-                                        edited_content[j] = new_line
-                                        changes_made = True
-                                        console_output.append(f"Regex replace at line {j+1}: {line} -> {new_line}")
-                    else:
-                        if line_num is not None:
-                            if operation == 'REPLACE':
-                                old_content = edited_content[line_num - 1]
-                                edited_content[line_num - 1] = content
-                                changes_made = True
-                                console_output.append(f"Replaced line {line_num}: {old_content} -> {content}")
-                        else:
-                            joined_content = '\n'.join(edited_content)
-                            if operation == 'REPLACE':
-                                search_content = content
-                                replace_content = edit['replace']
-                                if USE_FUZZY_SEARCH and similarity >= 0.8:
-                                    matches = difflib.get_close_matches(search_content, edited_content, n=1, cutoff=0.6)
-                                    if matches:
-                                        idx = edited_content.index(matches[0])
-                                        old_content = edited_content[idx]
-                                        edited_content[idx] = replace_content
-                                        changes_made = True
-                                        console_output.append(f"Fuzzy replaced at line {idx+1}: {old_content} -> {replace_content}")
-                                else:
-                                    new_content = joined_content.replace(search_content, replace_content)
-                                    if new_content != joined_content:
-                                        edited_content = new_content.splitlines()
-                                        changes_made = True
-                                        console_output.append(f"Replaced: {search_content} -> {replace_content}")
+                if match:
+                    # Replace the content, preserving the original whitespace
+                    start, end = match.span()
+                    # Strip <SEARCH> and <REPLACE> tags from replace_content
+                    replace_content_cleaned = re.sub(r'</?SEARCH>|</?REPLACE>', '', replace_content)
+                    edited_content = edited_content[:start] + replace_content_cleaned + edited_content[end:]
+                    changes_made = True
 
-                # Generate and display diff for this edit
-                if changes_made:
-                    context_lines = 5  # Increased context to 5 lines
-                    start_line = max(0, line_num - context_lines - 1) if line_num else 0
-                    end_line = min(len(edited_content), (line_num or 0) + context_lines)
-                    original_snippet = '\n'.join(original_content.splitlines()[start_line:end_line])
-                    edited_snippet = '\n'.join(edited_content[start_line:end_line])
-                    diff_result = generate_diff(original_snippet, edited_snippet, file_path)
-                    highlighted_diff = highlight_diff(diff_result)
-                    console.print(Panel(highlighted_diff, title=f"Changes in {file_path} (Edit {i}/{total_edits}) - Similarity: {similarity:.2f}", expand=False))
-
-            except Exception as e:
-                failed_edits.append(f"Edit {i} failed: {str(e)}")
-                console_output.append(f"Error applying edit {i}: {str(e)}")
+                    # Display the diff for this edit
+                    diff_result = generate_diff(search_content, replace_content, file_path)
+                    console.print(Panel(diff_result, title=f"Changes in {file_path} ({i}/{total_edits}) - Similarity: {similarity:.2f}", style="cyan"))
+                    console_output.append(f"Edit {i}/{total_edits} applied successfully")
+                else:
+                    message = f"Edit {i}/{total_edits} not applied: content not found (Similarity: {similarity:.2f})"
+                    console_output.append(message)
+                    console.print(Panel(message, style="yellow"))
+                    failed_edits.append(f"Edit {i}: {search_content}")
+            else:
+                message = f"Edit {i}/{total_edits} not applied: content not found (Similarity: {similarity:.2f})"
+                console_output.append(message)
+                console.print(Panel(message, style="yellow"))
+                failed_edits.append(f"Edit {i}: {search_content}")
 
             progress.update(edit_task, advance=1)
 
@@ -593,12 +578,32 @@ async def apply_edits(file_path, edit_instructions, original_content):
     else:
         # Write the changes to the file
         with open(file_path, 'w') as file:
-            file.write('\n'.join(edited_content))
+            file.write(edited_content)
         message = f"Changes have been written to {file_path}"
         console_output.append(message)
         console.print(Panel(message, style="green"))
 
-    return '\n'.join(edited_content), changes_made, "\n".join(failed_edits), "\n".join(console_output)
+    return edited_content, changes_made, "\n".join(failed_edits), "\n".join(console_output)
+
+
+def highlight_diff(diff_text):
+    return Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
+
+
+def generate_diff(original, new, path):
+    diff = list(difflib.unified_diff(
+        original.splitlines(keepends=True),
+        new.splitlines(keepends=True),
+        fromfile=f"a/{path}",
+        tofile=f"b/{path}",
+        n=3
+    ))
+
+    diff_text = ''.join(diff)
+    highlighted_diff = highlight_diff(diff_text)
+
+    return highlighted_diff
+
 
 async def execute_code(code, timeout=10):
     global running_processes
