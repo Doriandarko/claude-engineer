@@ -5,3 +5,4 @@ Pillow
 rich
 aiohttp
 prompt_toolkit
+SpeechRecognition
