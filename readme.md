@@ -4,6 +4,13 @@ Claude Engineer is an advanced interactive command-line interface (CLI) that har
 
 ## NEW
 
+TTS using 11labs WebSockets and audio streaming.
+Type
+```
+11labs on
+```
+to use TTS and 11labs off to return to regualr mode.
+
 Voice mode 🗣️: Now you can talk to the Engineer directly without even touching your keyboard.
 
 Type
