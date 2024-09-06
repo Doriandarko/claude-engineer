@@ -14,12 +14,27 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.markdown import Markdown
 import asyncio
-import aiohttp
 from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
-import difflib
 import glob
 import speech_recognition as sr
+import websockets
+from pydub import AudioSegment
+from pydub.playback import play
+import datetime
+import venv
+import sys
+import signal
+import logging
+from typing import Tuple, Optional, Dict, Any
+import mimetypes
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Create a recognizer object
 recognizer = sr.Recognizer()
@@ -36,6 +51,75 @@ VOICE_COMMANDS = {
 recognizer = None
 microphone = None
 
+# 11 Labs TTS
+tts_enabled = True
+use_tts = False
+ELEVEN_LABS_API_KEY = os.getenv('ELEVEN_LABS_API_KEY')
+VOICE_ID = 'YOUR VOICE ID'
+MODEL_ID = 'eleven_turbo_v2_5'
+
+
+async def text_to_speech(text):
+    if not ELEVEN_LABS_API_KEY:
+        console.print("ElevenLabs API key not found. Text-to-speech is disabled.", style="bold yellow")
+        console.print("Fallback: Printing the text instead.", style="bold yellow")
+        console.print(text)
+        return
+
+    uri = f"wss://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}/stream-input?model_id={MODEL_ID}"
+    
+    async def chunk_text(text):
+        sentences = re.split('(?<=[.,?!;:—\-()[\]{}]) +', text)
+        for sentence in sentences:
+            yield sentence + " "
+
+    try:
+        logging.info("Connecting to ElevenLabs API")
+        async with websockets.connect(uri, extra_headers={'xi-api-key': ELEVEN_LABS_API_KEY}) as websocket:
+            logging.info("Connected to ElevenLabs API")
+            await websocket.send(json.dumps({
+                "text": " ",
+                "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
+                "xi_api_key": ELEVEN_LABS_API_KEY,
+            }))
+
+            audio_stream = AudioSegment.empty()
+            async for chunk in chunk_text(text):
+                logging.debug(f"Sending chunk: {chunk}")
+                await websocket.send(json.dumps({"text": chunk, "try_trigger_generation": True}))
+
+            await websocket.send(json.dumps({"text": ""}))  # Closing message
+            logging.info("Sent all text chunks")
+
+            while True:
+                try:
+                    message = await websocket.recv()
+                    data = json.loads(message)
+                    if data.get('audio'):
+                        audio_data = base64.b64decode(data['audio'])
+                        audio_chunk = AudioSegment.from_mp3(io.BytesIO(audio_data))
+                        audio_stream += audio_chunk
+                        play(audio_chunk)  # Play each chunk as it's received
+                        logging.debug("Played audio chunk")
+                    elif data.get('isFinal'):
+                        logging.info("Received final message")
+                        break
+                except websockets.exceptions.ConnectionClosed:
+                    logging.error("WebSocket connection closed unexpectedly")
+                    console.print("WebSocket connection closed unexpectedly", style="bold red")
+                    break
+
+    except websockets.exceptions.InvalidStatusCode as e:
+        logging.error(f"Failed to connect to ElevenLabs API: {e}")
+        console.print(f"Failed to connect to ElevenLabs API: {e}", style="bold red")
+        console.print("Fallback: Printing the text instead.", style="bold yellow")
+        console.print(text)
+    except Exception as e:
+        logging.error(f"Error in text-to-speech: {str(e)}")
+        console.print(f"Error in text-to-speech: {str(e)}", style="bold red")
+        console.print("Fallback: Printing the text instead.", style="bold yellow")
+        console.print(text)
+
 def initialize_speech_recognition():
     global recognizer, microphone
     recognizer = sr.Recognizer()
@@ -44,14 +128,16 @@ def initialize_speech_recognition():
     # Adjust for ambient noise
     with microphone as source:
         recognizer.adjust_for_ambient_noise(source, duration=1)
+    
+    logging.info("Speech recognition initialized")
 
 async def voice_input(max_retries=3):
     global recognizer, microphone
-    
-    if recognizer is None or microphone is None:
-        initialize_speech_recognition()
 
     for attempt in range(max_retries):
+        # Reinitialize speech recognition objects before each attempt
+        initialize_speech_recognition()
+
         try:
             with microphone as source:
                 console.print("Listening... Speak now.", style="bold green")
@@ -63,22 +149,31 @@ async def voice_input(max_retries=3):
             return text.lower()
         except sr.WaitTimeoutError:
             console.print(f"No speech detected. Attempt {attempt + 1} of {max_retries}.", style="bold red")
+            logging.warning(f"No speech detected. Attempt {attempt + 1} of {max_retries}")
         except sr.UnknownValueError:
             console.print(f"Speech was unintelligible. Attempt {attempt + 1} of {max_retries}.", style="bold red")
+            logging.warning(f"Speech was unintelligible. Attempt {attempt + 1} of {max_retries}")
         except sr.RequestError as e:
             console.print(f"Could not request results from speech recognition service; {e}", style="bold red")
+            logging.error(f"Could not request results from speech recognition service; {e}")
             return None
         except Exception as e:
             console.print(f"Unexpected error in voice input: {str(e)}", style="bold red")
+            logging.error(f"Unexpected error in voice input: {str(e)}")
             return None
+        
+        # Add a short delay between attempts
+        await asyncio.sleep(1)
     
     console.print("Max retries reached. Returning to text input mode.", style="bold red")
+    logging.info("Max retries reached in voice input. Returning to text input mode.")
     return None
 
 def cleanup_speech_recognition():
     global recognizer, microphone
     recognizer = None
     microphone = None
+    logging.info('Speech recognition objects cleaned up')
 
 def process_voice_command(command):
     if command in VOICE_COMMANDS:
@@ -99,16 +194,8 @@ async def get_user_input(prompt="You: "):
     })
     session = PromptSession(style=style)
     return await session.prompt_async(prompt, multiline=False)
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-import datetime
-import venv
-import subprocess
-import sys
-import signal
-import logging
-from typing import Tuple, Optional
-import mimetypes
-import mimetypes
+
+
 
 
 def setup_virtual_environment() -> Tuple[str, str]:
@@ -130,8 +217,7 @@ def setup_virtual_environment() -> Tuple[str, str]:
         raise
 
 
-# Load environment variables from .env file
-load_dotenv()
+
 
 # Initialize the Anthropic client
 anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -213,6 +299,7 @@ Available tools and their optimal use cases:
 4. execute_code: Run Python code exclusively in the 'code_execution_env' virtual environment and analyze its output. Use this when you need to test code functionality or diagnose issues. Remember that all code execution happens in this isolated environment. This tool returns a process ID for long-running processes.
 5. stop_process: Stop a running process by its ID. Use this when you need to terminate a long-running process started by the execute_code tool.
 6. read_multiple_files: Read the contents of one or more existing files, supporting wildcards (e.g., '*.py') and recursive directory reading. This tool can handle single or multiple file paths, directory paths, and wildcard patterns. Use this when you need to examine or work with file contents, especially for multiple files or entire directories.
+ULTRA IMPORTANT: BEFORE READING A FILE or FILES, ALWAYS CHECK IF THE FILE IS ALREADY IN YOUR CONTEXT. IF IT IS, USE THE FILE CONTENTS DIRECTLY.
 7. list_files: List all files and directories in a specified folder.
 8. tavily_search: Perform a web search using the Tavily API for up-to-date information.
 9. Scan project folders to turn them into an .md file for better context.
@@ -992,10 +1079,7 @@ tools = [
     }
 ]
 
-from typing import Dict, Any
-import os
-import mimetypes
-import asyncio
+
 
 async def decide_retry(tool_checker_response, edit_results):
     try:
@@ -1257,7 +1341,7 @@ def save_chat():
 
 
 async def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
-    global conversation_history, automode, main_model_tokens
+    global conversation_history, automode, main_model_tokens, use_tts, tts_enabled
 
     current_conversation = []
 
@@ -1366,6 +1450,9 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             tool_uses.append(content_block)
 
     console.print(Panel(Markdown(assistant_response), title="Claude's Response", title_align="left", border_style="blue", expand=False))
+    
+    if tts_enabled and use_tts:
+        await text_to_speech(assistant_response)
 
     # Display files in context
     if file_contents:
@@ -1460,6 +1547,8 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 if tool_content_block.type == "text":
                     tool_checker_response += tool_content_block.text
             console.print(Panel(Markdown(tool_checker_response), title="Claude's Response to Tool Result",  title_align="left", border_style="blue", expand=False))
+            if use_tts:
+                await text_to_speech(tool_checker_response)
             assistant_response += "\n\n" + tool_checker_response
 
             # If the tool was edit_and_apply_multiple, let the AI decide whether to retry
@@ -1472,7 +1561,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     console.print(Panel(retry_console_output, title="Retry Result", style="cyan"))
                     assistant_response += f"\n\nRetry result: {json.dumps(retry_result, indent=2)}"
                 else:
-                    console.print(Panel("Clude has decided not to retry editing", style="green"))
+                    console.print(Panel("Claude has decided not to retry editing", style="green"))
 
         except APIError as e:
             error_message = f"Error in tool response: {str(e)}"
@@ -1595,15 +1684,43 @@ def display_token_usage():
 
 
 
+async def test_voice_mode():
+    global voice_mode
+    voice_mode = True
+    initialize_speech_recognition()
+    console.print(Panel("Entering voice input test mode. Say a few phrases, then say 'exit voice mode' to end the test.", style="bold green"))
+    
+    while voice_mode:
+        user_input = await voice_input()
+        if user_input is None:
+            voice_mode = False
+            cleanup_speech_recognition()
+            console.print(Panel("Exited voice input test mode due to error.", style="bold yellow"))
+            break
+        
+        stay_in_voice_mode, command_result = process_voice_command(user_input)
+        if not stay_in_voice_mode:
+            voice_mode = False
+            cleanup_speech_recognition()
+            console.print(Panel("Exited voice input test mode.", style="bold green"))
+            break
+        elif command_result:
+            console.print(Panel(command_result, style="cyan"))
+    
+    console.print(Panel("Voice input test completed.", style="bold green"))
+
 async def main():
-    global automode, conversation_history
-    console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Multi-Agent, Image, and Voice Support!", title="Welcome", style="bold green"))
+    global automode, conversation_history, use_tts, tts_enabled
+    console.print(Panel("Welcome to the Claude-3-Sonnet Engineer Chat with Multi-Agent, Image, Voice, and Text-to-Speech Support!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
     console.print("Type 'image' to include an image in your message.")
     console.print("Type 'voice' to enter voice input mode.")
+    console.print("Type 'test voice' to run a voice input test.")
     console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
     console.print("Type 'reset' to clear the conversation history.")
     console.print("Type 'save chat' to save the conversation to a Markdown file.")
+    console.print("Type '11labs on' to enable text-to-speech.")
+    console.print("Type '11labs off' to disable text-to-speech.")
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
 
     voice_mode = False
@@ -1617,10 +1734,16 @@ async def main():
                 console.print(Panel("Exited voice input mode due to error. Returning to text input.", style="bold yellow"))
                 continue
             
-            if user_input.lower() == 'exit voice mode':
+            stay_in_voice_mode, command_result = process_voice_command(user_input)
+            if not stay_in_voice_mode:
                 voice_mode = False
                 cleanup_speech_recognition()
                 console.print(Panel("Exited voice input mode. Returning to text input.", style="bold green"))
+                if command_result:
+                    console.print(Panel(command_result, style="cyan"))
+                continue
+            elif command_result:
+                console.print(Panel(command_result, style="cyan"))
                 continue
         else:
             user_input = await get_user_input()
@@ -1628,6 +1751,24 @@ async def main():
         if user_input.lower() == 'exit':
             console.print(Panel("Thank you for chatting. Goodbye!", title_align="left", title="Goodbye", style="bold green"))
             break
+
+        if user_input.lower() == 'test voice':
+            await test_voice_mode()
+            continue
+
+        if user_input.lower() == '11labs on':
+            use_tts = True
+            tts_enabled = True
+            console.print(Panel("Text-to-speech enabled.", style="bold green"))
+            continue
+
+        if user_input.lower() == '11labs off':
+            use_tts = False
+            tts_enabled = False
+            console.print(Panel("Text-to-speech disabled.", style="bold yellow"))
+            continue
+
+
 
         if user_input.lower() == 'reset':
             reset_conversation()
