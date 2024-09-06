@@ -1,7 +1,4 @@
 import os
-import io
-import re
-import mimetypes
 import fnmatch
 
 class GitignoreParser:
