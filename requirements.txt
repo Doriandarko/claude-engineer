@@ -7,3 +7,4 @@ aiohttp
 prompt_toolkit
 SpeechRecognition
 pydub
+websockets
