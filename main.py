@@ -20,6 +20,7 @@ from prompt_toolkit.styles import Style
 import difflib
 import glob
 import speech_recognition as sr
+from gitignore_parser import GitignoreParser
 
 # Create a recognizer object
 recognizer = sr.Recognizer()
@@ -1108,21 +1109,49 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
             "console_output": None
         }
 
+def is_text_file(file_path, block_size=512):
+    try:
+        with open(file_path, 'rb') as file:
+            chunk = file.read(block_size)
+            if b'\x00' in chunk:  # If we find a null byte, it's a binary file
+                return False
+            # Try decoding to UTF-8 (or any other common text encoding)
+            try:
+                chunk.decode('utf-8')
+                return True
+            except UnicodeDecodeError:
+                return False
+    except Exception as e:
+        print(f"Could not read file {file_path}: {e}")
+        return False
+
 def scan_folder(folder_path: str, output_file: str) -> str:
-    ignored_folders = {'.git', '__pycache__', 'node_modules', 'venv', 'env'}
+    # Dynamically extend the ignored folders by finding and parsing .gitignore files
+    parser = GitignoreParser(folder_path)
+    parser.build_exclusion_list() # by default, all the .ignore files in the project are used as a source for folders and files to exclude
+    parser.add_exclusions([
+        (False, "**/package-lock.json"), 
+        (False, "**/.gitignore"), 
+        (False, "**/.git"), 
+        (False, "**/__pycache__"), 
+        (False, "**/node_modules"), 
+        (False, "**/venv"), 
+        (False, "**/env")]) # manual exclusion rules, the boolean indicates if the rule must be negated or not
+
     markdown_content = f"# Folder Scan: {folder_path}\n\n"
     total_chars = len(markdown_content)
     max_chars = 600000  # Approximating 150,000 tokens
 
     for root, dirs, files in os.walk(folder_path):
-        dirs[:] = [d for d in dirs if d not in ignored_folders]
-
+        # Remove ignored folders and their subdirectories
+        dirs[:] = [d for d in dirs if not parser.is_excluded(os.path.relpath(os.path.join(root, d), folder_path))]  
+        files[:] = [f for f in files if not parser.is_excluded(os.path.relpath(os.path.join(root, f), folder_path)) ] 
+        
         for file in files:
             file_path = os.path.join(root, file)
             relative_path = os.path.relpath(file_path, folder_path)
 
-            mime_type, _ = mimetypes.guess_type(file_path)
-            if mime_type and mime_type.startswith('text'):
+            if is_text_file(file_path):
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
