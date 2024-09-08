@@ -278,6 +278,7 @@ CODEEXECUTIONMODEL = "claude-3-5-sonnet-20240620"
 BASE_SYSTEM_PROMPT = """
 You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
 
+<capabilities>
 1. Creating and managing project structures
 2. Writing, debugging, and improving code across multiple languages
 3. Providing architectural insights and applying design patterns
@@ -286,9 +287,11 @@ You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, 
 6. Performing web searches for up-to-date information
 7. Executing code and analyzing its output within an isolated 'code_execution_env' virtual environment
 8. Managing and stopping running processes started within the 'code_execution_env'
+</capabilities>
 
 Available tools and their optimal use cases:
 
+<tools>
 1. create_folders: Create new folders at the specified paths, including nested directories. Use this to create one or more directories in the project structure, even complex nested structures in a single operation.
 2. create_files: Generate one or more new files with specified content. Strive to make the files as complete and useful as possible.
 3. edit_and_apply_multiple: Examine and modify one or more existing files by instructing a separate AI coding agent. You are responsible for providing clear, detailed instructions for each file. When using this tool:
@@ -300,11 +303,17 @@ Available tools and their optimal use cases:
 4. execute_code: Run Python code exclusively in the 'code_execution_env' virtual environment and analyze its output. Use this when you need to test code functionality or diagnose issues. Remember that all code execution happens in this isolated environment. This tool returns a process ID for long-running processes.
 5. stop_process: Stop a running process by its ID. Use this when you need to terminate a long-running process started by the execute_code tool.
 6. read_multiple_files: Read the contents of one or more existing files, supporting wildcards (e.g., '*.py') and recursive directory reading. This tool can handle single or multiple file paths, directory paths, and wildcard patterns. Use this when you need to examine or work with file contents, especially for multiple files or entire directories.
-ULTRA IMPORTANT: BEFORE READING A FILE or FILES, ALWAYS CHECK IF THE FILE IS ALREADY IN YOUR CONTEXT. IF IT IS, USE THE FILE CONTENTS DIRECTLY.
+ IMPORTANT: Before using the read_multiple_files tool, always check if the files you need are already in your context (system prompt).
+    If the file contents are already available to you, use that information directly instead of calling the read_multiple_files tool.
+    Only use the read_multiple_files tool for files that are not already in your context.
 7. list_files: List all files and directories in a specified folder.
 8. tavily_search: Perform a web search using the Tavily API for up-to-date information.
-9. Scan project folders to turn them into an .md file for better context.
+9. scan_folder: Scan a specified folder and create a Markdown file with the contents of all coding text files, excluding binary files and common ignored folders. Use this tool to generate comprehensive documentation of project structures.
+10. run_shell_command: Execute a shell command and return its output. Use this tool when you need to run system commands or interact with the operating system. Ensure the command is safe and appropriate for the current operating system.
+IMPORTANT: Use this tool to install dependencies in the code_execution_env when using the execute_code tool.
+</tools>
 
+<tool_usage_guidelines>
 Tool Usage Guidelines:
 - Always use the most appropriate tool for the task at hand.
 - Provide detailed and clear instructions when using tools, especially for edit_and_apply_multiple.
@@ -313,26 +322,33 @@ Tool Usage Guidelines:
 - For long-running processes, use the process ID returned by execute_code to stop them later if needed.
 - Proactively use tavily_search when you need up-to-date information or additional context.
 - When working with files, use read_multiple_files for both single and multiple file read making sure that the files are not already in your context.
+</tool_usage_guidelines>
 
+<error_handling>
 Error Handling and Recovery:
 - If a tool operation fails, carefully analyze the error message and attempt to resolve the issue.
 - For file-related errors, double-check file paths and permissions before retrying.
 - If a search fails, try rephrasing the query or breaking it into smaller, more specific searches.
 - If code execution fails, analyze the error output and suggest potential fixes, considering the isolated nature of the environment.
 - If a process fails to stop, consider potential reasons and suggest alternative approaches.
+</error_handling>
 
+<project_management>
 Project Creation and Management:
 1. Start by creating a root folder for new projects.
 2. Create necessary subdirectories and files within the root folder.
 3. Organize the project structure logically, following best practices for the specific project type.
+</project_management>
 
 Always strive for accuracy, clarity, and efficiency in your responses and actions. Your instructions must be precise and comprehensive. If uncertain, use the tavily_search tool or admit your limitations. When executing code, always remember that it runs in the isolated 'code_execution_env' virtual environment. Be aware of any long-running processes you start and manage them appropriately, including stopping them when they are no longer needed.
 
+<tool_usage_best_practices>
 When using tools:
 1. Carefully consider if a tool is necessary before using it.
 2. Ensure all required parameters are provided and valid.
 3. Handle both successful results and errors gracefully.
 4. Provide clear explanations of tool usage and results to the user.
+</tool_usage_best_practices>
 
 Remember, you are an AI assistant, and your primary goal is to help the user accomplish their tasks effectively and efficiently while maintaining the integrity and security of their development environment.
 """
@@ -340,25 +356,36 @@ Remember, you are an AI assistant, and your primary goal is to help the user acc
 AUTOMODE_SYSTEM_PROMPT = """
 You are currently in automode. Follow these guidelines:
 
+<goal_setting>
 1. Goal Setting:
    - Set clear, achievable goals based on the user's request.
    - Break down complex tasks into smaller, manageable goals.
+</goal_setting>
 
+<goal_execution>
 2. Goal Execution:
    - Work through goals systematically, using appropriate tools for each task.
    - Utilize file operations, code writing, and web searches as needed.
    - Always read a file before editing and review changes after editing.
+</goal_execution>
 
+<progress_tracking>
 3. Progress Tracking:
    - Provide regular updates on goal completion and overall progress.
    - Use the iteration information to pace your work effectively.
+</progress_tracking>
 
+<task_breakdown>
 Break Down Complex Tasks:
 When faced with a complex task or project, break it down into smaller, manageable steps. Provide a clear outline of the steps involved, potential challenges, and how to approach each part of the task.
+</task_breakdown>
 
+<explanation_preference>
 Prefer Answering Without Code:
 When explaining concepts or providing solutions, prioritize clear explanations and pseudocode over full code implementations. Only provide full code snippets when explicitly requested or when it's essential for understanding.
+</explanation_preference>
 
+<code_review_process>
 Code Review Process:
 When reviewing code, follow these steps:
 1. Understand the context and purpose of the code
@@ -368,7 +395,9 @@ When reviewing code, follow these steps:
 5. Ensure adherence to best practices and coding standards
 6. Consider security implications
 7. Provide constructive feedback with explanations
+</code_review_process>
 
+<project_planning>
 Project Planning:
 When planning a project, consider the following:
 1. Define clear project goals and objectives
@@ -378,7 +407,9 @@ When planning a project, consider the following:
 5. Suggest appropriate tools and technologies
 6. Outline a testing and quality assurance strategy
 7. Consider scalability and future maintenance
+</project_planning>
 
+<security_review>
 Security Review:
 When conducting a security review, focus on:
 1. Identifying potential vulnerabilities in the code
@@ -388,24 +419,34 @@ When conducting a security review, focus on:
 5. Checking for secure communication protocols
 6. Identifying any use of deprecated or insecure functions
 7. Suggesting security best practices and improvements
+</security_review>
 
 Remember to apply these additional skills and processes when assisting users with their software development tasks and projects.
+
+<tool_usage>
 4. Tool Usage:
    - Leverage all available tools to accomplish your goals efficiently.
    - Prefer edit_and_apply_multiple for file modifications, applying changes in chunks for large edits.
    - Use tavily_search proactively for up-to-date information.
+</tool_usage>
 
+<error_handling>
 5. Error Handling:
    - If a tool operation fails, analyze the error and attempt to resolve the issue.
    - For persistent errors, consider alternative approaches to achieve the goal.
+</error_handling>
 
+<automode_completion>
 6. Automode Completion:
    - When all goals are completed, respond with "AUTOMODE_COMPLETE" to exit automode.
    - Do not ask for additional tasks or modifications once goals are achieved.
+</automode_completion>
 
+<iteration_awareness>
 7. Iteration Awareness:
    - You have access to this {iteration_info}.
    - Use this information to prioritize tasks and manage time effectively.
+</iteration_awareness>
 
 Remember: Focus on completing the established goals efficiently and effectively. Avoid unnecessary conversations or requests for additional tasks.
 """
@@ -414,9 +455,9 @@ Remember: Focus on completing the established goals efficiently and effectively.
 def update_system_prompt(current_iteration: Optional[int] = None, max_iterations: Optional[int] = None) -> str:
     global file_contents
     chain_of_thought_prompt = """
-    IMPORTANT: Before using the read_multiple_files tool, always check if the files you need are already in your context (system prompt).
-    If the file contents are already available to you, use that information directly instead of calling the read_multiple_files tool.
-    Only use the read_multiple_files tool for files that are not already in your context.
+    Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
+
+    Do not reflect on the quality of the returned search results in your response.
     """
 
     files_in_context = "\n".join(file_contents.keys())
@@ -625,16 +666,21 @@ async def edit_and_apply_multiple(files, project_context, is_automode=False):
     if isinstance(files, dict):
         files = [files]
 
+    logging.info(f"Starting edit_and_apply_multiple with {len(files)} file(s)")
+
     for file in files:
         path = file['path']
         instructions = file['instructions']
+        logging.info(f"Processing file: {path}")
         try:
             original_content = file_contents.get(path, "")
             if not original_content:
+                logging.info(f"Reading content for file: {path}")
                 with open(path, 'r') as f:
                     original_content = f.read()
                 file_contents[path] = original_content
 
+            logging.info(f"Generating edit instructions for file: {path}")
             edit_instructions = await generate_edit_instructions(path, original_content, instructions, project_context, file_contents)
 
             if edit_instructions:
@@ -643,14 +689,17 @@ async def edit_and_apply_multiple(files, project_context, is_automode=False):
                     console.print(f"Block {i}:")
                     console.print(Panel(f"SEARCH:\n{block['search']}\n\nREPLACE:\n{block['replace']}\nSimilarity: {block['similarity']:.2f}", expand=False))
 
+                logging.info(f"Applying edits to file: {path}")
                 edited_content, changes_made, failed_edits, console_output = await apply_edits(path, edit_instructions, original_content)
                 console_outputs.append(console_output)
 
                 if changes_made:
                     file_contents[path] = edited_content
                     console.print(Panel(f"File contents updated in system prompt: {path}", style="green"))
+                    logging.info(f"Changes applied to file: {path}")
 
                     if failed_edits:
+                        logging.warning(f"Some edits failed for file: {path}")
                         results.append({
                             "path": path,
                             "status": "partial_success",
@@ -666,18 +715,21 @@ async def edit_and_apply_multiple(files, project_context, is_automode=False):
                             "edited_content": edited_content
                         })
                 else:
+                    logging.warning(f"No changes applied to file: {path}")
                     results.append({
                         "path": path,
                         "status": "no_changes",
                         "message": f"No changes could be applied to {path}. Please review the edit instructions and try again."
                     })
             else:
+                logging.warning(f"No edit instructions generated for file: {path}")
                 results.append({
                     "path": path,
                     "status": "no_instructions",
                     "message": f"No edit instructions generated for {path}"
                 })
         except Exception as e:
+            logging.error(f"Error editing/applying to file {path}: {str(e)}")
             error_message = f"Error editing/applying to file {path}: {str(e)}"
             results.append({
                 "path": path,
@@ -686,6 +738,7 @@ async def edit_and_apply_multiple(files, project_context, is_automode=False):
             })
             console_outputs.append(error_message)
 
+    logging.info("Completed edit_and_apply_multiple")
     return results, "\n".join(console_outputs)
 
 
@@ -785,12 +838,21 @@ async def execute_code(code, timeout=10):
     global running_processes
     venv_path, activate_script = setup_virtual_environment()
 
+    # Input validation
+    if not isinstance(code, str):
+        raise ValueError("code must be a string")
+    if not isinstance(timeout, (int, float)):
+        raise ValueError("timeout must be a number")
+
     # Generate a unique identifier for this process
     process_id = f"process_{len(running_processes)}"
 
     # Write the code to a temporary file
-    with open(f"{process_id}.py", "w") as f:
-        f.write(code)
+    try:
+        with open(f"{process_id}.py", "w") as f:
+            f.write(code)
+    except IOError as e:
+        return process_id, f"Error writing code to file: {str(e)}"
 
     # Prepare the command to run the code
     if sys.platform == "win32":
@@ -798,32 +860,41 @@ async def execute_code(code, timeout=10):
     else:
         command = f'source "{activate_script}" && python3 {process_id}.py'
 
-    # Create a process to run the command
-    process = await asyncio.create_subprocess_shell(
-        command,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        shell=True,
-        preexec_fn=None if sys.platform == "win32" else os.setsid
-    )
-
-    # Store the process in our global dictionary
-    running_processes[process_id] = process
-
     try:
-        # Wait for initial output or timeout
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
-        stdout = stdout.decode()
-        stderr = stderr.decode()
-        return_code = process.returncode
-    except asyncio.TimeoutError:
-        # If we timeout, it means the process is still running
-        stdout = "Process started and running in the background."
-        stderr = ""
-        return_code = "Running"
+        # Create a process to run the command
+        process = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            shell=True,
+            preexec_fn=None if sys.platform == "win32" else os.setsid
+        )
 
-    execution_result = f"Process ID: {process_id}\n\nStdout:\n{stdout}\n\nStderr:\n{stderr}\n\nReturn Code: {return_code}"
-    return process_id, execution_result
+        # Store the process in our global dictionary
+        running_processes[process_id] = process
+
+        try:
+            # Wait for initial output or timeout
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+            stdout = stdout.decode()
+            stderr = stderr.decode()
+            return_code = process.returncode
+        except asyncio.TimeoutError:
+            # If we timeout, it means the process is still running
+            stdout = "Process started and running in the background."
+            stderr = ""
+            return_code = "Running"
+
+        execution_result = f"Process ID: {process_id}\n\nStdout:\n{stdout}\n\nStderr:\n{stderr}\n\nReturn Code: {return_code}"
+        return process_id, execution_result
+    except Exception as e:
+        return process_id, f"Error executing code: {str(e)}"
+    finally:
+        # Cleanup: remove the temporary file
+        try:
+            os.remove(f"{process_id}.py")
+        except OSError:
+            pass  # Ignore errors in removing the file
 
 # Update the read_multiple_files function to handle both single and multiple files
 def read_multiple_files(paths, recursive=False):
@@ -1380,6 +1451,16 @@ def save_chat():
 async def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
     global conversation_history, automode, main_model_tokens, use_tts, tts_enabled
 
+    # Input validation
+    if not isinstance(user_input, str):
+        raise ValueError("user_input must be a string")
+    if image_path is not None and not isinstance(image_path, str):
+        raise ValueError("image_path must be a string or None")
+    if current_iteration is not None and not isinstance(current_iteration, int):
+        raise ValueError("current_iteration must be an integer or None")
+    if max_iterations is not None and not isinstance(max_iterations, int):
+        raise ValueError("max_iterations must be an integer or None")
+
     current_conversation = []
 
     if image_path:
@@ -1435,44 +1516,52 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     # Combine filtered history with current conversation to maintain context
     messages = filtered_conversation_history + current_conversation
 
-    try:
-        # MAINMODEL call with prompt caching
-        response = client.beta.prompt_caching.messages.create(
-            model=MAINMODEL,
-            max_tokens=8000,
-            system=[
-                {
-                    "type": "text",
-                    "text": update_system_prompt(current_iteration, max_iterations),
-                    "cache_control": {"type": "ephemeral"}
-                },
-                {
-                    "type": "text",
-                    "text": json.dumps(tools),
-                    "cache_control": {"type": "ephemeral"}
-                }
-            ],
-            messages=messages,
-            tools=tools,
-            tool_choice={"type": "auto"},
-            extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
-        )
-        # Update token usage for MAINMODEL
-        main_model_tokens['input'] += response.usage.input_tokens
-        main_model_tokens['output'] += response.usage.output_tokens
-        main_model_tokens['cache_creation'] = response.usage.cache_creation_input_tokens
-        main_model_tokens['cache_read'] = response.usage.cache_read_input_tokens
-    except APIStatusError as e:
-        if e.status_code == 429:
-            console.print(Panel("Rate limit exceeded. Retrying after a short delay...", title="API Error", style="bold yellow"))
-            time.sleep(5)
-            return await chat_with_claude(user_input, image_path, current_iteration, max_iterations)
-        else:
+    max_retries = 3
+    retry_delay = 5
+
+    for attempt in range(max_retries):
+        try:
+            # MAINMODEL call with prompt caching
+            response = client.beta.prompt_caching.messages.create(
+                model=MAINMODEL,
+                max_tokens=8000,
+                system=[
+                    {
+                        "type": "text",
+                        "text": update_system_prompt(current_iteration, max_iterations),
+                        "cache_control": {"type": "ephemeral"}
+                    },
+                    {
+                        "type": "text",
+                        "text": json.dumps(tools),
+                        "cache_control": {"type": "ephemeral"}
+                    }
+                ],
+                messages=messages,
+                tools=tools,
+                tool_choice={"type": "auto"},
+                extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
+            )
+            # Update token usage for MAINMODEL
+            main_model_tokens['input'] += response.usage.input_tokens
+            main_model_tokens['output'] += response.usage.output_tokens
+            main_model_tokens['cache_creation'] = response.usage.cache_creation_input_tokens
+            main_model_tokens['cache_read'] = response.usage.cache_read_input_tokens
+            break  # If successful, break out of the retry loop
+        except APIStatusError as e:
+            if e.status_code == 429 and attempt < max_retries - 1:
+                console.print(Panel(f"Rate limit exceeded. Retrying in {retry_delay} seconds... (Attempt {attempt + 1}/{max_retries})", title="API Error", style="bold yellow"))
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+            else:
+                console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
+                return "I'm sorry, there was an error communicating with the AI. Please try again.", False
+        except APIError as e:
             console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
             return "I'm sorry, there was an error communicating with the AI. Please try again.", False
-    except APIError as e:
-        console.print(Panel(f"API Error: {str(e)}", title="API Error", style="bold red"))
-        return "I'm sorry, there was an error communicating with the AI. Please try again.", False
+    else:
+        console.print(Panel("Max retries reached. Unable to communicate with the AI.", title="Error", style="bold red"))
+        return "I'm sorry, there was a persistent error communicating with the AI. Please try again later.", False
 
     assistant_response = ""
     exit_continuation = False
@@ -1887,5 +1976,54 @@ async def main():
         else:
             response, _ = await chat_with_claude(user_input)
 
+def validate_files_structure(files):
+    if not isinstance(files, (dict, list)):
+        raise ValueError("Invalid 'files' structure. Expected a dictionary or a list of dictionaries.")
+    
+    if isinstance(files, dict):
+        files = [files]
+    
+    for file in files:
+        if not isinstance(file, dict):
+            raise ValueError("Each file must be a dictionary.")
+        if 'path' not in file or 'instructions' not in file:
+            raise ValueError("Each file dictionary must contain 'path' and 'instructions' keys.")
+        if not isinstance(file['path'], str) or not isinstance(file['instructions'], str):
+            raise ValueError("'path' and 'instructions' must be strings.")
+
+    return files
+
+def validate_files_structure(files):
+    if not isinstance(files, (dict, list)):
+        raise ValueError("Invalid 'files' structure. Expected a dictionary or a list of dictionaries.")
+    
+    if isinstance(files, dict):
+        files = [files]
+    
+    for file in files:
+        if not isinstance(file, dict):
+            raise ValueError("Each file must be a dictionary.")
+        if 'path' not in file or 'instructions' not in file:
+            raise ValueError("Each file dictionary must contain 'path' and 'instructions' keys.")
+        if not isinstance(file['path'], str) or not isinstance(file['instructions'], str):
+            raise ValueError("'path' and 'instructions' must be strings.")
+
+    return files
+
+
+
+    # Add more tests for other functions as needed
+
 if __name__ == "__main__":
-    asyncio.run(main())
+
+
+    # Run the main program
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        console.print("\nProgram interrupted by user. Exiting...", style="bold red")
+    except Exception as e:
+        console.print(f"An unexpected error occurred: {str(e)}", style="bold red")
+        logging.error(f"Unexpected error: {str(e)}", exc_info=True)
+    finally:
+        console.print("Program finished. Goodbye!", style="bold green")
