@@ -56,7 +56,7 @@ microphone = None
 tts_enabled = True
 use_tts = False
 ELEVEN_LABS_API_KEY = os.getenv('ELEVEN_LABS_API_KEY')
-VOICE_ID = 'VOICE ID'
+VOICE_ID = 'YOUR VOICE'
 MODEL_ID = 'eleven_turbo_v2_5'
 
 
@@ -301,6 +301,22 @@ Available tools and their optimal use cases:
    - Include ALL the snippets of code to change, along with the desired modifications.
    - Specify coding standards, naming conventions, or architectural patterns to be followed.
    - Anticipate potential issues or conflicts that might arise from the changes and provide guidance on how to handle them.
+   - IMPORTANT: Always provide the input in the following format:
+     {
+       "files": [
+         {
+           "path": "path/to/file1.py",
+           "instructions": "Detailed instructions for modifying file1.py"
+         },
+         {
+           "path": "path/to/file2.py",
+           "instructions": "Detailed instructions for modifying file2.py"
+         }
+       ],
+       "project_context": "Overall context and description of the project and desired changes"
+     }
+   - Ensure that the "files" key contains a list of dictionaries, even if you're only editing one file.
+   - Always include the "project_context" key with relevant information.
 4. execute_code: Run Python code exclusively in the 'code_execution_env' virtual environment and analyze its output. Use this when you need to test code functionality or diagnose issues. Remember that all code execution happens in this isolated environment. This tool returns a process ID for long-running processes.
 5. stop_process: Stop a running process by its ID. Use this when you need to terminate a long-running process started by the execute_code tool.
 6. read_multiple_files: Read the contents of one or more existing files, supporting wildcards (e.g., '*.py') and recursive directory reading. This tool can handle single or multiple file paths, directory paths, and wildcard patterns. Use this when you need to examine or work with file contents, especially for multiple files or entire directories.
@@ -347,8 +363,9 @@ Always strive for accuracy, clarity, and efficiency in your responses and action
 When using tools:
 1. Carefully consider if a tool is necessary before using it.
 2. Ensure all required parameters are provided and valid.
-3. Handle both successful results and errors gracefully.
-4. Provide clear explanations of tool usage and results to the user.
+3. When using edit_and_apply_multiple, always structure your input as a dictionary with "files" (a list of file dictionaries) and "project_context" keys.
+4. Handle both successful results and errors gracefully.
+5. Provide clear explanations of tool usage and results to the user.
 </tool_usage_best_practices>
 
 Remember, you are an AI assistant, and your primary goal is to help the user accomplish their tasks effectively and efficiently while maintaining the integrity and security of their development environment.
@@ -605,7 +622,7 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
 
         
 
-        IMPORTANT: ONLY RETURN CODE INSIDE THE <SEARCH> AND <REPLACE> TAGS. ONLY RETURN THE CODE OTHERWISE THE EDIT WILL NOT BE APPLIED.
+        IMPORTANT: ONLY RETURN CODE INSIDE THE <SEARCH> AND <REPLACE> TAGS. ONLY RETURN THE CODE OTHERWISE THE EDIT WILL NOT BE APPLIED AND YOU WILL BE FIRED.
         """
 
         response = client.beta.prompt_caching.messages.create(
@@ -623,17 +640,27 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
             ],
             extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
         )
+
         # Update token usage for code editor
         code_editor_tokens['input'] += response.usage.input_tokens
         code_editor_tokens['output'] += response.usage.output_tokens
         code_editor_tokens['cache_creation'] = response.usage.cache_creation_input_tokens
         code_editor_tokens['cache_read'] = response.usage.cache_read_input_tokens
 
-        # Parse the response to extract SEARCH/REPLACE blocks
-        edit_instructions = parse_search_replace_blocks(response.content[0].text)
+        ai_response_text = response.content[0].text
 
-        # Update code editor memory (this is the only part that maintains some context between calls)
-        code_editor_memory.append(f"Edit Instructions for {file_path}:\n{response.content[0].text}")
+        # Validate AI response
+        if not validate_ai_response(ai_response_text):
+            raise ValueError("AI response does not contain valid SEARCH/REPLACE blocks")
+
+        # Parse the response to extract SEARCH/REPLACE blocks
+        edit_instructions = parse_search_replace_blocks(ai_response_text)
+
+        if not edit_instructions:
+            raise ValueError("No valid edit instructions were generated")
+
+        # Update code editor memory
+        code_editor_memory.append(f"Edit Instructions for {file_path}:\n{ai_response_text}")
 
         # Add the file to code_editor_files set
         code_editor_files.add(file_path)
@@ -642,8 +669,16 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
 
     except Exception as e:
         console.print(f"Error in generating edit instructions: {str(e)}", style="bold red")
+        logging.error(f"Error in generating edit instructions: {str(e)}")
         return []  # Return empty list if any exception occurs
 
+
+def validate_ai_response(response_text):
+    if not re.search(r'<SEARCH>.*?</SEARCH>', response_text, re.DOTALL):
+        raise ValueError("AI response does not contain any SEARCH blocks")
+    if not re.search(r'<REPLACE>.*?</REPLACE>', response_text, re.DOTALL):
+        raise ValueError("AI response does not contain any REPLACE blocks")
+    return True
 
 
 def parse_search_replace_blocks(response_text, use_fuzzy=USE_FUZZY_SEARCH):
@@ -688,84 +723,97 @@ async def edit_and_apply_multiple(files, project_context, is_automode=False):
     results = []
     console_outputs = []
 
-    # Ensure files is always a list
-    if isinstance(files, dict):
-        files = [files]
+    logging.debug(f"Received files: {files}")
+    logging.debug(f"Project context: {project_context}")
 
-    logging.info(f"Starting edit_and_apply_multiple with {len(files)} file(s)")
+    try:
+        # Ensure files is always a list of dictionaries
+        if isinstance(files, dict):
+            files = [files]
+        elif not isinstance(files, list):
+            raise ValueError("files must be a dictionary or a list of dictionaries")
+        
+        for file in files:
+            if not isinstance(file, dict) or 'path' not in file or 'instructions' not in file:
+                raise ValueError("Each file must be a dictionary with 'path' and 'instructions' keys")
 
-    for file in files:
-        path = file['path']
-        instructions = file['instructions']
-        logging.info(f"Processing file: {path}")
-        try:
-            original_content = file_contents.get(path, "")
-            if not original_content:
-                logging.info(f"Reading content for file: {path}")
-                with open(path, 'r') as f:
-                    original_content = f.read()
-                file_contents[path] = original_content
+        logging.info(f"Starting edit_and_apply_multiple with {len(files)} file(s)")
 
-            logging.info(f"Generating edit instructions for file: {path}")
-            edit_instructions = await generate_edit_instructions(path, original_content, instructions, project_context, file_contents)
+        for file in files:
+            path = file['path']
+            instructions = file['instructions']
+            logging.info(f"Processing file: {path}")
+            try:
+                original_content = file_contents.get(path, "")
+                if not original_content:
+                    logging.info(f"Reading content for file: {path}")
+                    with open(path, 'r') as f:
+                        original_content = f.read()
+                    file_contents[path] = original_content
 
-            if edit_instructions:
-                console.print(Panel(f"File: {path}\nThe following SEARCH/REPLACE blocks have been generated:", title="Edit Instructions", style="cyan"))
-                for i, block in enumerate(edit_instructions, 1):
-                    console.print(f"Block {i}:")
-                    console.print(Panel(f"SEARCH:\n{block['search']}\n\nREPLACE:\n{block['replace']}\nSimilarity: {block['similarity']:.2f}", expand=False))
+                logging.info(f"Generating edit instructions for file: {path}")
+                edit_instructions = await generate_edit_instructions(path, original_content, instructions, project_context, file_contents)
 
-                logging.info(f"Applying edits to file: {path}")
-                edited_content, changes_made, failed_edits, console_output = await apply_edits(path, edit_instructions, original_content)
-                console_outputs.append(console_output)
+                if edit_instructions:
+                    console.print(Panel(f"File: {path}\nThe following SEARCH/REPLACE blocks have been generated:", title="Edit Instructions", style="cyan"))
+                    for i, block in enumerate(edit_instructions, 1):
+                        console.print(f"Block {i}:")
+                        console.print(Panel(f"SEARCH:\n{block['search']}\n\nREPLACE:\n{block['replace']}\nSimilarity: {block['similarity']:.2f}", expand=False))
 
-                if changes_made:
-                    file_contents[path] = edited_content
-                    console.print(Panel(f"File contents updated in system prompt: {path}", style="green"))
-                    logging.info(f"Changes applied to file: {path}")
+                    logging.info(f"Applying edits to file: {path}")
+                    edited_content, changes_made, failed_edits, console_output = await apply_edits(path, edit_instructions, original_content)
+                    console_outputs.append(console_output)
 
-                    if failed_edits:
-                        logging.warning(f"Some edits failed for file: {path}")
-                        results.append({
-                            "path": path,
-                            "status": "partial_success",
-                            "message": f"Some changes applied to {path}, but some edits failed.",
-                            "failed_edits": failed_edits,
-                            "edited_content": edited_content
-                        })
+                    if changes_made:
+                        file_contents[path] = edited_content
+                        console.print(Panel(f"File contents updated in system prompt: {path}", style="green"))
+                        logging.info(f"Changes applied to file: {path}")
+
+                        if failed_edits:
+                            logging.warning(f"Some edits failed for file: {path}")
+                            results.append({
+                                "path": path,
+                                "status": "partial_success",
+                                "message": f"Some changes applied to {path}, but some edits failed.",
+                                "failed_edits": failed_edits,
+                                "edited_content": edited_content
+                            })
+                        else:
+                            results.append({
+                                "path": path,
+                                "status": "success",
+                                "message": f"All changes successfully applied to {path}",
+                                "edited_content": edited_content
+                            })
                     else:
+                        logging.warning(f"No changes applied to file: {path}")
                         results.append({
                             "path": path,
-                            "status": "success",
-                            "message": f"All changes successfully applied to {path}",
-                            "edited_content": edited_content
+                            "status": "no_changes",
+                            "message": f"No changes could be applied to {path}. Please review the edit instructions and try again."
                         })
                 else:
-                    logging.warning(f"No changes applied to file: {path}")
+                    logging.warning(f"No edit instructions generated for file: {path}")
                     results.append({
                         "path": path,
-                        "status": "no_changes",
-                        "message": f"No changes could be applied to {path}. Please review the edit instructions and try again."
+                        "status": "no_instructions",
+                        "message": f"No edit instructions generated for {path}"
                     })
-            else:
-                logging.warning(f"No edit instructions generated for file: {path}")
+            except Exception as e:
+                logging.error(f"Error editing/applying to file {path}: {str(e)}")
+                error_message = f"Error editing/applying to file {path}: {str(e)}"
                 results.append({
                     "path": path,
-                    "status": "no_instructions",
-                    "message": f"No edit instructions generated for {path}"
+                    "status": "error",
+                    "message": error_message
                 })
-        except Exception as e:
-            logging.error(f"Error editing/applying to file {path}: {str(e)}")
-            error_message = f"Error editing/applying to file {path}: {str(e)}"
-            results.append({
-                "path": path,
-                "status": "error",
-                "message": error_message
-            })
-            console_outputs.append(error_message)
+                console_outputs.append(error_message)
 
-    logging.info("Completed edit_and_apply_multiple")
-    return results, "\n".join(console_outputs)
+        logging.info("Completed edit_and_apply_multiple")
+        return results, "\n".join(console_outputs)
+    except Exception as e:
+        logging.error(f"Error in edit_and_apply_multiple: {str(e)}")
+        return [], f"Error: {str(e)}"
 
 
 
