@@ -596,16 +596,7 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
         Outline discrete changes and suggest small tests for each stage.
         </PLANNING>
 
-        3. <SECURITY_REVIEW>
-        Conduct a thorough security analysis, especially for sensitive changes involving:
-        - Input handling
-        - Monetary calculations
-        - Authentication
-        - Data protection
-        Identify potential vulnerabilities introduced by the proposed changes.
-        </SECURITY_REVIEW>
-
-        4. Finally, generate SEARCH/REPLACE blocks for each necessary change:
+        3. Finally, generate SEARCH/REPLACE blocks for each necessary change:
         - Use enough context to uniquely identify the code to be changed
         - Maintain correct indentation and formatting
         - Focus on specific, targeted changes
