@@ -56,7 +56,7 @@ microphone = None
 tts_enabled = True
 use_tts = False
 ELEVEN_LABS_API_KEY = os.getenv('ELEVEN_LABS_API_KEY')
-VOICE_ID = 'YOUR VOICE ID'
+VOICE_ID = 'YOUR VOICE'
 MODEL_ID = 'eleven_turbo_v2_5'
 
 
@@ -1192,7 +1192,15 @@ async def decide_retry(tool_checker_response, edit_results):
         response = client.messages.create(
             model=TOOLCHECKERMODEL,
             max_tokens=1000,
-            system="You are an AI assistant tasked with deciding whether to retry editing files based on the previous edit results and the AI's response. Respond with a JSON object containing 'retry' (boolean) and 'files_to_retry' (list of file paths).",
+            system="""You are an AI assistant tasked with deciding whether to retry editing files based on the previous edit results and the AI's response. Respond with a JSON object containing 'retry' (boolean) and 'files_to_retry' (list of file paths).
+
+Example of the expected JSON response:
+{
+    "retry": true,
+    "files_to_retry": ["/path/to/file1.py", "/path/to/file2.py"]
+}
+
+Only return the JSON object, nothing else. Ensure that the JSON is properly formatted with double quotes around property names and string values.""",
             messages=[
                 {"role": "user", "content": f"Previous edit results: {json.dumps(edit_results)}\n\nAI's response: {tool_checker_response}\n\nDecide whether to retry editing any files."}
             ]
@@ -1593,7 +1601,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         tool_use_id = tool_use.id
 
         console.print(Panel(f"Tool Used: {tool_name}", style="green"))
-        # console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
+        console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
 
         if tool_name == 'create_files':
             tool_result = create_files(tool_input.get('files', [tool_input]))
