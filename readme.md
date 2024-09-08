@@ -21,6 +21,8 @@ to enter voice mode.
 
 Say "exit voice mode" to return to regular text.
 
+If you want to use your voice and 11 labs at the same time, first activate 11labs then type voice to use your voice. 
+
 Prompt caching. Make sure you udpate your Anthropic python package before running the script.
 ```
 pip install --upgrade anthropic
