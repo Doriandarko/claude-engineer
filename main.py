@@ -29,9 +29,10 @@ import logging
 from typing import Tuple, Optional, Dict, Any
 import mimetypes
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+import subprocess
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load environment variables from .env file
 load_dotenv()
@@ -311,7 +312,7 @@ Tool Usage Guidelines:
 - Use execute_code to run and test code within the 'code_execution_env' virtual environment, then analyze the results.
 - For long-running processes, use the process ID returned by execute_code to stop them later if needed.
 - Proactively use tavily_search when you need up-to-date information or additional context.
-- When working with files, use read_multiple_files for both single and multiple file reads.
+- When working with files, use read_multiple_files for both single and multiple file read making sure that the files are not already in your context.
 
 Error Handling and Recovery:
 - If a tool operation fails, carefully analyze the error message and attempt to resolve the issue.
@@ -886,6 +887,26 @@ def stop_process(process_id):
     else:
         return f"No running process found with ID {process_id}."
 
+def run_shell_command(command):
+    try:
+        result = subprocess.run(command, shell=True, check=True, text=True, capture_output=True)
+        return {
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "return_code": result.returncode
+        }
+    except subprocess.CalledProcessError as e:
+        return {
+            "stdout": e.stdout,
+            "stderr": e.stderr,
+            "return_code": e.returncode,
+            "error": str(e)
+        }
+    except Exception as e:
+        return {
+            "error": f"An error occurred while executing the command: {str(e)}"
+        }
+
 
 tools = [
     {
@@ -1076,6 +1097,20 @@ tools = [
             },
             "required": ["query"]
         }
+    },
+    {
+        "name": "run_shell_command",
+        "description": "Execute a shell command and return its output. This tool should be used when you need to run system commands or interact with the operating system. It will return the standard output, standard error, and return code of the executed command.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "The shell command to execute. Ensure the command is safe and appropriate for the current operating system."
+                }
+            },
+            "required": ["command"]
+        }
     }
 ]
 
@@ -1168,6 +1203,8 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
                 result += "\n\nNote: The process is still running in the background."
         elif tool_name == "scan_folder":
             result = scan_folder(tool_input["folder_path"], tool_input["output_file"])
+        elif tool_name == "run_shell_command":
+            result = run_shell_command(tool_input["command"])
         else:
             is_error = True
             result = f"Unknown tool: {tool_name}"
@@ -1467,7 +1504,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         tool_use_id = tool_use.id
 
         console.print(Panel(f"Tool Used: {tool_name}", style="green"))
-        console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
+        # console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
 
         if tool_name == 'create_files':
             tool_result = create_files(tool_input.get('files', [tool_input]))
@@ -1479,7 +1516,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         else:
             # Format the tool result content for proper rendering
             formatted_result = json.dumps(tool_result, indent=2) if isinstance(tool_result, (dict, list)) else str(tool_result)
-            console.print(Panel(formatted_result, title_align="left", title="Tool Result", style="green"))
+            # console.print(Panel(formatted_result, title_align="left", title="Tool Result", style="green"))
 
         current_conversation.append({
             "role": "assistant",
