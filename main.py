@@ -56,7 +56,7 @@ microphone = None
 tts_enabled = True
 use_tts = False
 ELEVEN_LABS_API_KEY = os.getenv('ELEVEN_LABS_API_KEY')
-VOICE_ID = 'YOUR VOICE'
+VOICE_ID = 'YOUR ID'
 MODEL_ID = 'eleven_turbo_v2_5'
 
 
@@ -235,11 +235,12 @@ tavily = TavilyClient(api_key=tavily_api_key)
 console = Console()
 
 
+
 # Token tracking variables
-main_model_tokens = {'input': 0, 'output': 0}
-tool_checker_tokens = {'input': 0, 'output': 0}
-code_editor_tokens = {'input': 0, 'output': 0}
-code_execution_tokens = {'input': 0, 'output': 0}
+main_model_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+tool_checker_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+code_editor_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+code_execution_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
 
 USE_FUZZY_SEARCH = True
 
@@ -1553,7 +1554,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             # Update token usage for MAINMODEL
             main_model_tokens['input'] += response.usage.input_tokens
             main_model_tokens['output'] += response.usage.output_tokens
-            main_model_tokens['cache_creation'] = response.usage.cache_creation_input_tokens
+            main_model_tokens['cache_write'] = response.usage.cache_creation_input_tokens
             main_model_tokens['cache_read'] = response.usage.cache_read_input_tokens
             break  # If successful, break out of the retry loop
         except APIStatusError as e:
@@ -1766,8 +1767,8 @@ def display_token_usage():
                           ("Code Execution", code_execution_tokens)]:
         input_tokens = tokens['input']
         output_tokens = tokens['output']
-        cache_write_tokens = tokens.get('cache_creation', 0)
-        cache_read_tokens = tokens.get('cache_read', 0)
+        cache_write_tokens = tokens['cache_write']
+        cache_read_tokens = tokens['cache_read']
         total_tokens = input_tokens + output_tokens + cache_write_tokens + cache_read_tokens
 
         total_input += input_tokens
