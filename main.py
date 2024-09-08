@@ -1722,10 +1722,10 @@ def reset_code_editor_memory():
 def reset_conversation():
     global conversation_history, main_model_tokens, tool_checker_tokens, code_editor_tokens, code_execution_tokens, file_contents, code_editor_files
     conversation_history = []
-    main_model_tokens = {'input': 0, 'output': 0}
-    tool_checker_tokens = {'input': 0, 'output': 0}
-    code_editor_tokens = {'input': 0, 'output': 0}
-    code_execution_tokens = {'input': 0, 'output': 0}
+    main_model_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+    tool_checker_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+    code_editor_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+    code_execution_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
     file_contents = {}
     code_editor_files = set()
     reset_code_editor_memory()
@@ -1765,10 +1765,10 @@ def display_token_usage():
                           ("Tool Checker", tool_checker_tokens),
                           ("Code Editor", code_editor_tokens),
                           ("Code Execution", code_execution_tokens)]:
-        input_tokens = tokens['input']
-        output_tokens = tokens['output']
-        cache_write_tokens = tokens['cache_write']
-        cache_read_tokens = tokens['cache_read']
+        input_tokens = tokens.get('input', 0)
+        output_tokens = tokens.get('output', 0)
+        cache_write_tokens = tokens.get('cache_write', 0)
+        cache_read_tokens = tokens.get('cache_read', 0)
         total_tokens = input_tokens + output_tokens + cache_write_tokens + cache_read_tokens
 
         total_input += input_tokens
