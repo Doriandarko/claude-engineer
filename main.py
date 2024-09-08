@@ -603,9 +603,9 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
         New code to insert
         </REPLACE>
 
-        If no changes are needed, explain why between <REASONING> tags.
+        
 
-        IMPORTANT: For any ambiguities or needed clarifications, ask questions between <CLARIFICATION> tags before proceeding with changes.
+        IMPORTANT: ONLY RETURN CODE INSIDE THE <SEARCH> AND <REPLACE> TAGS. ONLY RETURN THE CODE OTHERWISE THE EDIT WILL NOT BE APPLIED.
         """
 
         response = client.beta.prompt_caching.messages.create(
