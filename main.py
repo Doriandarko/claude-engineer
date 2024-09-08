@@ -56,7 +56,7 @@ microphone = None
 tts_enabled = True
 use_tts = False
 ELEVEN_LABS_API_KEY = os.getenv('ELEVEN_LABS_API_KEY')
-VOICE_ID = 'YOUR ID'
+VOICE_ID = 'VOICE ID'
 MODEL_ID = 'eleven_turbo_v2_5'
 
 
@@ -459,6 +459,11 @@ def update_system_prompt(current_iteration: Optional[int] = None, max_iterations
     Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
 
     Do not reflect on the quality of the returned search results in your response.
+
+    IMPORTANT: Before using the read_multiple_files tool, always check if the files you need are already in your context (system prompt).
+    If the file contents are already available to you, use that information directly instead of calling the read_multiple_files tool.
+    Only use the read_multiple_files tool for files that are not already in your context.
+    When instructing to read a file, always use the full file path.
     """
 
     files_in_context = "\n".join(file_contents.keys())
@@ -540,47 +545,67 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
         ])
 
         system_prompt = f"""
-        You are an AI coding agent that generates edit instructions for code files. Your task is to analyze the provided code and generate SEARCH/REPLACE blocks for necessary changes. Follow these steps:
+        You are an expert coding assistant specializing in web development (CSS, JavaScript, React, Tailwind, Node.JS, Hugo/Markdown). Review the following information carefully:
 
-        1. Review the entire file content to understand the context:
+        1. File Content:
         {file_content}
 
-        2. Carefully analyze the specific instructions:
+        2. Edit Instructions:
         {instructions}
 
-        3. Take into account the overall project context:
+        3. Project Context:
         {project_context}
 
-        4. Consider the memory of previous edits:
+        4. Previous Edit Memory:
         {memory_context}
 
-        5. Consider the full context of all files in the project:
+        5. Full Project Files Context:
         {full_file_contents_context}
 
-        6. Generate SEARCH/REPLACE blocks for each necessary change. Each block should:
-           - Include enough context to uniquely identify the code to be changed
-           - Provide the exact replacement code, maintaining correct indentation and formatting
-           - Focus on specific, targeted changes rather than large, sweeping modifications
+        Follow this process to generate edit instructions:
 
-        7. Ensure that your SEARCH/REPLACE blocks:
-           - Address all relevant aspects of the instructions
-           - Maintain or enhance code readability and efficiency
-           - Consider the overall structure and purpose of the code
-           - Follow best practices and coding standards for the language
-           - Maintain consistency with the project context and previous edits
-           - Take into account the full context of all files in the project
+        1. <CODE_REVIEW>
+        Analyze the existing code thoroughly. Describe how it works, identifying key components, 
+        dependencies, and potential issues. Consider the broader project context and previous edits.
+        </CODE_REVIEW>
 
-        IMPORTANT: RETURN ONLY THE SEARCH/REPLACE BLOCKS. NO EXPLANATIONS OR COMMENTS.
-        USE THE FOLLOWING FORMAT FOR EACH BLOCK:
+        2. <PLANNING>
+        Construct a plan to implement the requested changes. Consider:
+        - How to avoid code duplication (DRY principle)
+        - Balance between maintenance and flexibility
+        - Relevant frameworks or libraries
+        - Security implications
+        - Performance impacts
+        Outline discrete changes and suggest small tests for each stage.
+        </PLANNING>
+
+        3. <SECURITY_REVIEW>
+        Conduct a thorough security analysis, especially for sensitive changes involving:
+        - Input handling
+        - Monetary calculations
+        - Authentication
+        - Data protection
+        Identify potential vulnerabilities introduced by the proposed changes.
+        </SECURITY_REVIEW>
+
+        4. Finally, generate SEARCH/REPLACE blocks for each necessary change:
+        - Use enough context to uniquely identify the code to be changed
+        - Maintain correct indentation and formatting
+        - Focus on specific, targeted changes
+        - Ensure consistency with project context and previous edits
+
+        USE THIS FORMAT FOR CHANGES:
 
         <SEARCH>
-        Code to be replaced
+        Code to be replaced (with sufficient context)
         </SEARCH>
         <REPLACE>
         New code to insert
         </REPLACE>
 
-        If no changes are needed, return an empty list.
+        If no changes are needed, explain why between <REASONING> tags.
+
+        IMPORTANT: For any ambiguities or needed clarifications, ask questions between <CLARIFICATION> tags before proceeding with changes.
         """
 
         response = client.beta.prompt_caching.messages.create(
@@ -907,26 +932,28 @@ def read_multiple_files(paths, recursive=False):
 
     for path in paths:
         try:
-            if os.path.isdir(path):
+            abs_path = os.path.abspath(path)
+            if os.path.isdir(abs_path):
                 if recursive:
-                    file_paths = glob.glob(os.path.join(path, '**', '*'), recursive=True)
+                    file_paths = glob.glob(os.path.join(abs_path, '**', '*'), recursive=True)
                 else:
-                    file_paths = glob.glob(os.path.join(path, '*'))
+                    file_paths = glob.glob(os.path.join(abs_path, '*'))
                 file_paths = [f for f in file_paths if os.path.isfile(f)]
             else:
-                file_paths = glob.glob(path, recursive=recursive)
+                file_paths = glob.glob(abs_path, recursive=recursive)
 
             for file_path in file_paths:
-                if os.path.isfile(file_path):
-                    if file_path not in file_contents:
-                        with open(file_path, 'r', encoding='utf-8') as f:
+                abs_file_path = os.path.abspath(file_path)
+                if os.path.isfile(abs_file_path):
+                    if abs_file_path not in file_contents:
+                        with open(abs_file_path, 'r', encoding='utf-8') as f:
                             content = f.read()
-                        file_contents[file_path] = content
-                        results.append(f"File '{file_path}' has been read and stored in the system prompt.")
+                        file_contents[abs_file_path] = content
+                        results.append(f"File '{abs_file_path}' has been read and stored in the system prompt.")
                     else:
-                        results.append(f"File '{file_path}' is already in the system prompt. No need to read again.")
+                        results.append(f"File '{abs_file_path}' is already in the system prompt. No need to read again.")
                 else:
-                    results.append(f"Skipped '{file_path}': Not a file.")
+                    results.append(f"Skipped '{abs_file_path}': Not a file.")
         except Exception as e:
             results.append(f"Error reading path '{path}': {str(e)}")
 
@@ -1722,10 +1749,10 @@ def reset_code_editor_memory():
 def reset_conversation():
     global conversation_history, main_model_tokens, tool_checker_tokens, code_editor_tokens, code_execution_tokens, file_contents, code_editor_files
     conversation_history = []
-    main_model_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
-    tool_checker_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
-    code_editor_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
-    code_execution_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+    main_model_tokens = {'input': 0, 'output': 0}
+    tool_checker_tokens = {'input': 0, 'output': 0}
+    code_editor_tokens = {'input': 0, 'output': 0}
+    code_execution_tokens = {'input': 0, 'output': 0}
     file_contents = {}
     code_editor_files = set()
     reset_code_editor_memory()
@@ -1765,10 +1792,10 @@ def display_token_usage():
                           ("Tool Checker", tool_checker_tokens),
                           ("Code Editor", code_editor_tokens),
                           ("Code Execution", code_execution_tokens)]:
-        input_tokens = tokens.get('input', 0)
-        output_tokens = tokens.get('output', 0)
-        cache_write_tokens = tokens.get('cache_write', 0)
-        cache_read_tokens = tokens.get('cache_read', 0)
+        input_tokens = tokens['input']
+        output_tokens = tokens['output']
+        cache_write_tokens = tokens['cache_write']
+        cache_read_tokens = tokens['cache_read']
         total_tokens = input_tokens + output_tokens + cache_write_tokens + cache_read_tokens
 
         total_input += input_tokens
@@ -1984,23 +2011,6 @@ async def main():
             console.print(Panel("Exited automode. Returning to regular chat.", style="green"))
         else:
             response, _ = await chat_with_claude(user_input)
-
-def validate_files_structure(files):
-    if not isinstance(files, (dict, list)):
-        raise ValueError("Invalid 'files' structure. Expected a dictionary or a list of dictionaries.")
-    
-    if isinstance(files, dict):
-        files = [files]
-    
-    for file in files:
-        if not isinstance(file, dict):
-            raise ValueError("Each file must be a dictionary.")
-        if 'path' not in file or 'instructions' not in file:
-            raise ValueError("Each file dictionary must contain 'path' and 'instructions' keys.")
-        if not isinstance(file['path'], str) or not isinstance(file['instructions'], str):
-            raise ValueError("'path' and 'instructions' must be strings.")
-
-    return files
 
 def validate_files_structure(files):
     if not isinstance(files, (dict, list)):
