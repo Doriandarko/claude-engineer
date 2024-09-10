@@ -6,6 +6,5 @@ anthropic
 rich
 prompt_toolkit
 pydub
-RealtimeSTT
 websockets
 SpeechRecognition
