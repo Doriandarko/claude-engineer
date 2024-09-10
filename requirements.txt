@@ -2,9 +2,9 @@ anthropic
 python-dotenv
 tavily-python
 Pillow
+anthropic
 rich
-aiohttp
 prompt_toolkit
-SpeechRecognition
 pydub
+RealtimeSTT
 websockets
