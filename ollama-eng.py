@@ -943,7 +943,7 @@ async def main():
     global automode, conversation_history
     console.print(Panel("Welcome to the Ollama Llama 3.1 Engineer Chat with Multi-Agent and Image Support!", title="Welcome", style="bold green"))
     console.print("Type 'exit' to end the conversation.")
-    console.print("Type 'automode [number]' to enter Autonomous mode with a specific number of iterations.")
+    console.print("Type 'automode \\[number]' to enter Autonomous mode with a specific number of iterations.")
     console.print("Type 'reset' to clear the conversation history.")
     console.print("Type 'save chat' to save the conversation to a Markdown file.")
     console.print("While in automode, press Ctrl+C at any time to exit the automode to return to regular chat.")
