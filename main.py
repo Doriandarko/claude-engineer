@@ -1273,7 +1273,7 @@ def save_chat():
         elif message['role'] == 'assistant':
             if isinstance(message['content'], str):
                 formatted_chat += f"## Claude\n\n{message['content']}\n\n"
-            elif isinstance(message['content'], list]):
+            elif isinstance(message['content'], list):
                 for content in message['content']:
                     if content['type'] == 'tool_use':
                         formatted_chat += f"### Tool Use: {content['name']}\n\n```json\n{json.dumps(content['input'], indent=2)}\n```\n\n"

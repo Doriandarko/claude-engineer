@@ -2,6 +2,6 @@
   "tasks": {
     "test": "pip install -r requirements.txt && pytest",
     "build": "pip install -r requirements.txt",
-    "launch": "python main.py"
+    "launch": "python main.py && streamlit_app.py"
   }
 }
