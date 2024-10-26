@@ -74,6 +74,7 @@ pip install --upgrade anthropic
      ```
      ANTHROPIC_API_KEY=your_anthropic_api_key
      TAVILY_API_KEY=your_tavily_api_key
+     BASE_URL=your_base_url
      ```
 
 4. Set up the virtual environment for code execution:

@@ -86,3 +86,20 @@ for message in conversation_history:
         st.write("You: ", message["content"])
     elif message["role"] == "assistant":
         st.write("Claude: ", message["content"])
+
+# Settings page for API keys and base URL
+def settings_page():
+    st.header("Settings")
+    anthropic_api_key = st.text_input("Anthropic API Key", value=os.getenv("ANTHROPIC_API_KEY", ""))
+    tavily_api_key = st.text_input("Tavily API Key", value=os.getenv("TAVILY_API_KEY", ""))
+    base_url = st.text_input("Base URL", value=os.getenv("BASE_URL", ""))
+
+    if st.button("Save"):
+        with open('.env', 'w') as f:
+            f.write(f"ANTHROPIC_API_KEY={anthropic_api_key}\n")
+            f.write(f"TAVILY_API_KEY={tavily_api_key}\n")
+            f.write(f"BASE_URL={base_url}\n")
+        st.success("Settings saved. Please restart the app to apply changes.")
+
+if __name__ == "__main__":
+    settings_page()
