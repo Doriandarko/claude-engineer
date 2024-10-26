@@ -6,6 +6,7 @@ from tavily import TavilyClient
 import speech_recognition as sr
 import pyttsx3
 from PIL import Image
+import json
 
 # Load environment variables from .env file
 load_dotenv()
@@ -102,6 +103,10 @@ def handle_user_input(user_input):
         tts_engine.say(assistant_response)
         tts_engine.runAndWait()
 
+        # Save conversation history to a file
+        with open('conversation_history.json', 'w') as f:
+            json.dump(conversation_history, f)
+
 # Handle user input
 if user_input:
     handle_user_input(user_input)
@@ -146,7 +151,7 @@ if uploaded_file is not None:
 def settings_page():
     st.header("Settings")
     anthropic_api_key = st.text_input("Anthropic API Key", value=os.getenv("ANTHROPIC_API_KEY", ""))
-    tavily_api_key = st.text_input("Tavily API Key", value=os.getenv("TAVILY_API_KEY", ""))
+    tavily_api_key = st.text_input("TAVILY API Key", value=os.getenv("TAVILY_API_KEY", ""))
     base_url = st.text_input("Base URL", value=os.getenv("BASE_URL", ""))
 
     if st.button("Save"):
