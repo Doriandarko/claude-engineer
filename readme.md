@@ -74,6 +74,7 @@ pip install --upgrade anthropic
      ```
      ANTHROPIC_API_KEY=your_anthropic_api_key
      TAVILY_API_KEY=your_tavily_api_key
+     BASE_URL=your_base_url
      ```
 
 4. Set up the virtual environment for code execution:
@@ -361,6 +362,37 @@ graph TD
     M --> AG
 ```
 
+## Streamlit Deployment
+
+To run the Streamlit app, follow these steps:
+
+1. Install Streamlit:
+   ```
+   pip install streamlit
+   ```
+
+2. Run the Streamlit app:
+   ```
+   streamlit run streamlit_app.py
+   ```
+
+3. Open your web browser and go to `http://localhost:8501` to interact with the Streamlit app.
+
+## Gradio Deployment
+
+To run the Gradio app, follow these steps:
+
+1. Install Gradio:
+   ```
+   pip install gradio
+   ```
+
+2. Run the Gradio app:
+   ```
+   python gradio_app.py
+   ```
+
+3. Open your web browser and go to the URL provided in the terminal to interact with the Gradio app.
 
 ## 👥 Contributing
 
