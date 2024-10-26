@@ -62,7 +62,7 @@ def is_installed(lib_name):
 
 async def text_chunker(text: str) -> AsyncIterable[str]:
     """Split text into chunks, ensuring to not break sentences."""
-    splitters = (".", ",", "?", "!", ";", ":", "—", "-", "(", ")", "[", "]", "}", " ")
+    splitters = (".", ",", "?", "!", ";", ":", "—", "-", "(", ")", "[", "]", "}")
     buffer = ""
     
     for char in text:

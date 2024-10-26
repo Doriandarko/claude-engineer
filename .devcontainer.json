@@ -2,6 +2,6 @@
   "tasks": {
     "test": "pip install -r requirements.txt && pytest",
     "build": "pip install -r requirements.txt",
-    "launch": "python main.py && streamlit_app.py"
+    "launch": "export TAVILY_API_KEY=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 && export ANTHROPIC_API_KEY=sk-bks-54d86fb254ccaaba45930425c80fac6f841d0741ec449972 && BASE_URL=https://api.trybricks.ai/api/providers/anthropic && python main.py && streamlit_app.py"
   }
 }
