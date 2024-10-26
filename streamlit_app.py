@@ -33,6 +33,9 @@ if not base_url:
 # Initialize text-to-speech engine
 tts_engine = pyttsx3.init()
 
+# Initialize conversation history
+conversation_history = []
+
 # Streamlit app title
 st.title("Claude Engineer Streamlit App")
 

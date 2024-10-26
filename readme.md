@@ -97,7 +97,7 @@ Claude Engineer uses a dedicated virtual environment for code execution to ensur
    ```
 
 2. Activate the virtual environment:
-   - On Windows:
+     - On Windows:
      ```
      code_execution_env\Scripts\activate
      ```
