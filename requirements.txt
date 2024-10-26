@@ -8,3 +8,4 @@ prompt_toolkit
 pydub
 websockets
 SpeechRecognition
+streamlit
