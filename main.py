@@ -273,6 +273,11 @@ if not tavily_api_key:
     raise ValueError("TAVILY_API_KEY not found in environment variables")
 tavily = TavilyClient(api_key=tavily_api_key)
 
+# Initialize the base URL
+base_url = os.getenv("BASE_URL")
+if not base_url:
+    raise ValueError("BASE_URL not found in environment variables")
+
 console = Console()
 
 # Token tracking variables
@@ -1268,7 +1273,7 @@ def save_chat():
         elif message['role'] == 'assistant':
             if isinstance(message['content'], str):
                 formatted_chat += f"## Claude\n\n{message['content']}\n\n"
-            elif isinstance(message['content'], list):
+            elif isinstance(message['content'], list]):
                 for content in message['content']:
                     if content['type'] == 'tool_use':
                         formatted_chat += f"### Tool Use: {content['name']}\n\n```json\n{json.dumps(content['input'], indent=2)}\n```\n\n"
