@@ -32,6 +32,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 import subprocess
 import shutil
 from typing import AsyncIterable
+from elevenlabs import ElevenLabs, VoiceSettings
 
 # Configure logging
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -90,17 +91,30 @@ async def stream_audio(audio_stream):
 
     mpv_process = subprocess.Popen(
         ["mpv", "--no-cache", "--no-terminal", "--", "fd://0"],
-        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
     console.print("Started streaming audio", style="bold green")
+
+    async def listen_for_input():                                                        
+         """Listen for Enter key to stop audio."""                                        
+         await asyncio.get_event_loop().run_in_executor(None, input)                      
+         print("Stopping audio playback...")                                              
+         mpv_process.terminate()
+
     try:
-        async for chunk in audio_stream:
+        input_task = asyncio.create_task(listen_for_input())
+
+        for chunk in audio_stream:
             if chunk:
                 mpv_process.stdin.write(chunk)
                 mpv_process.stdin.flush()
+
+        await input_task
     except Exception as e:
-        console.print(f"Error during audio streaming: {str(e)}", style="bold red")
+        print(f"Error during audio streaming: {str(e)}")
     finally:
         if mpv_process.stdin:
             mpv_process.stdin.close()
@@ -108,65 +122,30 @@ async def stream_audio(audio_stream):
 
 async def text_to_speech(text):
     if not ELEVEN_LABS_API_KEY:
-        console.print("ElevenLabs API key not found. Text-to-speech is disabled.", style="bold yellow")
+        console.print(
+            "ElevenLabs API key not found. Text-to-speech is disabled.",
+            style="bold yellow",
+        )
         console.print(text)
         return
 
-    uri = f"wss://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}/stream-input?model_id={MODEL_ID}"
-    
-    try:
-        async with websockets.connect(uri, extra_headers={'xi-api-key': ELEVEN_LABS_API_KEY}) as websocket:
-            # Send initial message
-            await websocket.send(json.dumps({
-                "text": " ",
-                "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
-                "xi_api_key": ELEVEN_LABS_API_KEY,
-            }))
+    client = ElevenLabs(
+        api_key=f"{ELEVEN_LABS_API_KEY}",
+    )
 
-            # Set up listener for audio chunks
-            async def listen():
-                while True:
-                    try:
-                        message = await websocket.recv()
-                        data = json.loads(message)
-                        if data.get("audio"):
-                            yield base64.b64decode(data["audio"])
-                        elif data.get('isFinal'):
-                            break
-                    except websockets.exceptions.ConnectionClosed:
-                        logging.error("WebSocket connection closed unexpectedly")
-                        break
-                    except Exception as e:
-                        logging.error(f"Error processing audio message: {str(e)}")
-                        break
+    audio_stream = client.text_to_speech.convert_as_stream(
+        voice_id=f"{VOICE_ID}",
+        optimize_streaming_latency="0",
+        output_format="mp3_22050_32",
+        text=text,
+        voice_settings=VoiceSettings(
+            stability=0.1,
+            similarity_boost=0.3,
+            style=0.2,
+        ),
+    )
 
-            # Start audio streaming task
-            stream_task = asyncio.create_task(stream_audio(listen()))
-
-            # Send text in chunks
-            async for chunk in text_chunker(text):
-                try:
-                    await websocket.send(json.dumps({"text": chunk, "try_trigger_generation": True}))
-                except Exception as e:
-                    logging.error(f"Error sending text chunk: {str(e)}")
-                    break
-
-            # Send closing message
-            await websocket.send(json.dumps({"text": ""}))
-
-            # Wait for streaming to complete
-            await stream_task
-
-    except websockets.exceptions.InvalidStatusCode as e:
-        logging.error(f"Failed to connect to ElevenLabs API: {e}")
-        console.print(f"Failed to connect to ElevenLabs API: {e}", style="bold red")
-        console.print("Fallback: Printing the text instead.", style="bold yellow")
-        console.print(text)
-    except Exception as e:
-        logging.error(f"Error in text-to-speech: {str(e)}")
-        console.print(f"Error in text-to-speech: {str(e)}", style="bold red")
-        console.print("Fallback: Printing the text instead.", style="bold yellow")
-        console.print(text)
+    await stream_audio(audio_stream)
 
 def initialize_speech_recognition():
     global recognizer, microphone

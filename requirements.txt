@@ -6,5 +6,6 @@ anthropic
 rich
 prompt_toolkit
 pydub
-websockets
 SpeechRecognition
+pyaudio
+elevenlabs
