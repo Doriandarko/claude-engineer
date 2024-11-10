@@ -362,9 +362,10 @@ Available tools and their optimal use cases:
     If the file contents are already available to you, use that information directly instead of calling the read_multiple_files tool.
     Only use the read_multiple_files tool for files that are not already in your context.
 7. list_files: List all files and directories in a specified folder.
-8. tavily_search: Perform a web search using the Tavily API for up-to-date information.
-9. scan_folder: Scan a specified folder and create a Markdown file with the contents of all coding text files, excluding binary files and common ignored folders. Use this tool to generate comprehensive documentation of project structures.
-10. run_shell_command: Execute a shell command and return its output. Use this tool when you need to run system commands or interact with the operating system. Ensure the command is safe and appropriate for the current operating system.
+8. list_files_recursively: List all files and directories in a specified folder recursively (including all nested subdirectories). The results include relative paths to the files and directories. This tool is useful to explore the whole project scructure, or the whole structire of a specific module or part of the project.
+9. tavily_search: Perform a web search using the Tavily API for up-to-date information.
+10. scan_folder: Scan a specified folder and create a Markdown file with the contents of all coding text files, excluding binary files and common ignored folders. Use this tool to generate comprehensive documentation of project structures.
+11. run_shell_command: Execute a shell command and return its output. Use this tool when you need to run system commands or interact with the operating system. Ensure the command is safe and appropriate for the current operating system.
 IMPORTANT: Use this tool to install dependencies in the code_execution_env when using the execute_code tool.
 </tools>
 
@@ -1082,6 +1083,16 @@ def list_files(path="."):
     except Exception as e:
         return f"Error listing files: {str(e)}"
 
+def list_files_recursively(path="."):
+    try:
+        files = []
+        for root, _, filenames in os.walk(path):
+            for filename in filenames:
+                files.append(os.path.join(root, filename))
+        return "\n".join(files)
+    except Exception as e:
+        return f"Error listing files: {str(e)}"
+
 def tavily_search(query):
     try:
         response = tavily.qna_search(query=query, search_depth="advanced")
@@ -1463,6 +1474,19 @@ tools = [
         }
     },
     {
+        "name": "list_files_recursively",
+        "description": "List all files and directories in the specified folder recursively and return their relative paths. This tool should be used when you need to see the contents of a directory with all nested subdirectories recursively. It will return a list of all files and subdirectories, including nested ones, in the specified path, with their relative paths. If the directory doesn't exist or can't be read, an appropriate error message will be returned.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "The absolute or relative path of the folder to list. Use forward slashes (/) for path separation, even on Windows systems. If not provided, the current working directory will be used."
+                }
+            }
+        }
+    },
+    {
         "name": "tavily_search",
         "description": "Perform a web search using the Tavily API to get up-to-date information or additional context. This tool should be used when you need current information or feel a search could provide a better answer to the user's query. It will return a summary of the search results, including relevant snippets and source URLs.",
         "input_schema": {
@@ -1634,6 +1658,8 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
                     result = read_multiple_files(files_to_read, recursive)
         elif tool_name == "list_files":
             result = list_files(tool_input.get("path", "."))
+        elif tool_name == "list_files_recursively":
+            result = list_files_recursively(tool_input.get("path", "."))
         elif tool_name == "tavily_search":
             result = tavily_search(tool_input["query"])
         elif tool_name == "stop_process":
