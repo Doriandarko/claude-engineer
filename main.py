@@ -362,7 +362,7 @@ Available tools and their optimal use cases:
     If the file contents are already available to you, use that information directly instead of calling the read_multiple_files tool.
     Only use the read_multiple_files tool for files that are not already in your context.
 7. list_files: List all files and directories in a specified folder.
-8. list_files_recursively: List all files and directories in a specified folder recursively (including all nested subdirectories). The results include relative paths to the files and directories. This tool is useful to explore the whole project scructure, or the whole structire of a specific module or part of the project.
+8. list_files_recursively: List all files and directories in a specified folder recursively (including all nested subdirectories). The results include relative paths to the files and directories. This tool is useful to explore the whole project structure, or the whole structure of a specific module or part of the project.
 9. tavily_search: Perform a web search using the Tavily API for up-to-date information.
 10. scan_folder: Scan a specified folder and create a Markdown file with the contents of all coding text files, excluding binary files and common ignored folders. Use this tool to generate comprehensive documentation of project structures.
 11. run_shell_command: Execute a shell command and return its output. Use this tool when you need to run system commands or interact with the operating system. Ensure the command is safe and appropriate for the current operating system.
