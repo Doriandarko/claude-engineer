@@ -377,6 +377,16 @@ Tool Usage Guidelines:
 - For long-running processes, use the process ID returned by execute_code to stop them later if needed.
 - Proactively use tavily_search when you need up-to-date information or additional context.
 - When working with files, use read_multiple_files for both single and multiple file read making sure that the files are not already in your context.
+- When formatting tool inputs, strictly follow these rules:
+  * Never encode JSON as a string within JSON - pass objects directly
+  * Never escape quotes unless absolutely necessary for the content itself
+  * Use direct line breaks rather than newline characters in content
+  * No leading newlines or whitespace before the content
+  * No escaped characters unless explicitly required
+  * For triple-quoted Python content, use direct triple quotes rather than escaped quotes
+  * Always pass files as an array of objects, never as a string
+  * Keep paths clean without any escaping or extra characters
+  * Use direct string values rather than escaped or encoded versions
 </tool_usage_guidelines>
 
 <error_handling>
@@ -635,7 +645,7 @@ async def generate_edit_instructions(file_path, file_content, instructions, proj
         </PLANNING>
     
         3. Finally, generate SEARCH/REPLACE blocks for each necessary change:
-        - Use enough context to uniquely identify the code to be changed
+        - Use enough context to uniquely identify the code to be changed (three lines of preceding code will usually suffice)
         - Maintain correct indentation and formatting
         - Focus on specific, targeted changes
         - Ensure consistency with project context and previous edits
@@ -1883,14 +1893,25 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         messages = filtered_conversation_history + current_conversation
 
         try:
-            tool_response = client.messages.create(
+            tool_response = client.beta.prompt_caching.messages.create(
                 model=TOOLCHECKERMODEL,
                 max_tokens=8000,
-                system=update_system_prompt(current_iteration, max_iterations),
-                extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"},
+                system=[
+                    {
+                        "type": "text",
+                        "text": update_system_prompt(current_iteration, max_iterations),
+                        "cache_control": {"type": "ephemeral"}
+                    },
+                    {
+                        "type": "text",
+                        "text": json.dumps(tools),
+                        "cache_control": {"type": "ephemeral"}
+                    }
+                ],
                 messages=messages,
                 tools=tools,
-                tool_choice={"type": "auto"}
+                tool_choice={"type": "auto"},
+                extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
             )
             # Update token usage for tool checker
             tool_checker_tokens['input'] += tool_response.usage.input_tokens
