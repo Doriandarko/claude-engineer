@@ -332,6 +332,26 @@ Available tools and their optimal use cases:
 <tools>
 1. create_folders: Create new folders at the specified paths, including nested directories. Use this to create one or more directories in the project structure, even complex nested structures in a single operation.
 2. create_files: Generate one or more new files with specified content. Strive to make the files as complete and useful as possible.
+       - IMPORTANT: Always provide the input in the following format:
+     {
+    "files": [
+        {
+            "path": "path/to/file1.py",
+            "content": "File content here"
+        },
+        {
+            "path": "path/to/file2.py",
+            "content": "Another file content"
+        }
+    ]
+}
+   - Ensure that the "files" key contains a list of dictionaries, even if you're only creating one file.
+   - For empty files, you can omit the "content" key, but "path" is always required
+   - Use direct file content without escaping or string encoding
+   - For Python files, use triple quotes for multi-line content
+   - Keep paths clean and use forward slashes
+   - Never wrap the JSON structure in quites or escape
+   - Do not include leading/trailing whitespace
 3. edit_and_apply_multiple: Examine and modify one or more existing files by instructing a separate AI coding agent. You are responsible for providing clear, detailed instructions for each file. When using this tool:
    - Provide comprehensive context about the project, including recent changes, new variables or functions, and how files are interconnected.
    - Clearly state the specific changes or improvements needed for each file, explaining the reasoning behind each modification.
