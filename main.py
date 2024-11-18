@@ -332,26 +332,25 @@ Available tools and their optimal use cases:
 <tools>
 1. create_folders: Create new folders at the specified paths, including nested directories. Use this to create one or more directories in the project structure, even complex nested structures in a single operation.
 2. create_files: Generate one or more new files with specified content. Strive to make the files as complete and useful as possible.
-       - IMPORTANT: Always provide the input in the following format:
+       - IMPORTANT: The create_files tool ONLY accepts input in this format:
      {
     "files": [
         {
             "path": "path/to/file1.py",
             "content": "File content here"
-        },
-        {
-            "path": "path/to/file2.py",
-            "content": "Another file content"
         }
     ]
 }
-   - Ensure that the "files" key contains a list of dictionaries, even if you're only creating one file.
-   - For empty files, you can omit the "content" key, but "path" is always required
-   - Use direct file content without escaping or string encoding
-   - For Python files, use triple quotes for multi-line content
-   - Keep paths clean and use forward slashes
-   - Never wrap the JSON structure in quites or escape
-   - Do not include leading/trailing whitespace
+
+   Required format rules:
+   1. Input MUST be a dictionary with a "files" key containing an array
+   2. Each file in the array MUST be an object with:
+      - Required "path" key (string)
+      - Optional "content" key (string, defaults to empty string if omitted)
+   3. Even for single files, they MUST be in an array
+   4. No string paths or single objects allowed - always use array format
+   5. Use direct file content without escaping or string encoding
+   6. Paths should use forward slashes, even on Windows
 3. edit_and_apply_multiple: Examine and modify one or more existing files by instructing a separate AI coding agent. You are responsible for providing clear, detailed instructions for each file. When using this tool:
    - Provide comprehensive context about the project, including recent changes, new variables or functions, and how files are interconnected.
    - Clearly state the specific changes or improvements needed for each file, explaining the reasoning behind each modification.
@@ -575,31 +574,45 @@ def create_folders(paths):
             results.append(f"Error creating folder(s) {path}: {str(e)}")
     return "\n".join(results)
 
-def create_files(files):
+def create_files(input_data):
     global file_contents
     results = []
     
-    # Handle different input types
-    if isinstance(files, str):
-        # If a string is passed, assume it's a single file path
-        files = [{"path": files, "content": ""}]
-    elif isinstance(files, dict):
-        # If a single dictionary is passed, wrap it in a list
-        files = [files]
-    elif not isinstance(files, list):
-        return "Error: Invalid input type for create_files. Expected string, dict, or list."
+    if not isinstance(input_data, dict) and not isinstance(input_data, list):
+        return "Error: Invalid input. Expected dictionary with 'files' key or array of file objects."
+    
+    # Normalize input to handle both direct array and {files: [...]} formats
+    if isinstance(input_data, list):
+        files = input_data
+    else:
+        if 'files' not in input_data:
+            return "Error: Invalid input. When using dictionary format, must include 'files' key containing an array."
+        files = input_data['files']
+    
+    # Validate files array
+    if not isinstance(files, list):
+        return "Error: Files must be provided as an array of file objects."
     
     for file in files:
         try:
+            # Validate file object structure
             if not isinstance(file, dict):
-                results.append(f"Error: Invalid file specification: {file}")
+                results.append(f"Error: Each file must be an object, got: {type(file).__name__}")
                 continue
             
-            path = file.get('path')
+            if 'path' not in file:
+                results.append("Error: Each file object must contain a 'path' key")
+                continue
+            
+            if not isinstance(file['path'], str):
+                results.append(f"Error: File path must be a string, got: {type(file['path']).__name__}")
+                continue
+                
+            path = file['path']
             content = file.get('content', '')
             
-            if path is None:
-                results.append(f"Error: Missing 'path' for file")
+            if content is not None and not isinstance(content, str):
+                results.append(f"Error: File content must be a string or null, got: {type(content).__name__}")
                 continue
             
             dir_name = os.path.dirname(path)
@@ -614,7 +627,7 @@ def create_files(files):
         except Exception as e:
             results.append(f"Error creating file: {str(e)}")
     
-    return "\n".join(results)
+    return "".join(results)
 
 
 async def generate_edit_instructions(file_path, file_content, instructions, project_context, full_file_contents):
@@ -1359,31 +1372,22 @@ tools = [
             "type": "object",
             "properties": {
                 "files": {
-                    "oneOf": [
-                        {
-                            "type": "string",
-                            "description": "A single file path to create an empty file."
-                        },
-                        {
-                            "type": "object",
-                            "properties": {
-                                "path": {"type": "string"},
-                                "content": {"type": "string"}
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "description": "The path where the file should be created"
                             },
-                            "required": ["path"]
-                        },
-                        {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "path": {"type": "string"},
-                                    "content": {"type": "string"}
-                                },
-                                "required": ["path"]
+                            "content": {
+                                "type": "string",
+                                "description": "The content to write to the file"
                             }
-                        }
-                    ]
+                        },
+                        "required": ["path"]
+                    },
+                    "description": "Array of file objects, each containing a path and optional content"
                 }
             },
             "required": ["files"]
