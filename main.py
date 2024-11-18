@@ -1382,12 +1382,14 @@ tools = [
                             },
                             "content": {
                                 "type": "string",
-                                "description": "The content to write to the file"
+                                "description": "The raw file content to write. Content should be provided as-is without escaping or encoding. For code files, provide the exact code including any necessary quotes, newlines, or special characters directly. Do not escape or encode the content.",
+                                "contentEncoding": "identity",
+                                "contentMediaType": "text/plain"
                             }
                         },
                         "required": ["path"]
                     },
-                    "description": "Array of file objects, each containing a path and optional content"
+                    "description": "Array of file objects, each containing a path and raw unescaped content"
                 }
             },
             "required": ["files"]
@@ -1794,11 +1796,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                         "type": "text",
                         "text": update_system_prompt(current_iteration, max_iterations),
                         "cache_control": {"type": "ephemeral"}
-                    },
-                    {
-                        "type": "text",
-                        "text": json.dumps(tools),
-                        "cache_control": {"type": "ephemeral"}
                     }
                 ],
                 messages=messages,
@@ -1924,11 +1921,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     {
                         "type": "text",
                         "text": update_system_prompt(current_iteration, max_iterations),
-                        "cache_control": {"type": "ephemeral"}
-                    },
-                    {
-                        "type": "text",
-                        "text": json.dumps(tools),
                         "cache_control": {"type": "ephemeral"}
                     }
                 ],
