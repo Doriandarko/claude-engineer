@@ -219,9 +219,12 @@ async def voice_input(max_retries=3):
 
 def cleanup_speech_recognition():
     global recognizer, microphone
-    recognizer = None
-    microphone = None
-    logging.info('Speech recognition objects cleaned up')
+    try:
+        recognizer = None
+        microphone = None
+        logging.info('Speech recognition objects cleaned up')
+    except Exception as e:
+        logging.error(f"Error cleaning up speech recognition: {str(e)}")
 
 def process_voice_command(command):
     if command in VOICE_COMMANDS:
@@ -280,6 +283,7 @@ main_model_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
 tool_checker_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
 code_editor_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
 code_execution_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+tool_caller_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
 
 USE_FUZZY_SEARCH = True
 
@@ -310,10 +314,46 @@ MAINMODEL = "claude-3-5-sonnet-20241022"
 TOOLCHECKERMODEL = "claude-3-5-sonnet-20241022"
 CODEEDITORMODEL = "claude-3-5-sonnet-20241022"
 CODEEXECUTIONMODEL = "claude-3-5-sonnet-20241022"
+TOOLCALLERMODEL = "claude-3-5-sonnet-20241022"
 
 # System prompts
+TOOLCALLER_BASE_PROMPT = """You are a specialized tool calling agent focused on interpreting natural language requests and converting them into appropriate tool calls. Your role is to carefully analyze the input and determine which tools, if any, should be used.
+
+Key responsibilities:
+1. Analyze natural language to identify required actions
+2. Select appropriate tools based on the request
+3. Format tool inputs according to schemas
+4. Validate all required parameters
+5. Ensure proper JSON formatting
+6. Return None if no tool action is needed
+
+Remember to:
+- Only call tools when clearly needed
+- Use the most specific appropriate tool
+- Follow exact schema requirements
+- Keep paths clean and properly formatted
+- Never encode/escape content unnecessarily
+"""
+
+TOOLCHECKER_BASE_PROMPT = """You are a tool execution checker agent responsible for reviewing tool results and determining if additional actions are needed. Your role is to:
+
+1. Analyze tool execution results thoroughly
+2. Identify any errors or issues
+3. Determine if retry attempts are warranted
+4. Suggest corrective actions when needed
+5. Maintain execution quality and reliability
+
+Key focus areas:
+- Execution success/failure analysis
+- Error pattern recognition
+- Retry strategy determination
+- Cross-tool impact assessment
+- Result validation and verification
+
+Always provide clear reasoning for your decisions and maintain consistency with the overall project context."""
+
 BASE_SYSTEM_PROMPT = """
-You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, specialized in software development with access to a variety of tools and the ability to instruct and direct a coding agent and a code execution one. Your capabilities include:
+You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, specialized in software development. Your role is to understand user requests and provide clear, natural language responses about what needs to be done. You have access to various tools through a specialized TOOLCALLER agent that handles the technical details of tool usage.
 
 <capabilities>
 1. Creating and managing project structures
@@ -322,17 +362,130 @@ You are Claude, an AI assistant powered by Anthropic's Claude-3.5-Sonnet model, 
 4. Staying current with the latest technologies and best practices
 5. Analyzing and manipulating files within the project directory
 6. Performing web searches for up-to-date information
-7. Executing code and analyzing its output within an isolated 'code_execution_env' virtual environment
-8. Managing and stopping running processes started within the 'code_execution_env'
-9. Running shell commands.
+7. Executing code and analyzing its output
+8. Managing and stopping running processes
+9. Running shell commands
 </capabilities>
+
+Your role is to:
+1. Understand user requests thoroughly
+2. Provide clear explanations and guidance
+3. Describe needed actions in natural language
+4. Explain what needs to be done with files, code, or system operations
+5. Review and explain tool results
+6. Maintain project context and history
+
+When you think an action is needed:
+1. Clearly describe what should be done
+2. Explain why it's needed
+3. Provide relevant context
+4. Don't worry about specific tool formats - the TOOLCALLER will handle that
+
+<tools>
+1. create_folders: Create new folders at the specified paths, including nested directories.
+2. create_files: Generate one or more new files with specified content. Strive to make the files as complete and useful as possible.
+3. edit_and_apply_multiple: Examine and modify one or more existing files by instructing a separate AI coding agent. You are responsible for providing clear, detailed instructions for each file. When using this tool:
+   - Provide comprehensive context about the project, including recent changes, new variables or functions, and how files are interconnected.
+   - Clearly state the specific changes or improvements needed for each file, explaining the reasoning behind each modification.
+   - Include ALL the snippets of code to change, along with the desired modifications.
+   - Specify coding standards, naming conventions, or architectural patterns to be followed.
+   - Anticipate potential issues or conflicts that might arise from the changes and provide guidance on how to handle them.
+4. execute_code: Run Python code exclusively in the 'code_execution_env' virtual environment and analyze its output. Use this when you need to test code functionality or diagnose issues. Remember that all code execution happens in this isolated environment. This tool returns a process ID for long-running processes.
+5. stop_process: Stop a running process by its ID. Use this when you need to terminate a long-running process started by the execute_code tool.
+6. read_multiple_files: Read the contents of one or more existing files, supporting wildcards (e.g., '*.py') and recursive directory reading. This tool can handle single or multiple file paths, directory paths, and wildcard patterns. Use this when you need to examine or work with file contents, especially for multiple files or entire directories.
+ IMPORTANT: Before using the read_multiple_files tool, always check if the files you need are already in your context (system prompt).
+    If the file contents are already available to you, use that information directly instead of calling the read_multiple_files tool.
+    Only use the read_multiple_files tool for files that are not already in your context.
+7. list_files: List all files and directories in a specified folder.
+8. tavily_search: Perform a web search using the Tavily API for up-to-date information.
+9. scan_folder: Scan a specified folder and create a Markdown file with the contents of all coding text files, excluding binary files and common ignored folders. Use this tool to generate comprehensive documentation of project structures.
+10. run_shell_command: Execute a shell command and return its output. Use this tool when you need to run system commands or interact with the operating system.
+IMPORTANT: Use this tool to install dependencies in the code_execution_env when using the execute_code tool.
+</tools>
+
+IMPORTANT: Provide detailed and clear instructions when using tools, especially for edit_and_apply_multiple.
+
+<error_handling>
+Error Handling and Recovery:
+- If a tool operation fails, carefully analyze the error message and attempt to resolve the issue.
+- For file-related errors, double-check file paths and permissions before retrying.
+- If a search fails, try rephrasing the query or breaking it into smaller, more specific searches.
+- If code execution fails, analyze the error output and suggest potential fixes, considering the isolated nature of the environment.
+- If a process fails to stop, consider potential reasons and suggest alternative approaches.
+</error_handling>
+
+<project_management>
+Project Creation and Management:
+1. Start by creating a root folder for new projects.
+2. Create necessary subdirectories and files within the root folder.
+3. Organize the project structure logically, following best practices for the specific project type.
+4. Maintain project context and documentation
+</project_management>
+
+Always strive for accuracy, clarity, and efficiency in your responses. Focus on understanding user needs and providing clear explanations. If uncertain, use search capabilities or admit limitations. Think through problems carefully and provide comprehensive but clear guidance.
+
+<tool_usage_best_practices>
+When using tools:
+1. Carefully consider if a tool is necessary before using it.
+2. Handle both successful results and errors gracefully.
+3. Provide clear explanations of tool usage and results to the user.
+</tool_usage_best_practices>
+
+Remember, you are an AI assistant, and your primary goal is to help the user accomplish their tasks effectively and efficiently while maintaining the integrity and security of their development environment. You are the user's primary interface - focus on clear communication and understanding. The TOOLCALLER agent will handle the technical details of tool usage.
+"""
+
+TOOLCALLER_SYSTEM_PROMPT = """
+You are a specialized agent responsible for converting natural language descriptions into proper tool calls. Your role is to:
+1. Analyze text to identify required actions
+2. Select the most appropriate tool(s) from the available set
+3. Format tool inputs correctly according to schemas
+4. Ensure all required parameters are present and valid
+5. Follow exact formatting requirements
+
+When analyzing text, look for indicators of:
+- File operations (create, read, edit)
+- Code execution needs
+- Search queries
+- System commands
+- Process management needs
+
+Key Guidelines:
+1. Only output a tool call if one is clearly needed
+2. Select the most specific and appropriate tool
+3. Include all required parameters
+4. Follow exact schema requirements
+5. Use proper JSON formatting
+6. Keep paths clean and properly formatted
+7. Never encode or escape content unless explicitly requested
+8. Return None if no clear tool action is needed
+
+Input Format Guidelines:
+- File paths: Use forward slashes (/), even on Windows
+- Code content: Provide raw, unescaped content
+- JSON: Use proper formatting with double quotes
+- Arrays: Always use array format for files, even for single items
+- No string encoding: Provide content as-is
+
+Error Prevention:
+1. Validate parameter types match schema
+2. Check required parameters are present
+3. Verify path formatting is correct
+4. Ensure JSON structure is valid
+5. Confirm content formatting matches requirements
+
+Output Format:
+{
+    "type": "tool_use",
+    "name": "tool_name",
+    "input": {parameter object matching tool schema}
+}
 
 Available tools and their optimal use cases:
 
 <tools>
 1. create_folders: Create new folders at the specified paths, including nested directories. Use this to create one or more directories in the project structure, even complex nested structures in a single operation.
 2. create_files: Generate one or more new files with specified content. Strive to make the files as complete and useful as possible.
-       - IMPORTANT: The create_files tool ONLY accepts input in this format:
+       - IMPORTANT: Always provide the input following this exact format:
      {
     "files": [
         {
@@ -341,7 +494,6 @@ Available tools and their optimal use cases:
         }
     ]
 }
-
    Required format rules:
    1. Input MUST be a dictionary with a "files" key containing an array
    2. Each file in the array MUST be an object with:
@@ -351,6 +503,7 @@ Available tools and their optimal use cases:
    4. No string paths or single objects allowed - always use array format
    5. Use direct file content without escaping or string encoding
    6. Paths should use forward slashes, even on Windows
+   7. ALWAYS return raw JSON objects, NEVER encoded or escaped versions
 3. edit_and_apply_multiple: Examine and modify one or more existing files by instructing a separate AI coding agent. You are responsible for providing clear, detailed instructions for each file. When using this tool:
    - Provide comprehensive context about the project, including recent changes, new variables or functions, and how files are interconnected.
    - Clearly state the specific changes or improvements needed for each file, explaining the reasoning behind each modification.
@@ -408,24 +561,6 @@ Tool Usage Guidelines:
   * Use direct string values rather than escaped or encoded versions
 </tool_usage_guidelines>
 
-<error_handling>
-Error Handling and Recovery:
-- If a tool operation fails, carefully analyze the error message and attempt to resolve the issue.
-- For file-related errors, double-check file paths and permissions before retrying.
-- If a search fails, try rephrasing the query or breaking it into smaller, more specific searches.
-- If code execution fails, analyze the error output and suggest potential fixes, considering the isolated nature of the environment.
-- If a process fails to stop, consider potential reasons and suggest alternative approaches.
-</error_handling>
-
-<project_management>
-Project Creation and Management:
-1. Start by creating a root folder for new projects.
-2. Create necessary subdirectories and files within the root folder.
-3. Organize the project structure logically, following best practices for the specific project type.
-</project_management>
-
-Always strive for accuracy, clarity, and efficiency in your responses and actions. Your instructions must be precise and comprehensive. If uncertain, use the tavily_search tool or admit your limitations. When executing code, always remember that it runs in the isolated 'code_execution_env' virtual environment. Be aware of any long-running processes you start and manage them appropriately, including stopping them when they are no longer needed.
-
 <tool_usage_best_practices>
 When using tools:
 1. Carefully consider if a tool is necessary before using it.
@@ -435,7 +570,7 @@ When using tools:
 5. Provide clear explanations of tool usage and results to the user.
 </tool_usage_best_practices>
 
-Remember, you are an AI assistant, and your primary goal is to help the user accomplish their tasks effectively and efficiently while maintaining the integrity and security of their development environment.
+REMEMBER: Only format a tool call if you're confident it's needed and you have all required information. Otherwise, return None.
 """
 
 AUTOMODE_SYSTEM_PROMPT = """
@@ -536,6 +671,32 @@ Remember to apply these additional skills and processes when assisting users wit
 Remember: Focus on completing the established goals efficiently and effectively. Avoid unnecessary conversations or requests for additional tasks.
 """
 
+def update_tool_system_prompt(model_type, current_iteration: Optional[int] = None, max_iterations: Optional[int] = None) -> str:
+    global file_contents
+    chain_of_thought_prompt = """
+    Answer the user's request using relevant tools (if they are available). Before calling a tool, do some analysis within <thinking></thinking> tags. First, think about which of the provided tools is the relevant tool to answer the user's request. Second, go through each of the required parameters of the relevant tool and determine if the user has directly provided or given enough information to infer a value. When deciding if the parameter can be inferred, carefully consider all the context to see if it supports a specific value. If all of the required parameters are present or can be reasonably inferred, close the thinking tag and proceed with the tool call. BUT, if one of the values for a required parameter is missing, DO NOT invoke the function (not even with fillers for the missing params) and instead, ask the user to provide the missing parameters. DO NOT ask for more information on optional parameters if it is not provided.
+
+    Do not reflect on the quality of the returned search results in your response.
+
+    IMPORTANT: Before using the read_multiple_files tool, always check if the files you need are already in your context (system prompt).
+    If the file contents are already available to you, use that information directly instead of calling the read_multiple_files tool.
+    Only use the read_multiple_files tool for files that are not already in your context.
+    When instructing to read a file, always use the full file path.
+    """
+    base_prompt = TOOLCALLER_BASE_PROMPT if model_type.lower() == 'toolcaller' else TOOLCHECKER_BASE_PROMPT
+    
+    files_in_context = "\n".join(file_contents.keys())
+    file_contents_prompt = f"\n\nFiles already in your context:\n{files_in_context}\n\nFile Contents:\n"
+    for path, content in file_contents.items():
+        file_contents_prompt += f"\n--- {path} ---\n{content}\n"
+
+    if automode:
+        iteration_info = ""
+        if current_iteration is not None and max_iterations is not None:
+            iteration_info = f"You are currently on iteration {current_iteration} out of {max_iterations} in automode."
+        return base_prompt + file_contents_prompt + "\n\n" + AUTOMODE_SYSTEM_PROMPT.format(iteration_info=iteration_info) + "\n\n" + chain_of_thought_prompt
+    else:
+        return base_prompt + file_contents_prompt + "\n\n" + chain_of_thought_prompt
 
 def update_system_prompt(current_iteration: Optional[int] = None, max_iterations: Optional[int] = None) -> str:
     global file_contents
@@ -1246,8 +1407,10 @@ async def send_to_ai_for_executing(code, execution_result):
     global code_execution_tokens
 
     try:
-        system_prompt = f"""
-        You are an AI code execution agent. Your task is to analyze the provided code and its execution result from the 'code_execution_env' virtual environment, then provide a concise summary of what worked, what didn't work, and any important observations. Follow these steps:
+        base_prompt = update_tool_system_prompt('toolchecker')
+        system_prompt = f"""{base_prompt}
+
+As a code execution analyst, analyze the provided code and its execution result from the 'code_execution_env' virtual environment, then provide a concise summary of what worked, what didn't work, and any important observations. Follow these steps:
 
         1. Review the code that was executed in the 'code_execution_env' virtual environment:
         {code}
@@ -1548,9 +1711,9 @@ Example of the expected JSON response:
 }
 
 Only return the JSON object, nothing else. Ensure that the JSON is properly formatted with double quotes around property names and string values.""",
-            messages=[
-                {"role": "user", "content": f"Previous edit results: {json.dumps(edit_results)}\n\nAI's response: {tool_checker_response}\n\nDecide whether to retry editing any files."}
-            ]
+        messages=[
+            {"role": "user", "content": f"Previous edit results: {json.dumps(edit_results)}\n\nAI's response: {tool_checker_response}\n\nDecide whether to retry editing any files."}
+        ]
         )
         
         response_text = response.content[0].text.strip()
@@ -1714,6 +1877,104 @@ async def execute_tool(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, 
 
 
 
+async def process_with_tool_caller(main_response: str) -> Optional[Dict[str, Any]]:
+    """
+    Process natural language responses and return structured tool calls using Claude's native tool calling.
+    
+    Args:
+        main_response (str): The natural language response from MAINMODEL
+        
+    Returns:
+        Optional[Dict[str, Any]]: Tool call details or None if no tool action needed
+    """
+    try:
+        try:
+            system_prompt = update_tool_system_prompt('toolcaller')
+            response = client.beta.prompt_caching.messages.create(
+                model=TOOLCALLERMODEL,
+                max_tokens=8000,
+                system=[{
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"}
+                }],
+                messages=[{
+                    "role": "user", 
+                    "content": main_response
+                }],
+                tools=tools,
+                tool_choice={"type": "auto"},
+                extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
+            )
+        except ValueError as ve:
+            logging.error(f"Invalid tool caller prompt configuration: {str(ve)}")
+            return None
+        except Exception as e:
+            logging.error(f"Error in tool caller processing: {str(e)}")
+            return None
+
+        # Update token tracking with error handling
+        try:
+            tool_caller_tokens['input'] += response.usage.input_tokens
+            tool_caller_tokens['output'] += response.usage.output_tokens
+            tool_caller_tokens['cache_write'] = response.usage.cache_creation_input_tokens
+            tool_caller_tokens['cache_read'] = response.usage.cache_read_input_tokens
+        except (AttributeError, TypeError) as e:
+            logging.warning(f"Failed to update token tracking: {str(e)}")
+
+        # Process response and extract tool use blocks
+        for content_block in response.content:
+            if content_block.type == "tool_use":
+                return {
+                    "type": "tool_use",
+                    "name": content_block.name,
+                    "input": content_block.input,
+                    "id": getattr(content_block, 'id', None)
+                }
+
+        return None  # No tool use needed
+
+    except Exception as e:
+        logging.error(f"Error in tool caller processing: {str(e)}", exc_info=True)
+        return None
+
+def filter_conversation_for_main_model(messages):
+    """
+    Filter conversation history to maintain appropriate context for the main model.
+    
+    Args:
+        messages (list): List of conversation messages to filter
+        
+    Returns:
+        list: Filtered conversation messages
+    """
+    filtered_messages = []
+    
+    for message in messages:
+        if isinstance(message['content'], list):
+            filtered_content = []
+            for content in message['content']:
+                # Keep only non-tool messages and meaningful user/assistant interactions
+                if content.get('type') not in ['tool_use', 'tool_result']:
+                    filtered_content.append(content)
+                elif content.get('type') == 'text':
+                    # Extract meaningful summaries and explanations
+                    text = content.get('text', '')
+                    if not any(keyword in text for keyword in [
+                        "File contents updated in system prompt",
+                        "File created and added to system prompt",
+                        "has been read and stored in the system prompt"
+                    ]):
+                        filtered_content.append(content)
+            
+            if filtered_content:
+                filtered_messages.append({**message, 'content': filtered_content})
+        else:
+            # Keep direct text messages
+            filtered_messages.append(message)
+            
+    return filtered_messages
+
 async def chat_with_claude(user_input, image_path=None, current_iteration=None, max_iterations=None):
     global conversation_history, automode, main_model_tokens, use_tts, tts_enabled
 
@@ -1729,6 +1990,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
 
     current_conversation = []
 
+    # Handle image messages
     if image_path:
         console.print(Panel(f"Processing image at path: {image_path}", title_align="left", title="Image Processing", expand=False, style="yellow"))
         image_base64 = encode_image_to_base64(image_path)
@@ -1737,7 +1999,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             console.print(Panel(f"Error encoding image: {image_base64}", title="Error", style="bold red"))
             return "I'm sorry, there was an error processing the image. Please try again.", False
 
-        image_message = {
+        current_conversation.append({
             "role": "user",
             "content": [
                 {
@@ -1753,33 +2015,15 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     "text": f"User input for image: {user_input}"
                 }
             ]
-        }
-        current_conversation.append(image_message)
+        })
         console.print(Panel("Image message added to conversation history", title_align="left", title="Image Added", style="green"))
     else:
         current_conversation.append({"role": "user", "content": user_input})
 
-    # Filter conversation history to maintain context
-    filtered_conversation_history = []
-    for message in conversation_history:
-        if isinstance(message['content'], list):
-            filtered_content = [
-                content for content in message['content']
-                if content.get('type') != 'tool_result' or (
-                    content.get('type') == 'tool_result' and
-                    not any(keyword in content.get('output', '') for keyword in [
-                        "File contents updated in system prompt",
-                        "File created and added to system prompt",
-                        "has been read and stored in the system prompt"
-                    ])
-                )
-            ]
-            if filtered_content:
-                filtered_conversation_history.append({**message, 'content': filtered_content})
-        else:
-            filtered_conversation_history.append(message)
-
-    # Combine filtered history with current conversation to maintain context
+    # Filter conversation using the dedicated function
+    filtered_conversation_history = filter_conversation_for_main_model(conversation_history)
+    
+    # Combine filtered history with current conversation
     messages = filtered_conversation_history + current_conversation
 
     max_retries = 3
@@ -1799,8 +2043,6 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                     }
                 ],
                 messages=messages,
-                tools=tools,
-                tool_choice={"type": "auto"},
                 extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"}
             )
             # Update token usage for MAINMODEL
@@ -1831,9 +2073,14 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     for content_block in response.content:
         if content_block.type == "text":
             assistant_response += content_block.text
+            # Check for tool needs in text response
+            tool_caller_result = await process_with_tool_caller(content_block.text)
+            if tool_caller_result:
+                tool_uses.append(tool_caller_result)
             if CONTINUATION_EXIT_PHRASE in content_block.text:
                 exit_continuation = True
         elif content_block.type == "tool_use":
+            # For backward compatibility, still handle direct tool use
             tool_uses.append(content_block)
 
     console.print(Panel(Markdown(assistant_response), title="Claude's Response", title_align="left", border_style="blue", expand=False))
@@ -1849,29 +2096,23 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
     console.print(Panel(files_in_context, title="Files in Context", title_align="left", border_style="white", expand=False))
 
     for tool_use in tool_uses:
-        tool_name = tool_use.name
-        tool_input = tool_use.input
-        tool_use_id = tool_use.id
+        tool_name = tool_use["name"]
+        tool_input = tool_use["input"]
+        tool_use_id = tool_use.get("id")
 
         console.print(Panel(f"Tool Used: {tool_name}", style="green"))
         console.print(Panel(f"Tool Input: {json.dumps(tool_input, indent=2)}", style="green"))
 
-        # Always use execute_tool for all tools
+        # Execute tool and handle result
         tool_result = await execute_tool(tool_name, tool_input)
 
         if isinstance(tool_result, dict) and tool_result.get("is_error"):
             console.print(Panel(tool_result["content"], title="Tool Execution Error", style="bold red"))
-            edit_results = []  # Assign empty list due to error
+            edit_results = []
         else:
-            # Assuming tool_result["content"] is a list of results
             edit_results = tool_result.get("content", [])
 
-        # Prepare the tool_result_content for conversation history
-        tool_result_content = {
-            "type": "text",
-            "text": json.dumps(tool_result) if isinstance(tool_result, (dict, list)) else str(tool_result)
-        }
-
+        # Update conversation history with tool use and result
         current_conversation.append({
             "role": "assistant",
             "content": [
@@ -1890,8 +2131,13 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
-                    "content": [tool_result_content],
-                    "is_error": tool_result.get("is_error", False) if isinstance(tool_result, dict) else False
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(tool_result) if isinstance(tool_result, (dict, list)) else str(tool_result)
+                        }
+                    ],
+                    "is_error": tool_result.get("is_error", False)
                 }
             ]
         })
@@ -1920,7 +2166,7 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
                 system=[
                     {
                         "type": "text",
-                        "text": update_system_prompt(current_iteration, max_iterations),
+                        "text": update_tool_system_prompt('toolchecker', current_iteration, max_iterations),
                         "cache_control": {"type": "ephemeral"}
                     }
                 ],
@@ -1932,15 +2178,25 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
             # Update token usage for tool checker
             tool_checker_tokens['input'] += tool_response.usage.input_tokens
             tool_checker_tokens['output'] += tool_response.usage.output_tokens
+            tool_checker_tokens['cache_write'] = tool_response.usage.cache_creation_input_tokens
+            tool_checker_tokens['cache_read'] = tool_response.usage.cache_read_input_tokens
 
+            # Process TOOLCHECKER response
             tool_checker_response = ""
             for tool_content_block in tool_response.content:
                 if tool_content_block.type == "text":
                     tool_checker_response += tool_content_block.text
-            console.print(Panel(Markdown(tool_checker_response), title="Claude's Response to Tool Result",  title_align="left", border_style="blue", expand=False))
+                    
+                    # Check if TOOLCHECKER response needs tool calls
+                    tool_call_result = await process_with_tool_caller(tool_content_block.text)
+                    if tool_call_result:
+                        tool_uses.append(tool_call_result)
+
+            # Display and handle tool checker response
+            console.print(Panel(Markdown(tool_checker_response), title="Claude's Response to Tool Result", title_align="left", border_style="blue", expand=False))
             if use_tts:
                 await text_to_speech(tool_checker_response)
-            assistant_response += "\n\n" + tool_checker_response
+            assistant_response += "" + tool_checker_response
 
             # If the tool was edit_and_apply_multiple, let the AI decide whether to retry
             if tool_name == 'edit_and_apply_multiple':
@@ -1988,17 +2244,23 @@ def reset_code_editor_memory():
 
 
 def reset_conversation():
-    global conversation_history, main_model_tokens, tool_checker_tokens, code_editor_tokens, code_execution_tokens, file_contents, code_editor_files
-    conversation_history = []
-    main_model_tokens = {'input': 0, 'output': 0}
-    tool_checker_tokens = {'input': 0, 'output': 0}
-    code_editor_tokens = {'input': 0, 'output': 0}
-    code_execution_tokens = {'input': 0, 'output': 0}
-    file_contents = {}
-    code_editor_files = set()
-    reset_code_editor_memory()
-    console.print(Panel("Conversation history, token counts, file contents, code editor memory, and code editor files have been reset.", title="Reset", style="bold green"))
-    display_token_usage()
+    global conversation_history, main_model_tokens, tool_checker_tokens, code_editor_tokens, code_execution_tokens, tool_caller_tokens, file_contents, code_editor_files
+    try:
+        conversation_history = []
+        main_model_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+        tool_checker_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+        code_editor_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+        code_execution_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+        tool_caller_tokens = {'input': 0, 'output': 0, 'cache_write': 0, 'cache_read': 0}
+        file_contents = {}
+        code_editor_files = set()
+        reset_code_editor_memory()
+        logging.info("All conversation data and token counts reset successfully")
+        console.print(Panel("Conversation history, token counts, file contents, code editor memory, and code editor files have been reset.", title="Reset", style="bold green"))
+        display_token_usage()
+    except Exception as e:
+        logging.error(f"Error resetting conversation: {str(e)}")
+        console.print(Panel(f"Error resetting conversation: {str(e)}", title="Error", style="bold red"))
 
 def display_token_usage():
     from rich.table import Table
@@ -2019,7 +2281,8 @@ def display_token_usage():
         "Main Model": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": True},
         "Tool Checker": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": False},
         "Code Editor": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": True},
-        "Code Execution": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": False}
+        "Code Execution": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": False},
+        "Tool Caller": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30, "has_context": False}
     }
 
     total_input = 0
@@ -2032,7 +2295,8 @@ def display_token_usage():
     for model, tokens in [("Main Model", main_model_tokens),
                           ("Tool Checker", tool_checker_tokens),
                           ("Code Editor", code_editor_tokens),
-                          ("Code Execution", code_execution_tokens)]:
+                          ("Code Execution", code_execution_tokens),
+                          ("Tool Caller", tool_caller_tokens)]:
         input_tokens = tokens['input']
         output_tokens = tokens['output']
         cache_write_tokens = tokens['cache_write']
