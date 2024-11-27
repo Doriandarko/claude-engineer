@@ -1868,6 +1868,9 @@ async def chat_with_claude(user_input, image_path=None, current_iteration=None, 
         # Update the file_contents dictionary if applicable
         if tool_name in ['create_files', 'edit_and_apply_multiple', 'read_multiple_files'] and not (isinstance(tool_result, dict) and tool_result.get("is_error")):
             if tool_name == 'create_files':
+                # Convert single file dict to list for uniform handling
+                if isinstance(tool_input['files'], dict):
+                    tool_input['files'] = [tool_input['files']]
                 for file in tool_input['files']:
                     if "File created and added to system prompt" in str(tool_result):
                         file_contents[file['path']] = file['content']
