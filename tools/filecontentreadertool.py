@@ -1,5 +1,6 @@
 from tools.base import BaseTool
 import os
+import json
 
 class FileContentReaderTool(BaseTool):
     name = "filecontentreadertool"
@@ -9,6 +10,7 @@ class FileContentReaderTool(BaseTool):
     and their content as values.
     Handles file reading errors gracefully with built-in Python exceptions.
     '''
+    
     input_schema = {
         "type": "object",
         "properties": {
@@ -23,27 +25,37 @@ class FileContentReaderTool(BaseTool):
         "required": ["file_paths"]
     }
 
+    def _read_file(self, file_path: str) -> str:
+        """Safely read a file and handle errors."""
+        try:
+            if not os.path.exists(file_path):
+                return "Error: File not found"
+
+            with open(file_path, 'r', encoding='utf-8') as file:
+                return file.read()
+
+        except PermissionError:
+            return "Error: Permission denied"
+        except IsADirectoryError:
+            return "Error: Path is a directory"
+        except UnicodeDecodeError:
+            return "Error: Unable to decode file"
+        except Exception as e:
+            return f"Error: {str(e)}"
+
     def execute(self, **kwargs) -> str:
         file_paths = kwargs.get('file_paths', [])
         results = {}
 
-        for file_path in file_paths:
-            try:
-                if not os.path.exists(file_path):
-                    results[file_path] = f"Error: File not found: {file_path}"
-                    continue
+        try:
+            # Read each file
+            for file_path in file_paths:
+                content = self._read_file(file_path)
+                results[file_path] = content
 
-                with open(file_path, 'r', encoding='utf-8') as file:
-                    content = file.read()
-                    results[file_path] = content
+            # Format the output as JSON with proper escaping
+            formatted_results = json.dumps(results, indent=2)
+            return formatted_results
 
-            except PermissionError:
-                results[file_path] = f"Error: Permission denied for file: {file_path}"
-            except IsADirectoryError:
-                results[file_path] = f"Error: Path is a directory: {file_path}"
-            except UnicodeDecodeError:
-                results[file_path] = f"Error: Unable to decode file: {file_path}"
-            except Exception as e:
-                results[file_path] = f"Error: Unexpected error reading file {file_path}: {str(e)}"
-
-        return str(results)
+        except Exception as e:
+            return json.dumps({"error": str(e)}, indent=2)

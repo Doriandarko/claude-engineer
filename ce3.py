@@ -164,9 +164,6 @@ class Assistant:
         """Execute a tool and return its result"""
         tool_name = tool_use.name
         tool_input = tool_use.input
-
-        # Find the corresponding tool class
-        tools_path = Config.TOOLS_DIR
         tool_result = None
 
         try:
@@ -180,7 +177,9 @@ class Assistant:
                     obj != BaseTool):
                     tool = obj()
                     if tool.name == tool_name:
-                        tool_result = tool.execute(**tool_input)
+                        result = tool.execute(**tool_input)
+                        # Escape any Rich markup in the result
+                        tool_result = result.replace('[', '\\[').replace(']', '\\]')
                         break
 
             if tool_result is None:
@@ -337,7 +336,9 @@ class Assistant:
                         "role": "assistant",
                         "content": response.content
                     })
-                    return response.content[0].text
+                    # Escape any Rich markup in the response
+                    text_response = response.content[0].text
+                    return text_response.replace('[', '\\[').replace(']', '\\]')
 
         except Exception as e:
             return f"Error: {str(e)}"
@@ -405,7 +406,13 @@ Available tools:
 
             response = assistant.chat(user_input)
             console.print("\n[bold purple]Claude Engineer:[/bold purple]", style="bold")
-            console.print(response)
+            # Handle the response safely
+            if isinstance(response, str):
+                # Escape any Rich markup in the response
+                safe_response = response.replace('[', '\\[').replace(']', '\\]')
+                console.print(safe_response)
+            else:
+                console.print(str(response))
 
         except KeyboardInterrupt:
             continue
@@ -414,5 +421,3 @@ Available tools:
 
 if __name__ == "__main__":
     main()
-
-
