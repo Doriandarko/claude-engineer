@@ -192,12 +192,20 @@ class Assistant:
     def _display_tool_usage(self, tool_name: str, input_data: Dict, result: str):
         """
         If SHOW_TOOL_USAGE is enabled, display the input and result of a tool execution.
+        Handles special cases like image data and large outputs for cleaner display.
         """
         if not getattr(Config, 'SHOW_TOOL_USAGE', False):
             return
+
+        # Clean up input data by removing any large binary/base64 content
+        cleaned_input = self._clean_data_for_display(input_data)
         
-        tool_info = f"""[cyan]📥 Input:[/cyan] {json.dumps(input_data, indent=2)}
-[cyan]📤 Result:[/cyan] {result}"""
+        # Clean up result data
+        cleaned_result = self._clean_data_for_display(result)
+
+        tool_info = f"""[cyan]📥 Input:[/cyan] {json.dumps(cleaned_input, indent=2)}
+[cyan]📤 Result:[/cyan] {cleaned_result}"""
+        
         panel = Panel(
             tool_info,
             title=f"Tool used: {tool_name}",
@@ -206,6 +214,49 @@ class Assistant:
             padding=(1, 2)
         )
         self.console.print(panel)
+
+    def _clean_data_for_display(self, data):
+        """
+        Helper method to clean data for display by handling various data types
+        and removing/replacing large content like base64 strings.
+        """
+        if isinstance(data, str):
+            try:
+                # Try to parse as JSON first
+                parsed_data = json.loads(data)
+                return self._clean_parsed_data(parsed_data)
+            except json.JSONDecodeError:
+                # If it's a long string, check for base64 patterns
+                if len(data) > 1000 and ';base64,' in data:
+                    return "[base64 data omitted]"
+                return data
+        elif isinstance(data, dict):
+            return self._clean_parsed_data(data)
+        else:
+            return data
+
+    def _clean_parsed_data(self, data):
+        """
+        Recursively clean parsed JSON/dict data, handling nested structures
+        and replacing large data with placeholders.
+        """
+        if isinstance(data, dict):
+            cleaned = {}
+            for key, value in data.items():
+                # Handle image data in various formats
+                if key in ['data', 'image', 'source'] and isinstance(value, str):
+                    if len(value) > 1000 and (';base64,' in value or value.startswith('data:')):
+                        cleaned[key] = "[base64 data omitted]"
+                    else:
+                        cleaned[key] = value
+                else:
+                    cleaned[key] = self._clean_parsed_data(value)
+            return cleaned
+        elif isinstance(data, list):
+            return [self._clean_parsed_data(item) for item in data]
+        elif isinstance(data, str) and len(data) > 1000 and ';base64,' in data:
+            return "[base64 data omitted]"
+        return data
 
     def _execute_tool(self, tool_use):
         """
@@ -226,7 +277,8 @@ class Assistant:
                 # Execute the tool with the provided input
                 try:
                     result = tool_instance.execute(**tool_input)
-                    tool_result = result.replace('[', '\\[').replace(']', '\\]')
+                    # Keep structured data intact
+                    tool_result = result
                 except Exception as exec_err:
                     tool_result = f"Error executing tool '{tool_name}': {str(exec_err)}"
         except ImportError:
@@ -234,7 +286,9 @@ class Assistant:
         except Exception as e:
             tool_result = f"Error executing tool: {str(e)}"
 
-        self._display_tool_usage(tool_name, tool_input, tool_result)
+        # Display tool usage with proper handling of structured data
+        self._display_tool_usage(tool_name, tool_input, 
+            json.dumps(tool_result) if not isinstance(tool_result, str) else tool_result)
         return tool_result
 
     def _find_tool_instance_in_module(self, module, tool_name: str):
@@ -331,11 +385,21 @@ class Assistant:
                         for content_block in response.content:
                             if content_block.type == "tool_use":
                                 result = self._execute_tool(content_block)
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": content_block.id,
-                                    "content": result
-                                })
+                                
+                                # Handle structured data (like image blocks) vs text
+                                if isinstance(result, (list, dict)):
+                                    tool_results.append({
+                                        "type": "tool_result",
+                                        "tool_use_id": content_block.id,
+                                        "content": result  # Keep structured data intact
+                                    })
+                                else:
+                                    # Convert text results to proper content blocks
+                                    tool_results.append({
+                                        "type": "tool_result",
+                                        "tool_use_id": content_block.id,
+                                        "content": [{"type": "text", "text": str(result)}]
+                                    })
 
                         # Append tool usage to conversation and continue
                         self.conversation_history.append({
@@ -360,7 +424,8 @@ class Assistant:
                             "role": "assistant",
                             "content": response.content
                         })
-                        return final_content.replace('[', '\\[').replace(']', '\\]')
+                        # Don't escape brackets in the final response
+                        return final_content
                     else:
                         self.console.print("[red]No content in final response.[/red]")
                         return "No response content available."
