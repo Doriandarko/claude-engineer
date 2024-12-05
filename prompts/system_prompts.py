@@ -49,10 +49,7 @@ class SystemPrompts:
        - Managing file systems
     
     2. Development Tools:
-       - Git operations
        - Package management with UV
-       - Shell command execution
-       - Browser automation
     
     3. Web Interactions:
        - Web scraping
