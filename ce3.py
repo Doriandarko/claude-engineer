@@ -65,8 +65,6 @@ class Assistant:
             }
 
         result = self._execute_tool(ToolUseMock())
-        # If result doesn't contain an error message, assume success.
-        # This can be improved by more robust parsing.
         if "Error" not in result and "failed" not in result.lower():
             self.console.print("[green]The package was installed successfully.[/green]")
             return True
@@ -228,7 +226,6 @@ class Assistant:
                 # Execute the tool with the provided input
                 try:
                     result = tool_instance.execute(**tool_input)
-                    # Escaping brackets for safe printing
                     tool_result = result.replace('[', '\\[').replace(']', '\\]')
                 except Exception as exec_err:
                     tool_result = f"Error executing tool '{tool_name}': {str(exec_err)}"
@@ -254,6 +251,7 @@ class Assistant:
     def _display_token_usage(self, usage):
         """
         Display a visual representation of token usage and remaining tokens.
+        Uses only the tracked total_tokens_used.
         """
         used_percentage = (self.total_tokens_used / Config.MAX_CONVERSATION_TOKENS) * 100
         remaining_tokens = max(0, Config.MAX_CONVERSATION_TOKENS - self.total_tokens_used)
@@ -277,28 +275,10 @@ class Assistant:
 
         self.console.print("---")
 
-    def _count_tokens(self, messages, system_prompt=None) -> int:
-        """
-        Attempt to count tokens using the Anthropics API. If that fails, use a rough estimation.
-        """
-        try:
-            response = self.client.beta.messages.count_tokens(
-                betas=["token-counting-2024-11-01"],
-                model=Config.MODEL,
-                messages=messages,
-                system=system_prompt,
-                tools=self.tools
-            )
-            return response.input_tokens
-        except Exception:
-            self.console.print("[yellow]Warning: Token counting API failed, using estimation.[/yellow]")
-            total_chars = sum(len(str(m.get('content', ''))) for m in messages)
-            return int(total_chars * 0.5)
-
     def chat(self, user_input: str):
         """
         Handle a single user input and produce a response via the Anthropics API.
-        Manages tool calls, token usage, and conversation state.
+        Manages tool calls, token usage, and conversation state based on response. 
         """
         # Special commands
         if user_input.lower() == 'refresh':
@@ -306,17 +286,6 @@ class Assistant:
             return "Tools refreshed successfully!"
 
         new_message = {"role": "user", "content": user_input}
-        messages_to_check = self.conversation_history + [new_message]
-        estimated_tokens = self._count_tokens(
-            messages=messages_to_check,
-            system_prompt=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
-        )
-
-        # Check token limits before sending
-        if (self.total_tokens_used + estimated_tokens) >= Config.MAX_CONVERSATION_TOKENS:
-            self.console.print("\n[bold red]Token limit approaching! Please reset the conversation.[/bold red]")
-            return "Token limit approaching! Please type 'reset' to start a new conversation."
-
         self.conversation_history.append(new_message)
 
         try:
@@ -340,13 +309,14 @@ class Assistant:
                         system=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
                     )
 
+                    # Update token usage based on response usage
                     if hasattr(response, 'usage') and response.usage:
                         message_tokens = response.usage.input_tokens + response.usage.output_tokens
+                        self.total_tokens_used += message_tokens
+                        self._display_token_usage(response.usage)
                     else:
-                        message_tokens = estimated_tokens
-
-                    self.total_tokens_used += message_tokens
-                    self._display_token_usage(response.usage if hasattr(response, 'usage') else None)
+                        # No usage info, do not update token count
+                        pass
 
                     if self.total_tokens_used >= Config.MAX_CONVERSATION_TOKENS:
                         self.console.print("\n[bold red]Token limit reached! Please reset the conversation.[/bold red]")
@@ -390,7 +360,6 @@ class Assistant:
                             "role": "assistant",
                             "content": response.content
                         })
-                        # Escaping brackets for safe printing
                         return final_content.replace('[', '\\[').replace(']', '\\]')
                     else:
                         self.console.print("[red]No content in final response.[/red]")
@@ -467,10 +436,8 @@ Available tools:
                 console.print(str(response))
 
         except KeyboardInterrupt:
-            # If user hits Ctrl+C, just continue the loop
             continue
         except EOFError:
-            # If user sends EOF, break out of the loop
             break
 
 
