@@ -1,4 +1,4 @@
-# assistant.py
+# ce3.py
 import anthropic
 from rich.console import Console
 from rich.markdown import Markdown
@@ -27,6 +27,15 @@ logging.basicConfig(
 )
 
 class Assistant:
+    """
+    The Assistant class manages:
+    - Loading of tools from a specified directory.
+    - Interaction with the Anthropics API (message completion).
+    - Handling user commands such as 'refresh' and 'reset'.
+    - Token usage tracking and display.
+    - Tool execution upon request from model responses.
+    """
+
     def __init__(self):
         if not getattr(Config, 'ANTHROPIC_API_KEY', None):
             raise ValueError("No ANTHROPIC_API_KEY found in environment variables")
@@ -46,9 +55,8 @@ class Assistant:
     def _execute_uv_install(self, package_name: str) -> bool:
         """
         Execute the uvpackagemanager tool directly to install the missing package.
-        Returns True if installation seems successful (no errors in tool result), otherwise False.
+        Returns True if installation seems successful (no errors in output), otherwise False.
         """
-        # Construct a mock tool_use object to execute uvpackagemanager directly
         class ToolUseMock:
             name = "uvpackagemanager"
             input = {
@@ -57,8 +65,8 @@ class Assistant:
             }
 
         result = self._execute_tool(ToolUseMock())
-        # If result doesn't contain an error message, assume success
-        # You could improve this by parsing the output more carefully.
+        # If result doesn't contain an error message, assume success.
+        # This can be improved by more robust parsing.
         if "Error" not in result and "failed" not in result.lower():
             self.console.print("[green]The package was installed successfully.[/green]")
             return True
@@ -69,7 +77,10 @@ class Assistant:
     def _load_tools(self) -> List[Dict[str, Any]]:
         """
         Dynamically load all tool classes from the tools directory.
-        If a dependency is missing, prompts the user to install and attempts installation via uvpackagemanager.
+        If a dependency is missing, prompt the user to install it via uvpackagemanager.
+        
+        Returns:
+            A list of tools (dicts) containing their 'name', 'description', and 'input_schema'.
         """
         tools = []
         tools_path = getattr(Config, 'TOOLS_DIR', None)
@@ -78,7 +89,7 @@ class Assistant:
             self.console.print("[red]TOOLS_DIR not set in Config[/red]")
             return tools
 
-        # Clear cached modules for a fresh import of the tools directory
+        # Clear cached tool modules for fresh import
         for module_name in list(sys.modules.keys()):
             if module_name.startswith('tools.') and module_name != 'tools.base':
                 del sys.modules[module_name]
@@ -87,53 +98,24 @@ class Assistant:
             for module_info in pkgutil.iter_modules([str(tools_path)]):
                 if module_info.name == 'base':
                     continue
+
+                # Attempt loading the tool module
                 try:
                     module = importlib.import_module(f'tools.{module_info.name}')
-                    # Find tool classes in the module
-                    for name, obj in inspect.getmembers(module):
-                        if (inspect.isclass(obj) and
-                            issubclass(obj, BaseTool) and
-                            obj != BaseTool):
-                            try:
-                                tool_instance = obj()
-                                tools.append({
-                                    "name": tool_instance.name,
-                                    "description": tool_instance.description,
-                                    "input_schema": tool_instance.input_schema
-                                })
-                                self.console.print(f"[green]Loaded tool:[/green] {tool_instance.name}")
-                            except Exception as tool_init_err:
-                                self.console.print(f"[red]Error initializing tool {name}:[/red] {str(tool_init_err)}")
+                    self._extract_tools_from_module(module, tools)
                 except ImportError as e:
-                    # Attempt to parse missing module name from ImportError
-                    err_str = str(e)
-                    if "No module named" in err_str:
-                        parts = err_str.split("No module named")
-                        missing_module = parts[-1].strip(" '\"")
-                    else:
-                        missing_module = str(e)
-
+                    # Handle missing dependencies
+                    missing_module = self._parse_missing_dependency(str(e))
                     self.console.print(f"\n[yellow]Missing dependency:[/yellow] {missing_module} for tool {module_info.name}")
                     user_response = input(f"Would you like to install {missing_module}? (y/n): ").lower()
-                    
+
                     if user_response == 'y':
-                        # Install via uvpackagemanager
                         success = self._execute_uv_install(missing_module)
                         if success:
-                            # Retry loading the module
+                            # Retry loading the module after installation
                             try:
                                 module = importlib.import_module(f'tools.{module_info.name}')
-                                for name, obj in inspect.getmembers(module):
-                                    if (inspect.isclass(obj) and
-                                        issubclass(obj, BaseTool) and
-                                        obj != BaseTool):
-                                        tool_instance = obj()
-                                        tools.append({
-                                            "name": tool_instance.name,
-                                            "description": tool_instance.description,
-                                            "input_schema": tool_instance.input_schema
-                                        })
-                                        self.console.print(f"[green]Loaded tool:[/green] {tool_instance.name}")
+                                self._extract_tools_from_module(module, tools)
                             except Exception as retry_err:
                                 self.console.print(f"[red]Failed to load tool after installation: {str(retry_err)}[/red]")
                         else:
@@ -147,7 +129,39 @@ class Assistant:
 
         return tools
 
+    def _parse_missing_dependency(self, error_str: str) -> str:
+        """
+        Parse the missing dependency name from an ImportError string.
+        """
+        if "No module named" in error_str:
+            parts = error_str.split("No module named")
+            missing_module = parts[-1].strip(" '\"")
+        else:
+            missing_module = error_str
+        return missing_module
+
+    def _extract_tools_from_module(self, module, tools: List[Dict[str, Any]]) -> None:
+        """
+        Given a tool module, find and instantiate all tool classes (subclasses of BaseTool).
+        Append them to the 'tools' list.
+        """
+        for name, obj in inspect.getmembers(module):
+            if (inspect.isclass(obj) and issubclass(obj, BaseTool) and obj != BaseTool):
+                try:
+                    tool_instance = obj()
+                    tools.append({
+                        "name": tool_instance.name,
+                        "description": tool_instance.description,
+                        "input_schema": tool_instance.input_schema
+                    })
+                    self.console.print(f"[green]Loaded tool:[/green] {tool_instance.name}")
+                except Exception as tool_init_err:
+                    self.console.print(f"[red]Error initializing tool {name}:[/red] {str(tool_init_err)}")
+
     def refresh_tools(self):
+        """
+        Refresh the list of tools and show newly discovered tools.
+        """
         current_tool_names = {tool['name'] for tool in self.tools}
         self.tools = self._load_tools()
         new_tool_names = {tool['name'] for tool in self.tools}
@@ -165,13 +179,22 @@ class Assistant:
             self.console.print("\n[yellow]No new tools found[/yellow]")
 
     def display_available_tools(self):
+        """
+        Print a list of currently loaded tools.
+        """
         self.console.print("\n[bold cyan]Available tools:[/bold cyan]")
         tool_names = [tool['name'] for tool in self.tools]
-        formatted_tools = ", ".join([f"🔧 [cyan]{name}[/cyan]" for name in tool_names]) if tool_names else "No tools available."
+        if tool_names:
+            formatted_tools = ", ".join([f"🔧 [cyan]{name}[/cyan]" for name in tool_names])
+        else:
+            formatted_tools = "No tools available."
         self.console.print(formatted_tools)
         self.console.print("\n---")
 
     def _display_tool_usage(self, tool_name: str, input_data: Dict, result: str):
+        """
+        If SHOW_TOOL_USAGE is enabled, display the input and result of a tool execution.
+        """
         if not getattr(Config, 'SHOW_TOOL_USAGE', False):
             return
         
@@ -187,32 +210,28 @@ class Assistant:
         self.console.print(panel)
 
     def _execute_tool(self, tool_use):
+        """
+        Given a tool usage request (with tool name and inputs),
+        dynamically load and execute the corresponding tool.
+        """
         tool_name = tool_use.name
         tool_input = tool_use.input or {}
         tool_result = None
 
         try:
             module = importlib.import_module(f'tools.{tool_name}')
-            tool_instance = None
-
-            for name, obj in inspect.getmembers(module):
-                if (inspect.isclass(obj) and
-                    issubclass(obj, BaseTool) and
-                    obj != BaseTool):
-                    candidate_tool = obj()
-                    if candidate_tool.name == tool_name:
-                        tool_instance = candidate_tool
-                        break
+            tool_instance = self._find_tool_instance_in_module(module, tool_name)
 
             if not tool_instance:
                 tool_result = f"Tool not found: {tool_name}"
             else:
+                # Execute the tool with the provided input
                 try:
                     result = tool_instance.execute(**tool_input)
+                    # Escaping brackets for safe printing
                     tool_result = result.replace('[', '\\[').replace(']', '\\]')
                 except Exception as exec_err:
                     tool_result = f"Error executing tool '{tool_name}': {str(exec_err)}"
-
         except ImportError:
             tool_result = f"Failed to import tool: {tool_name}"
         except Exception as e:
@@ -221,7 +240,21 @@ class Assistant:
         self._display_tool_usage(tool_name, tool_input, tool_result)
         return tool_result
 
+    def _find_tool_instance_in_module(self, module, tool_name: str):
+        """
+        Search a given module for a tool class matching tool_name and return an instance of it.
+        """
+        for name, obj in inspect.getmembers(module):
+            if (inspect.isclass(obj) and issubclass(obj, BaseTool) and obj != BaseTool):
+                candidate_tool = obj()
+                if candidate_tool.name == tool_name:
+                    return candidate_tool
+        return None
+
     def _display_token_usage(self, usage):
+        """
+        Display a visual representation of token usage and remaining tokens.
+        """
         used_percentage = (self.total_tokens_used / Config.MAX_CONVERSATION_TOKENS) * 100
         remaining_tokens = max(0, Config.MAX_CONVERSATION_TOKENS - self.total_tokens_used)
 
@@ -244,7 +277,10 @@ class Assistant:
 
         self.console.print("---")
 
-    def _count_tokens(self, messages, system_prompt=None):
+    def _count_tokens(self, messages, system_prompt=None) -> int:
+        """
+        Attempt to count tokens using the Anthropics API. If that fails, use a rough estimation.
+        """
         try:
             response = self.client.beta.messages.count_tokens(
                 betas=["token-counting-2024-11-01"],
@@ -255,11 +291,16 @@ class Assistant:
             )
             return response.input_tokens
         except Exception:
-            self.console.print(f"[yellow]Warning: Token counting API failed, using estimation.[/yellow]")
+            self.console.print("[yellow]Warning: Token counting API failed, using estimation.[/yellow]")
             total_chars = sum(len(str(m.get('content', ''))) for m in messages)
             return int(total_chars * 0.5)
 
     def chat(self, user_input: str):
+        """
+        Handle a single user input and produce a response via the Anthropics API.
+        Manages tool calls, token usage, and conversation state.
+        """
+        # Special commands
         if user_input.lower() == 'refresh':
             self.refresh_tools()
             return "Tools refreshed successfully!"
@@ -271,6 +312,7 @@ class Assistant:
             system_prompt=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
         )
 
+        # Check token limits before sending
         if (self.total_tokens_used + estimated_tokens) >= Config.MAX_CONVERSATION_TOKENS:
             self.console.print("\n[bold red]Token limit approaching! Please reset the conversation.[/bold red]")
             return "Token limit approaching! Please type 'reset' to start a new conversation."
@@ -315,6 +357,7 @@ class Assistant:
 
                     tool_results = []
                     if getattr(response, 'content', None) and isinstance(response.content, list):
+                        # Execute each tool in the response content
                         for content_block in response.content:
                             if content_block.type == "tool_use":
                                 result = self._execute_tool(content_block)
@@ -324,6 +367,7 @@ class Assistant:
                                     "content": result
                                 })
 
+                        # Append tool usage to conversation and continue
                         self.conversation_history.append({
                             "role": "assistant",
                             "content": response.content
@@ -337,12 +381,16 @@ class Assistant:
                         self.console.print("[red]No tool content received despite 'tool_use' stop reason.[/red]")
                         break
                 else:
-                    if getattr(response, 'content', None) and isinstance(response.content, list) and response.content:
+                    # Final assistant response
+                    if (getattr(response, 'content', None) and 
+                        isinstance(response.content, list) and 
+                        response.content):
                         final_content = response.content[0].text
                         self.conversation_history.append({
                             "role": "assistant",
                             "content": response.content
                         })
+                        # Escaping brackets for safe printing
                         return final_content.replace('[', '\\[').replace(']', '\\]')
                     else:
                         self.console.print("[red]No content in final response.[/red]")
@@ -352,6 +400,9 @@ class Assistant:
             return f"Error: {str(e)}"
 
     def reset(self):
+        """
+        Reset the assistant's memory and token usage.
+        """
         self.conversation_history = []
         self.total_tokens_used = 0
         self.console.print("\n[bold green]🔄 Assistant memory has been reset![/bold green]")
@@ -368,7 +419,12 @@ Available tools:
         self.console.print(Markdown(welcome_text))
         self.display_available_tools()
 
+
 def main():
+    """
+    Entry point for the assistant CLI loop.
+    Provides a prompt for user input and handles 'quit' and 'reset' commands.
+    """
     console = Console()
     style = Style.from_dict({'prompt': 'orange'})
 
@@ -411,9 +467,12 @@ Available tools:
                 console.print(str(response))
 
         except KeyboardInterrupt:
+            # If user hits Ctrl+C, just continue the loop
             continue
         except EOFError:
+            # If user sends EOF, break out of the loop
             break
+
 
 if __name__ == "__main__":
     main()
