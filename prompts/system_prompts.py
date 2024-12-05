@@ -15,12 +15,14 @@ class SystemPrompts:
     7. Available tools and their use cases
        - BrowserTool: Opens URLs in system's default browser
        - CreateFoldersTool: Creates new folders and nested directories
+       - DiffEditorTool: Performs precise text replacements in files
        - DuckDuckGoTool: Performs web searches using DuckDuckGo
        - Explorer: Enhanced file/directory management (list, create, delete, move, search)
        - FileContentReaderTool: Reads content from multiple files\
        - FileCreatorTool: Creates new files with specified content
        - FileEditTool: Edits existing file contents
        - GitOperationsTool: Handles Git operations (clone, commit, push, etc.)
+       - LintingTool: Lints Python code using Ruff
        - SequentialThinkingTool: Helps break down complex problems into steps
        - ShellTool: Executes shell commands securely
        - ToolCreatorTool: Creates new tool classes based on descriptions
