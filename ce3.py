@@ -12,12 +12,19 @@ import pkgutil
 import os
 import json
 import sys
+import logging
 
 from config import Config
 from tools.base import BaseTool
 from prompt_toolkit import prompt
 from prompt_toolkit.styles import Style
 from prompts.system_prompts import SystemPrompts
+
+# Configure logging to only show ERROR level and above
+logging.basicConfig(
+    level=logging.ERROR,
+    format='%(levelname)s: %(message)s'
+)
 
 class Assistant:
     def __init__(self):
@@ -29,18 +36,40 @@ class Assistant:
 
         self.conversation_history: List[Dict[str, Any]] = []
         self.console = Console()
-        self.tools = self._load_tools()
 
-        # Safe defaults for configuration
         self.thinking_enabled = getattr(Config, 'ENABLE_THINKING', False)
         self.temperature = getattr(Config, 'DEFAULT_TEMPERATURE', 0.7)
         self.total_tokens_used = 0
 
+        self.tools = self._load_tools()
+
+    def _execute_uv_install(self, package_name: str) -> bool:
+        """
+        Execute the uvpackagemanager tool directly to install the missing package.
+        Returns True if installation seems successful (no errors in tool result), otherwise False.
+        """
+        # Construct a mock tool_use object to execute uvpackagemanager directly
+        class ToolUseMock:
+            name = "uvpackagemanager"
+            input = {
+                "command": "install",
+                "packages": [package_name]
+            }
+
+        result = self._execute_tool(ToolUseMock())
+        # If result doesn't contain an error message, assume success
+        # You could improve this by parsing the output more carefully.
+        if "Error" not in result and "failed" not in result.lower():
+            self.console.print("[green]The package was installed successfully.[/green]")
+            return True
+        else:
+            self.console.print(f"[red]Failed to install {package_name}. Output:[/red] {result}")
+            return False
+
     def _load_tools(self) -> List[Dict[str, Any]]:
         """
         Dynamically load all tool classes from the tools directory.
-        Tools must subclass BaseTool. Skips tools that cannot be loaded
-        due to missing dependencies or other errors.
+        If a dependency is missing, prompts the user to install and attempts installation via uvpackagemanager.
         """
         tools = []
         tools_path = getattr(Config, 'TOOLS_DIR', None)
@@ -54,7 +83,6 @@ class Assistant:
             if module_name.startswith('tools.') and module_name != 'tools.base':
                 del sys.modules[module_name]
 
-        # Iterate through modules in the tools directory
         try:
             for module_info in pkgutil.iter_modules([str(tools_path)]):
                 if module_info.name == 'base':
@@ -89,10 +117,9 @@ class Assistant:
                     user_response = input(f"Would you like to install {missing_module}? (y/n): ").lower()
                     
                     if user_response == 'y':
-                        installation_message = f"Please install the package '{missing_module}' using UV package manager"
-                        try:
-                            # Attempt to handle installation via chat method
-                            self.chat(installation_message)
+                        # Install via uvpackagemanager
+                        success = self._execute_uv_install(missing_module)
+                        if success:
                             # Retry loading the module
                             try:
                                 module = importlib.import_module(f'tools.{module_info.name}')
@@ -109,8 +136,8 @@ class Assistant:
                                         self.console.print(f"[green]Loaded tool:[/green] {tool_instance.name}")
                             except Exception as retry_err:
                                 self.console.print(f"[red]Failed to load tool after installation: {str(retry_err)}[/red]")
-                        except Exception as install_err:
-                            self.console.print(f"[red]Error during installation process: {str(install_err)}[/red]")
+                        else:
+                            self.console.print(f"[red]Installation of {missing_module} failed. Skipping this tool.[/red]")
                     else:
                         self.console.print(f"[yellow]Skipping tool {module_info.name} due to missing dependency[/yellow]")
                 except Exception as mod_err:
@@ -121,7 +148,6 @@ class Assistant:
         return tools
 
     def refresh_tools(self):
-        """Refresh the available tools and display newly added tools, if any."""
         current_tool_names = {tool['name'] for tool in self.tools}
         self.tools = self._load_tools()
         new_tool_names = {tool['name'] for tool in self.tools}
@@ -139,7 +165,6 @@ class Assistant:
             self.console.print("\n[yellow]No new tools found[/yellow]")
 
     def display_available_tools(self):
-        """Display the list of currently available tools."""
         self.console.print("\n[bold cyan]Available tools:[/bold cyan]")
         tool_names = [tool['name'] for tool in self.tools]
         formatted_tools = ", ".join([f"🔧 [cyan]{name}[/cyan]" for name in tool_names]) if tool_names else "No tools available."
@@ -147,7 +172,6 @@ class Assistant:
         self.console.print("\n---")
 
     def _display_tool_usage(self, tool_name: str, input_data: Dict, result: str):
-        """Display tool execution details if SHOW_TOOL_USAGE is enabled."""
         if not getattr(Config, 'SHOW_TOOL_USAGE', False):
             return
         
@@ -163,7 +187,6 @@ class Assistant:
         self.console.print(panel)
 
     def _execute_tool(self, tool_use):
-        """Execute a tool and return its result. Handles errors gracefully."""
         tool_name = tool_use.name
         tool_input = tool_use.input or {}
         tool_result = None
@@ -172,7 +195,6 @@ class Assistant:
             module = importlib.import_module(f'tools.{tool_name}')
             tool_instance = None
 
-            # Find the correct tool class
             for name, obj in inspect.getmembers(module):
                 if (inspect.isclass(obj) and
                     issubclass(obj, BaseTool) and
@@ -185,7 +207,6 @@ class Assistant:
             if not tool_instance:
                 tool_result = f"Tool not found: {tool_name}"
             else:
-                # Execute the tool method
                 try:
                     result = tool_instance.execute(**tool_input)
                     tool_result = result.replace('[', '\\[').replace(']', '\\]')
@@ -201,7 +222,6 @@ class Assistant:
         return tool_result
 
     def _display_token_usage(self, usage):
-        """Display token usage in a progress bar style, if usage data is available."""
         used_percentage = (self.total_tokens_used / Config.MAX_CONVERSATION_TOKENS) * 100
         remaining_tokens = max(0, Config.MAX_CONVERSATION_TOKENS - self.total_tokens_used)
 
@@ -225,10 +245,6 @@ class Assistant:
         self.console.print("---")
 
     def _count_tokens(self, messages, system_prompt=None):
-        """
-        Count tokens using Anthropic's token counting API.
-        Fallback to rough estimation if the API call fails.
-        """
         try:
             response = self.client.beta.messages.count_tokens(
                 betas=["token-counting-2024-11-01"],
@@ -238,14 +254,12 @@ class Assistant:
                 tools=self.tools
             )
             return response.input_tokens
-        except Exception as e:
+        except Exception:
             self.console.print(f"[yellow]Warning: Token counting API failed, using estimation.[/yellow]")
-            # Rough estimation: half the character count of all messages combined
             total_chars = sum(len(str(m.get('content', ''))) for m in messages)
             return int(total_chars * 0.5)
 
     def chat(self, user_input: str):
-        """Process user input and return assistant's response or handle special commands."""
         if user_input.lower() == 'refresh':
             self.refresh_tools()
             return "Tools refreshed successfully!"
@@ -257,7 +271,6 @@ class Assistant:
             system_prompt=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
         )
 
-        # Check token budget
         if (self.total_tokens_used + estimated_tokens) >= Config.MAX_CONVERSATION_TOKENS:
             self.console.print("\n[bold red]Token limit approaching! Please reset the conversation.[/bold red]")
             return "Token limit approaching! Please type 'reset' to start a new conversation."
@@ -269,12 +282,10 @@ class Assistant:
             spinner = Spinner('dots', text=spinner_text, style="cyan")
 
             while True:
-                # Warn if close to token limit
                 if self.total_tokens_used >= Config.MAX_CONVERSATION_TOKENS * 0.9:
                     self.console.print("\n[bold yellow]Warning: Approaching token limit![/bold yellow]")
 
                 with Live(spinner, refresh_per_second=10, transient=True):
-                    # Attempt to create a message-based completion
                     response = self.client.messages.create(
                         model=Config.MODEL,
                         max_tokens=min(
@@ -287,27 +298,22 @@ class Assistant:
                         system=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
                     )
 
-                    # Update token usage if available
                     if hasattr(response, 'usage') and response.usage:
                         message_tokens = response.usage.input_tokens + response.usage.output_tokens
                     else:
-                        # If usage is not provided, fallback to estimation
                         message_tokens = estimated_tokens
 
                     self.total_tokens_used += message_tokens
                     self._display_token_usage(response.usage if hasattr(response, 'usage') else None)
 
-                    # Check token limit again
                     if self.total_tokens_used >= Config.MAX_CONVERSATION_TOKENS:
                         self.console.print("\n[bold red]Token limit reached! Please reset the conversation.[/bold red]")
                         return "Token limit reached! Please type 'reset' to start a new conversation."
 
-                # Handle tool usage or finalize response
                 if response.stop_reason == "tool_use":
                     self.console.print("\n[bold yellow]🛠  Handling Tool Use...[/bold yellow]\n")
 
                     tool_results = []
-                    # response.content should be a structured set of messages indicating which tool to use
                     if getattr(response, 'content', None) and isinstance(response.content, list):
                         for content_block in response.content:
                             if content_block.type == "tool_use":
@@ -318,7 +324,6 @@ class Assistant:
                                     "content": result
                                 })
 
-                        # Add the intermediate tool usage messages to the conversation history
                         self.conversation_history.append({
                             "role": "assistant",
                             "content": response.content
@@ -327,21 +332,17 @@ class Assistant:
                             "role": "user",
                             "content": tool_results
                         })
-                        # Continue loop to process the next step after tool results
                         continue
                     else:
-                        # If no content to process, break to avoid infinite loop
                         self.console.print("[red]No tool content received despite 'tool_use' stop reason.[/red]")
                         break
                 else:
-                    # Final response
                     if getattr(response, 'content', None) and isinstance(response.content, list) and response.content:
                         final_content = response.content[0].text
                         self.conversation_history.append({
                             "role": "assistant",
                             "content": response.content
                         })
-                        # Escape Rich markup
                         return final_content.replace('[', '\\[').replace(']', '\\]')
                     else:
                         self.console.print("[red]No content in final response.[/red]")
@@ -351,7 +352,6 @@ class Assistant:
             return f"Error: {str(e)}"
 
     def reset(self):
-        """Reset the assistant's conversation history and token count."""
         self.conversation_history = []
         self.total_tokens_used = 0
         self.console.print("\n[bold green]🔄 Assistant memory has been reset![/bold green]")
