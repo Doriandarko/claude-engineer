@@ -1,6 +1,98 @@
 # Claude Engineer v3 🤖
 
-A powerful self-improving AI Assistant designed for creating and managing AI tools with Claude 3.5. This framework enables Claude to generate and manage its own tools, continuously expanding its capabilities through conversation. Via an advanced interactive command-line interface (CLI)
+A powerful self-improving AI Assistant designed for creating and managing AI tools with Claude 3.5. This framework enables Claude to generate and manage its own tools, continuously expanding its capabilities through conversation. Available both as a CLI and a modern web interface!
+
+## Interface Options
+
+### 1. Web Interface 🌐
+A sleek, modern web UI with features like:
+- Real-time token usage visualization
+- Image upload and analysis capabilities
+- Markdown rendering with syntax highlighting
+- Responsive design for all devices
+- Tool usage indicators
+- Clean, minimal interface
+
+To run the web interface:
+```bash
+# Using uv (recommended)
+uv run app.py
+
+# Or using traditional Python
+python app.py
+
+# Then open your browser to:
+http://localhost:5000
+```
+
+### 2. Command Line Interface (CLI) 💻
+A powerful terminal-based interface with:
+- Rich text formatting
+- Progress indicators
+- Token usage visualization
+- Direct tool interaction
+- Detailed debugging output
+
+To run the CLI:
+```bash
+# Using uv (recommended)
+uv run ce3.py
+
+# Or using traditional Python
+python ce3.py
+```
+
+Choose the interface that best suits your workflow:
+- Web UI: Great for visual work, image analysis, and a more modern experience
+- CLI: Perfect for developers, system integration, and terminal workflows
+
+## Installation
+
+For the best possible experience install uv
+
+### macOS and Linux
+```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Or using wget if curl is not available:
+# wget -qO- https://astral.sh/uv/install.sh | sh
+
+# Clone and setup
+git clone https://github.com/Doriandarko/claude-engineer.git
+cd claude-engineer
+uv venv
+source .venv/bin/activate
+
+# Install dependencies
+uv pip install -r requirements.txt
+
+# Run web interface
+uv run app.py
+
+# Or run CLI
+uv run ce3.py
+```
+
+### Windows
+```powershell
+# Install uv
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Clone and setup
+git clone https://github.com/Doriandarko/claude-engineer.git
+cd claude-engineer
+uv venv
+.venv\Scripts\activate
+
+# Install dependencies
+uv pip install -r requirements.txt
+
+# Run web interface
+uv run app.py
+
+# Or run CLI
+uv run ce3.py
+```
 
 ## History and Evolution
 This project represents the third major iteration of Claude Engineer, building upon the success of Claude Engineer v2. Key improvements from previous versions include:
@@ -39,104 +131,44 @@ Claude Engineer v3 is a sophisticated framework that allows Claude to expand its
 - 🔍 Enhanced error handling and debugging
 - 💾 Conversation state management
 
-## Installation
-
-For the best possible experience install uv
-
-### macOS and Linux
-```bash
-# Install uv
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# Or using wget if curl is not available:
-# wget -qO- https://astral.sh/uv/install.sh | sh
-
-# Clone and setup
-git clone https://github.com/Doriandarko/claude-engineer.git
-cd claude-engineer
-uv venv
-source .venv/bin/activate
-
-# Install dependencies and run
-uv run ce3.py
-```
-
-### Windows
-```powershell
-# Install uv
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# Clone and setup
-git clone https://github.com/Doriandarko/claude-engineer.git
-cd claude-engineer
-uv venv
-.venv\Scripts\activate
-
-# Install dependencies and run
-uv run ce3.py
-```
-
-### Alternative Installation (Using pip)
-If you prefer using traditional pip, you can follow these steps:
-```bash
-# Clone the repository
-git clone github.com/Doriandarko/claude-engineer.git
-cd claude-engineer
-
-# Create a virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up environment variables
-cp .env.example .env
-# Edit .env and add your ANTHROPIC_API_KEY
-```
-
-
-## Usage
-
-### Starting the Assistant
-```bash
-uv run ce3.py
-```
-
-### Command Reference
-- Type 'refresh' to reload available tools
-- Type 'reset' to clear conversation history and token count
-- Type 'quit' to exit the assistant
-- Use natural language to interact with tools
-
-### Self-Improving Tool Creation
-Claude Engineer v3 can automatically identify needs for new tools and create them during conversations. When you request functionality that isn't available:
-
-1. Claude analyzes the request and existing tools
-2. If needed, it designs and implements a new tool
-3. The tool is automatically saved and loaded
-4. Type 'refresh' to start using the new tool
-
-This creates a continuously expanding toolkit tailored to your needs.
-
-### Token Management
-The assistant features advanced token management:
-- Real-time token counting using Anthropic's API
-- Visual progress bar for token usage
-- Automatic warnings when approaching token limits
-- Smart conversation management to prevent token overflow
-- Detailed token usage statistics
-
 ## Project Structure
 ```
 claude-engineer/
-├── config.py           # Configuration settings
-├── main.py            # Main assistant interface
-├── tools/             # Tool implementations
-│   ├── base.py        # Base tool class
-│   └── ...           # Generated and custom tools
-└── prompts/           # System prompts
+├── app.py             # Web interface server
+├── ce3.py            # CLI interface
+├── config.py         # Configuration settings
+├── static/           # Web assets
+│   ├── css/         # Stylesheets
+│   └── js/          # JavaScript files
+├── templates/        # HTML templates
+├── tools/           # Tool implementations
+│   ├── base.py      # Base tool class
+│   └── ...         # Generated and custom tools
+└── prompts/         # System prompts
     └── system_prompts.py
 ```
+
+## Features by Interface
+
+### Web Interface Features
+- 🖼️ Image upload and analysis with Claude Vision
+- 📊 Visual token usage progress bar
+- 🎨 Clean, modern design with Tailwind CSS
+- 📝 Markdown rendering with syntax highlighting
+- 🔄 Real-time updates
+- 📱 Responsive design for all devices
+- 🖥️ Tool usage indicators
+- ⌨️ Command/Ctrl + Enter to send messages
+
+### CLI Features
+- 🎨 Rich text formatting
+- 📊 ASCII token usage bar
+- 🔄 Live progress indicators
+- 🛠️ Direct tool interaction
+- 📝 Detailed debugging output
+- 💻 Terminal-optimized interface
+
+Choose the interface that best matches your workflow and preferences. Both interfaces provide access to the same powerful Claude Engineer capabilities, just presented in different ways.
 
 ## Key Components
 
