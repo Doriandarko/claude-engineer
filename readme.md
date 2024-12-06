@@ -2,49 +2,19 @@
 
 A powerful self-improving AI Assistant designed for creating and managing AI tools with Claude 3.5. This framework enables Claude to generate and manage its own tools, continuously expanding its capabilities through conversation. Available both as a CLI and a modern web interface!
 
-## Interface Options
+## History and Evolution
+This project represents the third major iteration of Claude Engineer, building upon the success of Claude Engineer v2. Key improvements from previous versions include:
+- Upgraded to Claude 3.5 Sonnet model
+- Enhanced token management with Anthropic's new token counting API
+- Self-improving tool creation system
+- Streamlined conversation handling
+- More precise token usage tracking and visualization
+- Autonomous tool generation capabilities
+- No need for automode since Claude can intelligently decide when to run tools automatically and sequentially.
 
-### 1. Web Interface 🌐
-A sleek, modern web UI with features like:
-- Real-time token usage visualization
-- Image upload and analysis capabilities
-- Markdown rendering with syntax highlighting
-- Responsive design for all devices
-- Tool usage indicators
-- Clean, minimal interface
+## Description
+Claude Engineer v3 is a sophisticated framework that allows Claude to expand its own capabilities through dynamic tool creation. During conversations, Claude can identify needs for new tools, design them, and implement them automatically. This self-improving architecture means the framework becomes more powerful the more you use it.
 
-To run the web interface:
-```bash
-# Using uv (recommended)
-uv run app.py
-
-# Or using traditional Python
-python app.py
-
-# Then open your browser to:
-http://localhost:5000
-```
-
-### 2. Command Line Interface (CLI) 💻
-A powerful terminal-based interface with:
-- Rich text formatting
-- Progress indicators
-- Token usage visualization
-- Direct tool interaction
-- Detailed debugging output
-
-To run the CLI:
-```bash
-# Using uv (recommended)
-uv run ce3.py
-
-# Or using traditional Python
-python ce3.py
-```
-
-Choose the interface that best suits your workflow:
-- Web UI: Great for visual work, image analysis, and a more modern experience
-- CLI: Perfect for developers, system integration, and terminal workflows
 
 ## Installation
 
@@ -94,18 +64,51 @@ uv run app.py
 uv run ce3.py
 ```
 
-## History and Evolution
-This project represents the third major iteration of Claude Engineer, building upon the success of Claude Engineer v2. Key improvements from previous versions include:
-- Upgraded to Claude 3.5 Sonnet model
-- Enhanced token management with Anthropic's new token counting API
-- Self-improving tool creation system
-- Streamlined conversation handling
-- More precise token usage tracking and visualization
-- Autonomous tool generation capabilities
-- No need for automode since Claude can intelligently decide when to run tools automatically and sequentially.
 
-## Description
-Claude Engineer v3 is a sophisticated framework that allows Claude to expand its own capabilities through dynamic tool creation. During conversations, Claude can identify needs for new tools, design them, and implement them automatically. This self-improving architecture means the framework becomes more powerful the more you use it.
+## Interface Options
+
+### 1. Web Interface 🌐
+A sleek, modern web UI with features like:
+- Real-time token usage visualization
+- Image upload and analysis capabilities
+- Markdown rendering with syntax highlighting
+- Responsive design for all devices
+- Tool usage indicators
+- Clean, minimal interface
+
+To run the web interface:
+```bash
+# Using uv (recommended)
+uv run app.py
+
+# Or using traditional Python
+python app.py
+
+# Then open your browser to:
+http://localhost:5000
+```
+
+### 2. Command Line Interface (CLI) 💻
+A powerful terminal-based interface with:
+- Rich text formatting
+- Progress indicators
+- Token usage visualization
+- Direct tool interaction
+- Detailed debugging output
+
+To run the CLI:
+```bash
+# Using uv (recommended)
+uv run ce3.py
+
+# Or using traditional Python
+python ce3.py
+```
+
+Choose the interface that best suits your workflow:
+- Web UI: Great for visual work, image analysis, and a more modern experience
+- CLI: Perfect for developers, system integration, and terminal workflows
+
 
 ## Self-Improvement Features
 - 🧠 Autonomous tool identification and creation
