@@ -181,4 +181,18 @@ code {
     min-width: 48px;
     text-align: right;
 }
+
+/* Add these styles to your existing CSS */
+.message-wrapper .prose p {
+    color: #18181B;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* For user messages */
+.message-wrapper .prose {
+    color: #18181B;
+    font-size: 14px;
+    line-height: 1.5;
+}
   
