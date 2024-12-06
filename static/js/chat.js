@@ -1,4 +1,5 @@
 let currentImageData = null;
+let currentMediaType = null;
 
 // Auto-resize textarea
 const textarea = document.getElementById('message-input');
@@ -71,7 +72,8 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
             
             if (data.success) {
                 currentImageData = data.image_data;
-                document.getElementById('preview-img').src = `data:image/png;base64,${data.image_data}`;
+                currentMediaType = data.media_type;
+                document.getElementById('preview-img').src = `data:${data.media_type};base64,${data.image_data}`;
                 document.getElementById('image-preview').classList.remove('hidden');
             }
         } catch (error) {
@@ -178,7 +180,7 @@ function updateTokenUsage(usedTokens, maxTokens) {
     }
 }
 
-// Update the chat form submit handler to handle tool usage
+// Update the chat form submit handler
 document.getElementById('chat-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -187,8 +189,15 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
     
     if (!message && !currentImageData) return;
     
-    // Append user message
+    // Append user message (and image if present)
     appendMessage(message, true);
+    if (currentImageData) {
+        // Optionally show the image in the chat
+        const imagePreview = document.createElement('img');
+        imagePreview.src = `data:image/jpeg;base64,${currentImageData}`;
+        imagePreview.className = 'max-h-48 rounded-lg mt-2';
+        document.querySelector('.message-wrapper:last-child .prose').appendChild(imagePreview);
+    }
     
     // Clear input and reset height
     messageInput.value = '';
@@ -204,8 +213,8 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message,
-                image: currentImageData
+                message: message,
+                image: currentImageData  // This will be null if no image is selected
             })
         });
         

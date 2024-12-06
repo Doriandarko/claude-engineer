@@ -329,108 +329,127 @@ class Assistant:
 
         self.console.print("---")
 
-    def chat(self, user_input: str):
+    def _get_completion(self):
         """
-        Handle a single user input and produce a response via the Anthropics API.
-        Manages tool calls, token usage, and conversation state based on response. 
+        Get a completion from the Anthropic API.
+        Handles both text-only and multimodal messages.
         """
-        # Special commands
-        if user_input.lower() == 'refresh':
-            self.refresh_tools()
-            return "Tools refreshed successfully!"
-
-        new_message = {"role": "user", "content": user_input}
-        self.conversation_history.append(new_message)
-
         try:
-            spinner_text = 'Thinking...' if self.thinking_enabled else ''
-            spinner = Spinner('dots', text=spinner_text, style="cyan")
+            response = self.client.messages.create(
+                model=Config.MODEL,
+                max_tokens=min(
+                    Config.MAX_TOKENS,
+                    Config.MAX_CONVERSATION_TOKENS - self.total_tokens_used
+                ),
+                temperature=self.temperature,
+                tools=self.tools,
+                messages=self.conversation_history,
+                system=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
+            )
 
-            while True:
-                if self.total_tokens_used >= Config.MAX_CONVERSATION_TOKENS * 0.9:
-                    self.console.print("\n[bold yellow]Warning: Approaching token limit![/bold yellow]")
+            # Update token usage based on response usage
+            if hasattr(response, 'usage') and response.usage:
+                message_tokens = response.usage.input_tokens + response.usage.output_tokens
+                self.total_tokens_used += message_tokens
+                self._display_token_usage(response.usage)
 
-                with Live(spinner, refresh_per_second=10, transient=True):
-                    response = self.client.messages.create(
-                        model=Config.MODEL,
-                        max_tokens=min(
-                            Config.MAX_TOKENS,
-                            Config.MAX_CONVERSATION_TOKENS - self.total_tokens_used
-                        ),
-                        temperature=self.temperature,
-                        tools=self.tools,
-                        messages=self.conversation_history,
-                        system=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
-                    )
+            if self.total_tokens_used >= Config.MAX_CONVERSATION_TOKENS:
+                self.console.print("\n[bold red]Token limit reached! Please reset the conversation.[/bold red]")
+                return "Token limit reached! Please type 'reset' to start a new conversation."
 
-                    # Update token usage based on response usage
-                    if hasattr(response, 'usage') and response.usage:
-                        message_tokens = response.usage.input_tokens + response.usage.output_tokens
-                        self.total_tokens_used += message_tokens
-                        self._display_token_usage(response.usage)
-                    else:
-                        # No usage info, do not update token count
-                        pass
+            if response.stop_reason == "tool_use":
+                self.console.print("\n[bold yellow]  Handling Tool Use...[/bold yellow]\n")
 
-                    if self.total_tokens_used >= Config.MAX_CONVERSATION_TOKENS:
-                        self.console.print("\n[bold red]Token limit reached! Please reset the conversation.[/bold red]")
-                        return "Token limit reached! Please type 'reset' to start a new conversation."
+                tool_results = []
+                if getattr(response, 'content', None) and isinstance(response.content, list):
+                    # Execute each tool in the response content
+                    for content_block in response.content:
+                        if content_block.type == "tool_use":
+                            result = self._execute_tool(content_block)
+                            
+                            # Handle structured data (like image blocks) vs text
+                            if isinstance(result, (list, dict)):
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": content_block.id,
+                                    "content": result  # Keep structured data intact
+                                })
+                            else:
+                                # Convert text results to proper content blocks
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": content_block.id,
+                                    "content": [{"type": "text", "text": str(result)}]
+                                })
 
-                if response.stop_reason == "tool_use":
-                    self.console.print("\n[bold yellow]🛠  Handling Tool Use...[/bold yellow]\n")
+                    # Append tool usage to conversation and continue
+                    self.conversation_history.append({
+                        "role": "assistant",
+                        "content": response.content
+                    })
+                    self.conversation_history.append({
+                        "role": "user",
+                        "content": tool_results
+                    })
+                    return self._get_completion()  # Recursive call to continue the conversation
 
-                    tool_results = []
-                    if getattr(response, 'content', None) and isinstance(response.content, list):
-                        # Execute each tool in the response content
-                        for content_block in response.content:
-                            if content_block.type == "tool_use":
-                                result = self._execute_tool(content_block)
-                                
-                                # Handle structured data (like image blocks) vs text
-                                if isinstance(result, (list, dict)):
-                                    tool_results.append({
-                                        "type": "tool_result",
-                                        "tool_use_id": content_block.id,
-                                        "content": result  # Keep structured data intact
-                                    })
-                                else:
-                                    # Convert text results to proper content blocks
-                                    tool_results.append({
-                                        "type": "tool_result",
-                                        "tool_use_id": content_block.id,
-                                        "content": [{"type": "text", "text": str(result)}]
-                                    })
-
-                        # Append tool usage to conversation and continue
-                        self.conversation_history.append({
-                            "role": "assistant",
-                            "content": response.content
-                        })
-                        self.conversation_history.append({
-                            "role": "user",
-                            "content": tool_results
-                        })
-                        continue
-                    else:
-                        self.console.print("[red]No tool content received despite 'tool_use' stop reason.[/red]")
-                        break
                 else:
-                    # Final assistant response
-                    if (getattr(response, 'content', None) and 
-                        isinstance(response.content, list) and 
-                        response.content):
-                        final_content = response.content[0].text
-                        self.conversation_history.append({
-                            "role": "assistant",
-                            "content": response.content
-                        })
-                        # Don't escape brackets in the final response
-                        return final_content
-                    else:
-                        self.console.print("[red]No content in final response.[/red]")
-                        return "No response content available."
+                    self.console.print("[red]No tool content received despite 'tool_use' stop reason.[/red]")
+                    return "Error: No tool content received"
+
+            # Final assistant response
+            if (getattr(response, 'content', None) and 
+                isinstance(response.content, list) and 
+                response.content):
+                final_content = response.content[0].text
+                self.conversation_history.append({
+                    "role": "assistant",
+                    "content": response.content
+                })
+                return final_content
+            else:
+                self.console.print("[red]No content in final response.[/red]")
+                return "No response content available."
 
         except Exception as e:
+            logging.error(f"Error in _get_completion: {str(e)}")
+            return f"Error: {str(e)}"
+
+    def chat(self, user_input):
+        """
+        Process a chat message from the user.
+        user_input can be either a string (text-only) or a list (multimodal message)
+        """
+        # Handle special commands only for text-only messages
+        if isinstance(user_input, str):
+            if user_input.lower() == 'refresh':
+                self.refresh_tools()
+                return "Tools refreshed successfully!"
+            elif user_input.lower() == 'reset':
+                self.reset()
+                return "Conversation reset!"
+            elif user_input.lower() == 'quit':
+                return "Goodbye!"
+
+        try:
+            # Add user message to conversation history
+            self.conversation_history.append({
+                "role": "user",
+                "content": user_input  # This can be either string or list
+            })
+
+            # Show thinking indicator if enabled
+            if self.thinking_enabled:
+                with Live(Spinner('dots', text='Thinking...', style="cyan"), 
+                         refresh_per_second=10, transient=True):
+                    response = self._get_completion()
+            else:
+                response = self._get_completion()
+
+            return response
+
+        except Exception as e:
+            logging.error(f"Error in chat: {str(e)}")
             return f"Error: {str(e)}"
 
     def reset(self):
