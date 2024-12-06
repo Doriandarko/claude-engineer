@@ -99,4 +99,23 @@ code {
 /* Update the primary color to Tailwind black */
 .ai-avatar {
     background-color: #111827; /* Tailwind black-900 */
-} 
+}
+
+/* Add to your existing CSS */
+.tool-usage {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #6b7280;
+    font-size: 0.875rem;
+    padding: 0.5rem 0.75rem;
+    background-color: #f8fafc;
+    border-radius: 0.5rem;
+    margin: 0.5rem 0;
+}
+
+.tool-usage::before {
+    content: '🔧';
+    font-size: 1rem;
+}
+  

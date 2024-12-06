@@ -26,10 +26,24 @@ def chat():
     # Handle the chat message
     response = assistant.chat(message)
     
-    # Return both the response and thinking state
+    # Get the last used tool from the conversation history
+    tool_name = None
+    if assistant.conversation_history:
+        for msg in reversed(assistant.conversation_history):
+            if msg.get('role') == 'assistant' and msg.get('content'):
+                content = msg['content']
+                if isinstance(content, list):
+                    for block in content:
+                        if hasattr(block, 'type') and block.type == 'tool_use':
+                            tool_name = block.name
+                            break
+                if tool_name:
+                    break
+    
     return jsonify({
         'response': response,
-        'thinking': False
+        'thinking': False,
+        'tool_name': tool_name
     })
 
 @app.route('/upload', methods=['POST'])

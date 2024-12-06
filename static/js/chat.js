@@ -117,6 +117,45 @@ function appendThinkingIndicator() {
     return messageWrapper;
 }
 
+// Add command+enter handler
+document.getElementById('message-input').addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+    }
+});
+
+// Add function to show tool usage
+function appendToolUsage(toolName) {
+    const messagesDiv = document.getElementById('chat-messages');
+    const messageWrapper = document.createElement('div');
+    messageWrapper.className = 'message-wrapper';
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'flex items-start space-x-4';
+    
+    // AI Avatar
+    const avatarDiv = document.createElement('div');
+    avatarDiv.className = 'w-8 h-8 rounded-full ai-avatar flex items-center justify-center text-white font-bold text-sm';
+    avatarDiv.textContent = 'CE';
+    
+    // Tool usage content
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'flex-1';
+    
+    const toolDiv = document.createElement('div');
+    toolDiv.className = 'tool-usage';
+    toolDiv.textContent = `Using tool: ${toolName}`;
+    
+    contentDiv.appendChild(toolDiv);
+    messageDiv.appendChild(avatarDiv);
+    messageDiv.appendChild(contentDiv);
+    messageWrapper.appendChild(messageDiv);
+    messagesDiv.appendChild(messageWrapper);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+// Update the chat form submit handler to handle tool usage
 document.getElementById('chat-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -154,6 +193,11 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
             thinkingMessage.remove();
         }
         
+        // Show tool usage if present
+        if (data.tool_name) {
+            appendToolUsage(data.tool_name);
+        }
+        
         // Show response if we have one
         if (data && data.response) {
             appendMessage(data.response);
@@ -168,7 +212,6 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
         
     } catch (error) {
         console.error('Error sending message:', error);
-        // Remove thinking indicator if it exists
         document.querySelector('.thinking-message')?.remove();
         appendMessage('Error: Failed to send message');
     }
