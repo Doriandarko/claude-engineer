@@ -51,8 +51,6 @@ cd claude-engineer
 uv venv
 .venv\Scripts\activate
 
-# Install dependencies
-uv pip install -r requirements.txt
 
 # Run web interface
 uv run app.py
