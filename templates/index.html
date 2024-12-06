@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Engineer v3</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/marked@4.0.0/marked.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <script>
+        // Configure marked to use highlight.js
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    return hljs.highlight(code, { language: lang }).value;
+                }
+                return hljs.highlightAuto(code).value;
+            }
+        });
+    </script>
+</head>
+<body class="bg-white">
+    <div class="chat-container">
+        <!-- Messages area -->
+        <div class="messages-container" id="chat-messages">
+            <!-- Initial message -->
+            <div class="message-wrapper">
+                <div class="flex items-start space-x-4">
+                    <div class="w-8 h-8 rounded-full ai-avatar flex items-center justify-center text-white font-bold text-sm">
+                        CE
+                    </div>
+                    <div class="flex-1">
+                        <div class="prose prose-slate max-w-none">
+                            <p>Hello! How can I assist you with web development or any other programming tasks today?</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Fixed input area -->
+        <div class="input-container">
+            <div class="max-w-5xl mx-auto">
+                <form id="chat-form" class="relative">
+                    <div id="image-preview" class="hidden mb-2">
+                        <div class="relative inline-block">
+                            <img id="preview-img" class="max-h-32 rounded-lg border border-gray-200" src="" alt="Preview">
+                            <button type="button" id="remove-image" class="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm hover:bg-gray-100">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex items-end space-x-2 bg-white rounded-lg border border-gray-200 p-2">
+                        <button type="button" id="upload-btn" class="p-2 text-gray-400 hover:text-gray-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </button>
+                        <input type="file" id="file-input" class="hidden" accept="image/*">
+                        <textarea id="message-input" 
+                            class="flex-1 border-0 bg-transparent p-0 focus:ring-0 resize-none max-h-32 overflow-y-auto"
+                            rows="1"
+                            placeholder="Ask a follow up..."
+                            style="height: 28px; max-height: 200px;"
+                        ></textarea>
+                        <button type="submit" class="p-2 text-gray-400 hover:text-gray-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                            </svg>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+</body>
+</html> 
