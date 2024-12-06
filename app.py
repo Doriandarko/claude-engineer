@@ -3,6 +3,7 @@ from ce3 import Assistant
 import os
 from werkzeug.utils import secure_filename
 import base64
+from config import Config
 
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -26,6 +27,12 @@ def chat():
     # Handle the chat message
     response = assistant.chat(message)
     
+    # Get token usage from assistant
+    token_usage = {
+        'total_tokens': assistant.total_tokens_used,
+        'max_tokens': Config.MAX_CONVERSATION_TOKENS
+    }
+    
     # Get the last used tool from the conversation history
     tool_name = None
     if assistant.conversation_history:
@@ -43,7 +50,8 @@ def chat():
     return jsonify({
         'response': response,
         'thinking': False,
-        'tool_name': tool_name
+        'tool_name': tool_name,
+        'token_usage': token_usage
     })
 
 @app.route('/upload', methods=['POST'])

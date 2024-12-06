@@ -139,4 +139,46 @@ code {
         padding: 0.75rem;
     }
 }
+
+/* Add these styles to your existing CSS */
+.token-usage-container {
+    position: sticky;
+    bottom: 80px;
+    background-color: white;
+    padding: 0.5rem 0;
+    border-top: 1px solid #e5e7eb;
+    z-index: 10;
+}
+
+.token-bar-container {
+    flex: 1;
+    height: 8px;
+    background-color: #f3f4f6;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.token-bar {
+    height: 100%;
+    background-color: #10b981; /* Green by default */
+    border-radius: 4px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.token-bar.warning {
+    background-color: #f59e0b; /* Yellow for warning */
+}
+
+.token-bar.danger {
+    background-color: #ef4444; /* Red for danger */
+}
+
+.token-count {
+    min-width: 160px;
+}
+
+.token-percentage {
+    min-width: 48px;
+    text-align: right;
+}
   

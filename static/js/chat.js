@@ -155,6 +155,29 @@ function appendToolUsage(toolName) {
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
+// Add this function near the top of your file
+function updateTokenUsage(usedTokens, maxTokens) {
+    const percentage = (usedTokens / maxTokens) * 100;
+    const tokenBar = document.getElementById('token-bar');
+    const tokensUsed = document.getElementById('tokens-used');
+    const tokenPercentage = document.getElementById('token-percentage');
+    
+    // Update the numbers
+    tokensUsed.textContent = usedTokens.toLocaleString();
+    tokenPercentage.textContent = `${percentage.toFixed(1)}%`;
+    
+    // Update the bar
+    tokenBar.style.width = `${percentage}%`;
+    
+    // Update colors based on usage
+    tokenBar.classList.remove('warning', 'danger');
+    if (percentage > 90) {
+        tokenBar.classList.add('danger');
+    } else if (percentage > 75) {
+        tokenBar.classList.add('warning');
+    }
+}
+
 // Update the chat form submit handler to handle tool usage
 document.getElementById('chat-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -187,6 +210,11 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
         });
         
         const data = await response.json();
+        
+        // Update token usage if provided in response
+        if (data.token_usage) {
+            updateTokenUsage(data.token_usage.total_tokens, data.token_usage.max_tokens);
+        }
         
         // Remove thinking indicator
         if (thinkingMessage) {
@@ -255,6 +283,8 @@ window.addEventListener('load', async () => {
         document.getElementById('message-input').value = '';
         resetTextarea();
         
+        // Reset token usage display
+        updateTokenUsage(0, 200000);
     } catch (error) {
         console.error('Error resetting conversation:', error);
     }
