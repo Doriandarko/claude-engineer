@@ -39,6 +39,9 @@ code {
     overflow-y: auto;
     padding: 1rem;
     padding-bottom: 2rem;
+    max-width: 5xl;
+    margin: 0 auto;
+    width: 100%;
 }
 
 .input-container {
@@ -46,8 +49,8 @@ code {
     bottom: 0;
     background-color: white;
     border-top: 1px solid #e5e7eb;
-    padding: 1rem;
-    margin: 0 -1rem;
+    padding: 1rem 0;
+    width: 100%;
     box-shadow: 0 -4px 6px -1px rgb(0 0 0 / 0.05);
 }
 
@@ -89,11 +92,18 @@ code {
 
 /* Update the messages spacing */
 .message-wrapper {
-    margin-bottom: 1.5rem; /* Increased vertical spacing */
+    margin: 0 auto 1.5rem;
+    max-width: 5xl;
+    padding: 0 1rem;
 }
 
 .message-wrapper:last-child {
-    margin-bottom: 0;
+    margin-bottom: 2rem;
+}
+
+/* Special spacing for consecutive messages */
+.message-wrapper + .message-wrapper {
+    margin-top: 1.5rem;
 }
 
 /* Update the primary color to Tailwind black */
@@ -111,11 +121,22 @@ code {
     padding: 0.5rem 0.75rem;
     background-color: #f8fafc;
     border-radius: 0.5rem;
-    margin: 0.5rem 0;
+    margin: 1rem 0;
 }
 
 .tool-usage::before {
     content: '🔧';
     font-size: 1rem;
+}
+
+/* Add responsive container styles */
+@media (max-width: 640px) {
+    .input-container {
+        padding: 0.75rem 0;
+    }
+    
+    .messages-container {
+        padding: 0.75rem;
+    }
 }
   
