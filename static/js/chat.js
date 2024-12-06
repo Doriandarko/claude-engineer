@@ -107,7 +107,7 @@ function appendThinkingIndicator() {
     
     const thinkingDiv = document.createElement('div');
     thinkingDiv.className = 'thinking';
-    thinkingDiv.innerHTML = 'Thinking<span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span>';
+    thinkingDiv.innerHTML = '<div style="margin-top: 6px; margin-bottom: 4px;">Thinking<span class="thinking-dots"><span>.</span><span>.</span><span>.</span></span></div>';
     
     contentDiv.appendChild(thinkingDiv);
     messageDiv.appendChild(avatarDiv);
