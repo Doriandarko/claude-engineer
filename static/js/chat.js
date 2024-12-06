@@ -13,15 +13,15 @@ function appendMessage(content, isUser = false) {
     messageWrapper.className = 'message-wrapper';
     
     const messageDiv = document.createElement('div');
-    messageDiv.className = 'flex items-start space-x-4';
+    messageDiv.className = 'flex items-start space-x-4 space-y-1';
     
     // Avatar
     const avatarDiv = document.createElement('div');
     if (isUser) {
-        avatarDiv.className = 'w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold text-sm';
+        avatarDiv.className = 'w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold text-xs';
         avatarDiv.textContent = 'You';
     } else {
-        avatarDiv.className = 'w-8 h-8 rounded-full ai-avatar flex items-center justify-center text-white font-bold text-sm';
+        avatarDiv.className = 'w-8 h-8 rounded-full ai-avatar flex items-center justify-center text-white font-bold text-xs';
         avatarDiv.textContent = 'CE';
     }
     
