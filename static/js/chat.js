@@ -224,4 +224,38 @@ function resetTextarea() {
 
 document.getElementById('chat-form').addEventListener('reset', () => {
     resetTextarea();
+});
+
+// Add at the top of the file
+window.addEventListener('load', async () => {
+    try {
+        // Reset the conversation when page loads
+        const response = await fetch('/reset', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            console.error('Failed to reset conversation');
+        }
+        
+        // Clear any existing messages except the first one
+        const messagesDiv = document.getElementById('chat-messages');
+        const messages = messagesDiv.getElementsByClassName('message-wrapper');
+        while (messages.length > 1) {
+            messages[1].remove();
+        }
+        
+        // Reset any other state
+        currentImageData = null;
+        document.getElementById('image-preview')?.classList.add('hidden');
+        document.getElementById('file-input').value = '';
+        document.getElementById('message-input').value = '';
+        resetTextarea();
+        
+    } catch (error) {
+        console.error('Error resetting conversation:', error);
+    }
 }); 

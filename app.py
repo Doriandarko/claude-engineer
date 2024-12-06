@@ -74,5 +74,11 @@ def upload_file():
     
     return jsonify({'error': 'Invalid file type'}), 400
 
+@app.route('/reset', methods=['POST'])
+def reset():
+    # Reset the assistant's conversation history
+    assistant.reset()
+    return jsonify({'status': 'success'})
+
 if __name__ == '__main__':
     app.run(debug=True) 
