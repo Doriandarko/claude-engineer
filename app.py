@@ -34,14 +34,17 @@ def chat():
                 "source": {
                     "type": "base64",
                     "media_type": "image/jpeg",  # We should detect this from the image
-                    "data": image_data
+                    "data": image_data.split(',')[1] if ',' in image_data else image_data  # Remove data URL prefix if present
                 }
-            },
-            {
-                "type": "text",
-                "text": message
             }
         ]
+        
+        # Only add text message if there is actual text
+        if message.strip():
+            message_content.append({
+                "type": "text",
+                "text": message
+            })
     else:
         # Text-only message
         message_content = message
@@ -64,8 +67,8 @@ def chat():
                     content = msg['content']
                     if isinstance(content, list):
                         for block in content:
-                            if hasattr(block, 'type') and block.type == 'tool_use':
-                                tool_name = block.name
+                            if isinstance(block, dict) and block.get('type') == 'tool_use':
+                                tool_name = block.get('name')
                                 break
                     if tool_name:
                         break
