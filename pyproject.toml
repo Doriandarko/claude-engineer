@@ -36,6 +36,7 @@ dependencies = [
     "markdownify>=0.14.1",
     "protego>=0.3.1",
     "readability-lxml>=0.8.1",
+    "e2b-code-interpreter>=1.0.3",
 ]
 
 [project.optional-dependencies]
