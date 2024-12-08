@@ -209,22 +209,26 @@ Claude Engineer v3 comes with a comprehensive set of pre-built tools:
 
 ### Core Tools
 - 🛠️ **Tool Creator** (`toolcreator`): Creates new tools based on natural language descriptions, enabling the framework's self-improvement capabilities.
-- 🤔 **Sequential Thinking** (`sequentialthinking`): Enables structured, step-by-step problem analysis with support for branching thoughts and revisions.
-
-### File System Tools
-- 📂 **Explorer** (`explorer`): Comprehensive file and directory management with operations like create, list, delete, move, and search.
-- 📝 **File Creator** (`filecreatortool`): Creates new files with specified content, supporting both text and binary files.
-- 📖 **File Content Reader** (`filecontentreadertool`): Reads content from multiple files simultaneously.
-- ✏️ **File Edit** (`fileedittool`): Advanced file editing with support for full content replacement and partial edits.
 
 ### Development Tools
 - 📦 **UV Package Manager** (`uvpackagemanager`): Interface to the UV package manager for Python dependency management, supporting package installation, removal, updates, and virtual environment management.
+- 🐍 **E2B Code Executor** (`e2bcodetool`): Securely executes Python code in a sandboxed environment powered by E2B. This tool enables Claude to write and run Python code directly, making it capable of data analysis, visualization, and complex computations. Requires an E2B API key available at [e2b.dev](https://e2b.dev/).
+- 🔍 **Linting Tool** (`lintingtool`): Runs the Ruff linter on Python files to detect and fix coding style or syntax issues, with support for automatic fixes and customizable rules.
+
+### File System Tools
+- 📂 **Create Folders Tool** (`createfolderstool`): Creates new directories and nested directory structures with proper error handling and path validation.
+- 📝 **File Creator** (`filecreatortool`): Creates new files with specified content, supporting both text and binary files.
+- 📖 **File Content Reader** (`filecontentreadertool`): Reads content from multiple files simultaneously, with smart filtering of binary and system files.
+- ✏️ **File Edit** (`fileedittool`): Advanced file editing with support for full content replacement and partial edits.
+- 🔄 **Diff Editor** (`diffeditortool`): Performs precise text replacements in files by matching exact substrings.
 
 ### Web Tools
-- 🔍 **DuckDuckGo** (`duckduckgotool`): Performs web 
-searches using DuckDuckGo.
-- 🌐 **Web Scraper** (`webscrapertool`): Extracts readable content from web pages while removing unnecessary elements.
+- 🔍 **DuckDuckGo** (`duckduckgotool`): Performs web searches using DuckDuckGo.
+- 🌐 **Web Scraper** (`webscrapertool`): Intelligently extracts readable content from web pages while removing unnecessary elements.
 - 🌍 **Browser** (`browsertool`): Opens URLs in the system's default web browser.
+
+### Utility Tools
+- 📸 **Screenshot Tool** (`screenshottool`): Captures screenshots of the entire screen or specific regions, returning base64-encoded images ready for Claude's vision capabilities.
 
 Each tool is designed to be:
 - Self-documenting with detailed descriptions
@@ -234,3 +238,14 @@ Each tool is designed to be:
 - Cross-platform compatible where applicable
 
 The tools are dynamically loaded and can be extended during runtime through the Tool Creator, allowing the assistant to continuously expand its capabilities based on user needs.
+
+## API Keys Required
+1. **Anthropic API Key**: Required for Claude 3.5 access
+2. **E2B API Key**: Required for Python code execution capabilities. Get your key at [e2b.dev](https://e2b.dev/)
+
+Add these to your `.env` file:
+
+```bash
+ANTHROPIC_API_KEY=your_anthropic_key
+E2B_API_KEY=your_e2b_key
+```
