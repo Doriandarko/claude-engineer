@@ -8,10 +8,62 @@ class FileCreatorTool(BaseTool):
     name = "filecreatortool"
     description = '''
     Creates new files with specified content.
-    Accepts single file specification or list of files.
-    Each file spec must include path and content.
-    Creates parent directories as needed.
-    Supports both text and binary content.
+    
+    IMPORTANT: The input must follow this exact structure:
+    1. For a single file:
+       {
+           "files": {
+               "path": "path/to/file.txt",
+               "content": "file content here"
+           }
+       }
+    
+    2. For multiple files:
+       {
+           "files": [
+               {
+                   "path": "path/to/file1.txt",
+                   "content": "content for file 1"
+               },
+               {
+                   "path": "path/to/file2.txt",
+                   "content": "content for file 2"
+               }
+           ]
+       }
+    
+    Features:
+    - Creates parent directories automatically if they don't exist
+    - Supports both text and binary content
+    - Can create multiple files in one call
+    - Handles JSON content automatically
+    
+    Optional parameters:
+    - binary: boolean (default: false) - Set to true for binary files
+    - encoding: string (default: "utf-8") - Specify file encoding
+    
+    Example usage:
+    1. Create a Python file:
+       {
+           "files": {
+               "path": "test.py",
+               "content": "def hello():\\n    print('Hello, World!')"
+           }
+       }
+    
+    2. Create multiple files:
+       {
+           "files": [
+               {
+                   "path": "src/main.py",
+                   "content": "# Main file content"
+               },
+               {
+                   "path": "src/utils.py",
+                   "content": "# Utils file content"
+               }
+           ]
+       }
     '''
     input_schema = {
         "type": "object",
@@ -48,6 +100,16 @@ class FileCreatorTool(BaseTool):
     }
 
     def execute(self, **kwargs) -> str:
+        """
+        Execute the file creation process.
+        
+        Args:
+            **kwargs: Must contain 'files' key with either a dict or list of dicts
+                     Each dict must have 'path' and 'content' keys
+        
+        Returns:
+            str: JSON string containing results of file creation operations
+        """
         files = kwargs.get('files', [])
         if isinstance(files, dict):
             files = [files]
