@@ -262,7 +262,6 @@ class Assistant:
         """
         Given a tool usage request (with tool name and inputs),
         dynamically load and execute the corresponding tool.
-        Returns both the tool result and any error message.
         """
         tool_name = tool_use.name
         tool_input = tool_use.input or {}
@@ -273,23 +272,24 @@ class Assistant:
             tool_instance = self._find_tool_instance_in_module(module, tool_name)
 
             if not tool_instance:
-                result, error = None, f"Tool not found: {tool_name}"
+                tool_result = f"Tool not found: {tool_name}"
             else:
+                # Execute the tool with the provided input
                 try:
                     result = tool_instance.execute(**tool_input)
-                    error = None
+                    # Keep structured data intact
+                    tool_result = result
                 except Exception as exec_err:
-                    result, error = None, f"Error executing tool '{tool_name}': {str(exec_err)}"
+                    tool_result = f"Error executing tool '{tool_name}': {str(exec_err)}"
         except ImportError:
-            result, error = None, f"Failed to import tool: {tool_name}"
+            tool_result = f"Failed to import tool: {tool_name}"
         except Exception as e:
-            result, error = None, f"Error executing tool: {str(e)}"
+            tool_result = f"Error executing tool: {str(e)}"
 
-        # Display tool usage for monitoring (but don't store in conversation)
+        # Display tool usage with proper handling of structured data
         self._display_tool_usage(tool_name, tool_input, 
-            json.dumps(result) if not isinstance(result, str) else result)
-
-        return result, error
+            json.dumps(tool_result) if not isinstance(tool_result, str) else tool_result)
+        return tool_result
 
     def _find_tool_instance_in_module(self, module, tool_name: str):
         """
@@ -360,40 +360,39 @@ class Assistant:
             if response.stop_reason == "tool_use":
                 self.console.print("\n[bold yellow]  Handling Tool Use...[/bold yellow]\n")
 
+                tool_results = []
                 if getattr(response, 'content', None) and isinstance(response.content, list):
-                    # First, store the assistant's tool use request
+                    # Execute each tool in the response content
+                    for content_block in response.content:
+                        if content_block.type == "tool_use":
+                            result = self._execute_tool(content_block)
+                            
+                            # Handle structured data (like image blocks) vs text
+                            if isinstance(result, (list, dict)):
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": content_block.id,
+                                    "content": result  # Keep structured data intact
+                                })
+                            else:
+                                # Convert text results to proper content blocks
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": content_block.id,
+                                    "content": [{"type": "text", "text": str(result)}]
+                                })
+
+                    # Append tool usage to conversation and continue
                     self.conversation_history.append({
                         "role": "assistant",
                         "content": response.content
                     })
-
-                    # Store tool results and errors
-                    tool_results = []
-                    
-                    for content_block in response.content:
-                        if content_block.type == "tool_use":
-                            result, error = self._execute_tool(content_block)
-                            if error:
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": content_block.id,
-                                    "content": [{"type": "text", "text": error}]
-                                })
-                            else:
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": content_block.id,
-                                    "content": result if isinstance(result, list) else [{"type": "text", "text": str(result)}]
-                                })
-
-                    # Add tool results to conversation history as a user message
                     self.conversation_history.append({
                         "role": "user",
                         "content": tool_results
                     })
+                    return self._get_completion()  # Recursive call to continue the conversation
 
-                    # Make another request to get the final response
-                    return self._get_completion()
                 else:
                     self.console.print("[red]No tool content received despite 'tool_use' stop reason.[/red]")
                     return "Error: No tool content received"
