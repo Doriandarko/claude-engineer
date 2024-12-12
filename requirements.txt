@@ -1,5 +1,5 @@
 flask==3.0.0
-anthropic>=0.18.1
+anthropic>=0.7.0
 beautifulsoup4>=4.12.3
 markdownify>=0.14.1
 pillow>=10.2.0
@@ -8,8 +8,9 @@ pyautogui>=0.9.54
 python-dotenv>=1.0.1
 readability-lxml>=0.8.1
 requests>=2.31.0
-rich>=13.7.0
+rich>=10.0.0
 validators>=0.22.0
 werkzeug>=3.0.1
-prompt-toolkit>=3.0.43
+prompt-toolkit>=3.0.0
 matplotlib>=3.9.2
+nest-asyncio>=1.5.0

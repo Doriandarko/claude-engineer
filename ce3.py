@@ -5,7 +5,7 @@ from rich.markdown import Markdown
 from rich.live import Live
 from rich.spinner import Spinner
 from rich.panel import Panel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import importlib
 import inspect
 import pkgutil
@@ -13,12 +13,17 @@ import os
 import json
 import sys
 import logging
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import threading
+import nest_asyncio
 
 from config import Config
 from tools.base import BaseTool
 from prompt_toolkit import prompt
 from prompt_toolkit.styles import Style
 from prompts.system_prompts import SystemPrompts
+from tools.conversation_summarizer import ConversationSummarizer
 
 # Configure logging to only show ERROR level and above
 logging.basicConfig(
@@ -51,6 +56,20 @@ class Assistant:
         self.total_tokens_used = 0
 
         self.tools = self._load_tools()
+        self.summarizer = ConversationSummarizer()
+        self.summary = None
+        self.last_summary_tokens = 0
+        self.SUMMARY_THRESHOLD = 10000  # Trigger summarization at 50k tokens
+
+        self.executor = ThreadPoolExecutor(max_workers=2)
+        self.summarization_lock = threading.Lock()
+        self.is_summarizing = False
+
+        nest_asyncio.apply()  # Allow nested event loops
+        self.loop = asyncio.get_event_loop()
+        if not self.loop.is_running():
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
 
     def _execute_uv_install(self, package_name: str) -> bool:
         """
@@ -415,49 +434,99 @@ class Assistant:
             logging.error(f"Error in _get_completion: {str(e)}")
             return f"Error: {str(e)}"
 
-    def chat(self, user_input):
+    async def _background_summarize(self):
         """
-        Process a chat message from the user.
-        user_input can be either a string (text-only) or a list (multimodal message)
+        Asynchronously summarizes the conversation in the background
+        without blocking the main conversation flow.
         """
-        # Handle special commands only for text-only messages
-        if isinstance(user_input, str):
-            if user_input.lower() == 'refresh':
-                self.refresh_tools()
-                return "Tools refreshed successfully!"
-            elif user_input.lower() == 'reset':
-                self.reset()
-                return "Conversation reset!"
-            elif user_input.lower() == 'quit':
-                return "Goodbye!"
-
         try:
+            if self.is_summarizing:
+                return
+                
+            with self.summarization_lock:
+                self.is_summarizing = True
+                
+            # Save current context to temp file
+            context_file = self.summarizer.save_context_to_temp(self.conversation_history)
+            
+            # Generate summary asynchronously
+            new_summary = await self.summarizer.summarize_async(self.conversation_history)
+            
+            # Update conversation history with summary
+            with self.summarization_lock:
+                self.conversation_history = [{
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Previous conversation summary:\n\n{new_summary}\n\nLet's continue our discussion with this context in mind."
+                        }
+                    ]
+                }]
+                
+                self.last_summary_tokens = self.total_tokens_used
+                self.summary = new_summary
+                
+            self.console.print("[green]Conversation summarized in background[/green]")
+            
+        except Exception as e:
+            self.console.print(f"[red]Error in background summarization: {str(e)}[/red]")
+        finally:
+            self.is_summarizing = False
+            
+    def _check_and_trigger_summarize(self):
+        """
+        Checks if summarization is needed and triggers it in the background
+        if the token threshold is reached.
+        """
+        if (self.total_tokens_used - self.last_summary_tokens) >= self.SUMMARY_THRESHOLD:
+            self.loop.create_task(self._background_summarize())
+            
+    def chat(self, user_input):
+        """Update the chat method to include background summarization"""
+        try:
+            # Handle special commands
+            if isinstance(user_input, str):
+                if user_input.lower() == 'refresh':
+                    self.refresh_tools()
+                    return "Tools refreshed successfully!"
+                elif user_input.lower() == 'reset':
+                    self.reset()
+                    return "Conversation reset!"
+                elif user_input.lower() == 'quit':
+                    self.summarizer.cleanup_temp_files()
+                    return "Goodbye!"
+
             # Add user message to conversation history
             self.conversation_history.append({
                 "role": "user",
-                "content": user_input  # This can be either string or list
+                "content": user_input
             })
-
-            # Show thinking indicator if enabled
+            
+            # Trigger background summarization if needed
+            self._check_and_trigger_summarize()
+            
+            # Get completion while summarization might be running in background
             if self.thinking_enabled:
                 with Live(Spinner('dots', text='Thinking...', style="cyan"), 
                          refresh_per_second=10, transient=True):
                     response = self._get_completion()
             else:
                 response = self._get_completion()
-
+                
             return response
-
+            
         except Exception as e:
             logging.error(f"Error in chat: {str(e)}")
             return f"Error: {str(e)}"
 
     def reset(self):
-        """
-        Reset the assistant's memory and token usage.
-        """
+        """Update reset to clean up temp files"""
         self.conversation_history = []
         self.total_tokens_used = 0
+        self.last_summary_tokens = 0
+        self.summary = None
+        self.summarizer.cleanup_temp_files()
         self.console.print("\n[bold green]🔄 Assistant memory has been reset![/bold green]")
 
         welcome_text = """
