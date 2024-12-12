@@ -71,6 +71,8 @@ A sleek, modern web UI with features like:
 - Tool usage indicators
 - Clean, minimal interface
 
+![Claude Engineer v3 Web Interface](ui.png)
+
 To run the web interface:
 ```bash
 # Using uv (recommended)
