@@ -6,3 +6,4 @@ uploads/
 __pycache__/
 .ruff_cache/
 .pytest_cache/
+.vscode/PythonImportHelper-v2-Completion.json

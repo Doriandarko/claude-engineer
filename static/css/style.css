@@ -13,6 +13,14 @@
     background: #94a3b8;
 }
 
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-thumb {
+    background: #4b5563;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+}
+
 /* Code block styling */
 pre {
     background: #f8fafc;
@@ -47,11 +55,13 @@ code {
 .input-container {
     position: sticky;
     bottom: 0;
-    background-color: white;
-    border-top: 1px solid #e5e7eb;
     padding: 1rem 0;
     width: 100%;
     box-shadow: 0 -4px 6px -1px rgb(0 0 0 / 0.05);
+}
+
+.dark .input-container {
+    box-shadow: 0 -4px 6px -1px rgb(0 0 0 / 0.3);
 }
 
 @keyframes pulse {
@@ -133,7 +143,7 @@ code {
     .input-container {
         padding: 0.75rem 0;
     }
-    
+
     .messages-container {
         padding: 0.75rem;
     }
@@ -143,9 +153,7 @@ code {
 .token-usage-container {
     position: sticky;
     bottom: 80px;
-    background-color: white;
     padding: 0.5rem 0;
-    border-top: 1px solid #e5e7eb;
     z-index: 10;
 }
 
@@ -183,14 +191,12 @@ code {
 
 /* Add these styles to your existing CSS */
 .message-wrapper .prose p {
-    color: #18181B;
     font-size: 14px;
     line-height: 1.5;
 }
 
 /* For user messages */
 .message-wrapper .prose {
-    color: #18181B;
     font-size: 14px;
     line-height: 1.5;
 }
@@ -202,4 +208,8 @@ code {
     border-radius: 4px;
     font-family: monospace;
 }
-  
+
+.dark .command-code {
+    background-color: #1e2a23;
+    color: #34d399;
+}

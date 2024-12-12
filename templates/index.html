@@ -1,13 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="{{ theme }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Claude Engineer v3</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            bg: '#1a1a1a',
+                            surface: '#2d2d2d',
+                            text: '#e5e5e5'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
     <script src="https://unpkg.com/marked@4.0.0/marked.min.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github-dark.min.css" id="hljs-dark-theme" disabled>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
     <script>
         // Configure marked to use highlight.js
@@ -20,42 +37,79 @@
             }
         });
     </script>
+    <style>
+        /* Dark mode styles */
+        /* Dark mode styles */
+        .dark {
+            color-scheme: dark;
+        }
+
+        .dark .prose {
+            --tw-prose-body: theme('colors.dark.text');
+            --tw-prose-headings: theme('colors.dark.text');
+            --tw-prose-links: theme('colors.blue.400');
+            --tw-prose-code: theme('colors.dark.text');
+            --tw-prose-pre-code: theme('colors.dark.text');
+            --tw-prose-pre-bg: theme('colors.dark.surface');
+        }
+
+        .dark .message-wrapper {
+            background-color: theme('colors.dark.surface');
+            border-color: theme('colors.gray.700');
+        }
+
+        .dark .input-container {
+            background-color: theme('colors.dark.bg');
+        }
+    </style>
 </head>
-<body class="bg-white">
+<body class="{{ theme_classes.bg }} transition-colors duration-200">
+    <!-- Theme toggle button -->
+    <div class="fixed top-4 right-4 z-50">
+        <button id="theme-toggle" class="p-2 rounded-lg {{ theme_classes.surface }} {{ theme_classes.border }} {{ theme_classes.shadow }}" data-theme-surface data-theme-border>
+            <!-- Sun icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden dark:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+            <!-- Moon icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 block dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+        </button>
+    </div>
+
     <div class="chat-container">
         <!-- Messages area -->
-        <div class=" max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 messages-container" id="chat-messages">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 messages-container" id="chat-messages">
             <!-- Initial message -->
-            <div class="message-wrapper initial-message">
+            <div class="message-wrapper initial-message {{ theme_classes.surface }} {{ theme_classes.text }} {{ theme_classes.border }} {{ theme_classes.shadow }} border rounded-lg shadow-md p-4 mb-4" data-theme-surface data-theme-text data-theme-border>
                 <div class="flex items-start space-x-4 space-y-1">
                     <div class="w-8 h-8 rounded-full ai-avatar flex items-center justify-center text-white font-bold text-xs">
                         CE
                     </div>
                     <div class="flex-1">
-                        <div class="prose prose-slate max-w-none">
+                    <div class="prose prose-slate dark:prose-invert max-w-none {{ theme_classes.text }}" data-theme-text>
                             <p>Welcome to Claude Engineer v3! I'm here to help with programming and development tasks. I can create custom tools on demand to help with any task you need - just ask!</p>
-                            
+
                             <p>Available commands:</p>
                             <p>
-                                <span class="command-code">refresh</span> - Reload available tools<br>
-                                <span class="command-code">reset</span> - Clear conversation history<br>
-                                <span class="command-code">quit</span> - Exit the conversation
+                                <span class="command-code {{ theme_classes.text }}" data-theme-text>refresh</span> - Reload available tools<br>
+                                <span class="command-code {{ theme_classes.text }}" data-theme-text>reset</span> - Clear conversation history<br>
+                                <span class="command-code {{ theme_classes.text }}" data-theme-text>quit</span> - Exit the conversation
                             </p>
-                            
-                            
-                            
+
                             <p>How can I assist you today?</p>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        
-        <!-- Add this right before the input-container div -->
-        <div class="token-usage-container">
+
+        <!-- Token usage container -->
+        <div class="token-usage-container {{ theme_classes.surface }}" data-theme-surface>
             <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex items-center space-x-4 text-sm text-gray-500">
-                    <div class="token-count">Total used: <span id="tokens-used">0</span> / <span id="max-tokens">200,000</span></div>
+                <div class="flex items-center space-x-4 text-sm {{ theme_classes.text }}" data-theme-text>
+                    <div class="token-count {{ theme_classes.text }}" data-theme-text>Total used: <span id="tokens-used">0</span> / <span id="max-tokens">200,000</span></div>
                     <div class="token-bar-container">
                         <div id="token-bar" class="token-bar" style="width: 0%"></div>
                     </div>
@@ -63,35 +117,36 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Fixed input area -->
-        <div class="input-container">
+        <div class="input-container {{ theme_classes.surface }} {{ theme_classes.border }} {{ theme_classes.shadow }} border-t shadow-lg" data-theme-surface data-theme-border>
             <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                 <form id="chat-form" class="relative">
                     <div id="image-preview" class="hidden mb-2">
                         <div class="relative inline-block">
-                            <img id="preview-img" class="max-h-32 rounded-lg border border-gray-200" src="" alt="Preview">
-                            <button type="button" id="remove-image" class="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm hover:bg-gray-100">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+                            <img id="preview-img" class="max-h-32 rounded-lg border border-gray-200 dark:border-dark-surface" src="" alt="Preview">
+                            <button type="button" id="remove-image" class="absolute -top-2 -right-2 bg-white dark:bg-dark-surface rounded-full p-1 shadow-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500 dark:text-gray-400" viewBox="0 0 20 20" fill="currentColor">
                                     <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                                 </svg>
                             </button>
                         </div>
                     </div>
-                    <div class="flex items-end space-x-2 bg-white rounded-xl border border-gray-200 p-3 mx-2">
-                        <button type="button" id="upload-btn" class="p-2 text-gray-400 hover:text-gray-600">
+                    <div class="flex items-end space-x-2 {{ theme_classes.surface }} {{ theme_classes.shadow }} rounded-xl border border-gray-200 dark:border-gray-600/50 p-3 mx-2 shadow-md" data-theme-surface>
+                        <button type="button" id="upload-btn" class="p-2 {{ theme_classes.button }}">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                         </button>
                         <input type="file" id="file-input" class="hidden" accept="image/*">
-                        <textarea id="message-input" 
-                            class="flex-1 border-0 bg-transparent p-2 focus:ring-0 focus:outline-none resize-none max-h-32 overflow-y-auto min-h-[2.5rem]"
+                        <textarea id="message-input"
+                            class="flex-1 border-0 bg-transparent p-2 focus:ring-0 focus:outline-none resize-none max-h-32 overflow-y-auto min-h-[2.5rem] {{ theme_classes.text }}"
+                            data-theme-text
                             rows="1"
                             placeholder="Type something... (⌘ + Enter to send)"
                             style="height: 40px; max-height: 200px;"
                         ></textarea>
-                        <button type="submit" class="p-2 text-gray-400 hover:text-gray-600">
+                        <button type="submit" class="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                 <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
                             </svg>
@@ -103,5 +158,99 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+    <script>
+        // Theme toggle functionality
+        const themeToggleButton = document.getElementById('theme-toggle');
+        const htmlElement = document.documentElement;
+        const hljsLightTheme = document.querySelector('link[href*="github.min.css"]');
+        const hljsDarkTheme = document.getElementById('hljs-dark-theme');
+
+        function setTheme(theme) {
+            // Save theme preference and update classes
+            fetch('/toggle-theme', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ theme: theme })
+            })
+            .then(response => response.json())
+            .then(data => {
+                try {
+                    // Update theme classes
+                    if (theme === 'dark') {
+                        htmlElement.classList.add('dark');
+                        hljsLightTheme.disabled = true;
+                        hljsDarkTheme.disabled = false;
+                    } else {
+                        htmlElement.classList.remove('dark');
+                        hljsLightTheme.disabled = false;
+                        hljsDarkTheme.disabled = true;
+                    }
+
+                    // Helper function to update classes with prefix matching
+                    function updateClassWithPrefix(el, prefix, newClass) {
+                        if (!newClass) return;
+                        const classes = el.className.split(' ');
+                        const index = classes.findIndex(c => c.startsWith(prefix));
+                        if (index !== -1) {
+                            classes[index] = newClass;
+                        } else {
+                            classes.push(newClass);
+                        }
+                        el.className = classes.join(' ');
+                    }
+
+                    // Update body classes
+                    document.body.className = data.theme_classes.bg + ' transition-colors duration-200';
+
+                    // Update themed elements
+                    document.querySelectorAll('[data-theme-surface]').forEach(el => {
+                        updateClassWithPrefix(el, 'bg-', data.theme_classes.surface);
+                    });
+
+                    document.querySelectorAll('[data-theme-text]').forEach(el => {
+                        updateClassWithPrefix(el, 'text-', data.theme_classes.text);
+                    });
+
+                    document.querySelectorAll('[data-theme-border]').forEach(el => {
+                        updateClassWithPrefix(el, 'border-', data.theme_classes.border);
+                    });
+
+                    // Update button classes
+                    document.querySelectorAll('button[data-theme-surface]').forEach(el => {
+                        updateClassWithPrefix(el, 'bg-', data.theme_classes.surface);
+                        updateClassWithPrefix(el, 'hover:bg-', `hover:${data.theme_classes.surface}`);
+                    });
+
+                    // Update command code classes
+                    document.querySelectorAll('.command-code').forEach(el => {
+                        updateClassWithPrefix(el, 'text-', data.theme_classes.text);
+                    });
+
+                    // Update prose classes
+                    document.querySelectorAll('.prose').forEach(el => {
+                        updateClassWithPrefix(el, 'text-', data.theme_classes.text);
+                    });
+
+                } catch (error) {
+                    console.error('Error updating theme:', error);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching theme:', error);
+            });
+        }
+
+        // Initialize theme from server-side rendered class
+        if (htmlElement.classList.contains('dark')) {
+            setTheme('dark');
+        }
+
+        themeToggleButton.addEventListener('click', () => {
+            const isDark = htmlElement.classList.contains('dark');
+            setTheme(isDark ? 'light' : 'dark');
+        });
+    </script>
 </body>
-</html> 
+</html>
