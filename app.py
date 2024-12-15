@@ -4,6 +4,7 @@ import os
 from werkzeug.utils import secure_filename
 import base64
 from config import Config
+import logging
 
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -81,6 +82,7 @@ def chat():
         })
         
     except Exception as e:
+        logging.error(f"Exception in chat route: {str(e)}")
         return jsonify({
             'response': f"Error: {str(e)}",
             'thinking': False,
@@ -90,35 +92,39 @@ def chat():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-    
-    if file and file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part'}), 400
         
-        # Get the actual media type
-        media_type = file.content_type or 'image/jpeg'  # Default to jpeg if not detected
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
         
-        # Convert image to base64
-        with open(filepath, "rb") as image_file:
-            encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+        if file and file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            
+            # Get the actual media type
+            media_type = file.content_type or 'image/jpeg'  # Default to jpeg if not detected
+            
+            # Convert image to base64
+            with open(filepath, "rb") as image_file:
+                encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+            
+            # Clean up the file
+            os.remove(filepath)
+            
+            return jsonify({
+                'success': True,
+                'image_data': encoded_string,
+                'media_type': media_type
+            })
         
-        # Clean up the file
-        os.remove(filepath)
-        
-        return jsonify({
-            'success': True,
-            'image_data': encoded_string,
-            'media_type': media_type
-        })
-    
-    return jsonify({'error': 'Invalid file type'}), 400
+        return jsonify({'error': 'Invalid file type'}), 400
+    except Exception as e:
+        logging.error(f"Exception in upload_file route: {str(e)}")
+        return jsonify({'error': f"Error: {str(e)}"}), 500
 
 @app.route('/reset', methods=['POST'])
 def reset():

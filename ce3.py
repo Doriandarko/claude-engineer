@@ -280,10 +280,12 @@ class Assistant:
                     # Keep structured data intact
                     tool_result = result
                 except Exception as exec_err:
+                    logging.error(f"Error executing tool '{tool_name}': {str(exec_err)}")  # P1877
                     tool_result = f"Error executing tool '{tool_name}': {str(exec_err)}"
         except ImportError:
             tool_result = f"Failed to import tool: {tool_name}"
         except Exception as e:
+            logging.error(f"Error executing tool: {str(e)}")  # P1877
             tool_result = f"Error executing tool: {str(e)}"
 
         # Display tool usage with proper handling of structured data
@@ -412,7 +414,7 @@ class Assistant:
                 return "No response content available."
 
         except Exception as e:
-            logging.error(f"Error in _get_completion: {str(e)}")
+            logging.error(f"Error in _get_completion: {str(e)}")  # P24a9
             return f"Error: {str(e)}"
 
     def chat(self, user_input):

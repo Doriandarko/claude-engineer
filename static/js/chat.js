@@ -75,9 +75,13 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
                 currentMediaType = data.media_type;
                 document.getElementById('preview-img').src = `data:${data.media_type};base64,${data.image_data}`;
                 document.getElementById('image-preview').classList.remove('hidden');
+            } else {
+                console.error('Error uploading image:', data.error); // Pae85
+                appendMessage(`Error: ${data.error}`); // Pae85
             }
         } catch (error) {
-            console.error('Error uploading image:', error);
+            console.error('Error uploading image:', error); // Pae85
+            appendMessage('Error: Failed to upload image'); // Pae85
         }
     }
 });
@@ -248,9 +252,9 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
         document.getElementById('file-input').value = '';
         
     } catch (error) {
-        console.error('Error sending message:', error);
+        console.error('Error sending message:', error); // P77c8
         document.querySelector('.thinking-message')?.remove();
-        appendMessage('Error: Failed to send message');
+        appendMessage('Error: Failed to send message'); // P77c8
     }
 });
 

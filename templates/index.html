@@ -42,7 +42,10 @@
                                 <span class="command-code">quit</span> - Exit the conversation
                             </p>
                             
-                            
+                            <p>In case of any errors, they will be displayed below:</p>
+                            <div id="error-message" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                                <span class="block sm:inline"></span>
+                            </div>
                             
                             <p>How can I assist you today?</p>
                         </div>
@@ -104,4 +107,4 @@
 
     <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 </body>
-</html> 
+</html>
