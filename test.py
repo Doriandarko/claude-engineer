@@ -1,5 +1,7 @@
 from typing import List
 import unittest
+from ce3 import Assistant
+from app import app
 
 def calculate_sum(numbers: List[float]) -> float:
     """
@@ -97,6 +99,30 @@ class TestCalculateMedian(unittest.TestCase):
     def test_negative_numbers(self):
         """Test with negative numbers."""
         self.assertEqual(calculate_median([-1, -2, -3]), -2)
+
+class TestAssistant(unittest.TestCase):
+    """Test cases for the Assistant class in ce3.py."""
+
+    def setUp(self):
+        self.assistant = Assistant()
+
+    def test_directory_path_handling(self):
+        """Test that directory paths are handled correctly."""
+        response = self.assistant.chat("/home/yoan")
+        self.assertNotIn("Error", response)
+
+class TestApp(unittest.TestCase):
+    """Test cases for the Flask app in app.py."""
+
+    def setUp(self):
+        self.app = app.test_client()
+        self.app.testing = True
+
+    def test_chat_with_directory_path(self):
+        """Test chat route with a directory path."""
+        response = self.app.post('/chat', json={'message': '/home/yoan'})
+        data = response.get_json()
+        self.assertNotIn("Error", data['response'])
 
 if __name__ == "__main__":
     main()

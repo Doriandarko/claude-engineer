@@ -25,6 +25,10 @@ def chat():
     message = data.get('message', '')
     image_data = data.get('image')  # Get the base64 image data
     
+    # Validate and sanitize directory paths in the message
+    if isinstance(message, str) and os.path.isdir(message):
+        message = os.path.abspath(message)
+    
     # Prepare the message content
     if image_data:
         # Create a message with both text and image in correct order
