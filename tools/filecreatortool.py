@@ -9,28 +9,19 @@ class FileCreatorTool(BaseTool):
     description = '''
     Creates new files with specified content.
     
-    IMPORTANT: The input must follow this exact structure:
-    1. For a single file:
-       {
-           "files": {
-               "path": "path/to/file.txt",
-               "content": "file content here"
-           }
-       }
-    
-    2. For multiple files:
-       {
-           "files": [
-               {
-                   "path": "path/to/file1.txt",
-                   "content": "content for file 1"
-               },
-               {
-                   "path": "path/to/file2.txt",
-                   "content": "content for file 2"
-               }
-           ]
-       }
+    The input must follow this structure:
+    {
+        "files": [
+            {
+                "path": "path/to/file1.txt",
+                "content": "content for file 1"
+            },
+            {
+                "path": "path/to/file2.txt",
+                "content": "content for file 2"
+            }
+        ]
+    }
     
     Features:
     - Creates parent directories automatically if they don't exist
@@ -43,57 +34,34 @@ class FileCreatorTool(BaseTool):
     - encoding: string (default: "utf-8") - Specify file encoding
     
     Example usage:
-    1. Create a Python file:
-       {
-           "files": {
-               "path": "test.py",
-               "content": "def hello():\\n    print('Hello, World!')"
-           }
-       }
-    
-    2. Create multiple files:
-       {
-           "files": [
-               {
-                   "path": "src/main.py",
-                   "content": "# Main file content"
-               },
-               {
-                   "path": "src/utils.py",
-                   "content": "# Utils file content"
-               }
-           ]
-       }
+    {
+        "files": [
+            {
+                "path": "src/main.py",
+                "content": "def hello():\n    print('Hello, World!')"
+            },
+            {
+                "path": "src/utils.py",
+                "content": "# Utility functions"
+            }
+        ]
+    }
     '''
     input_schema = {
         "type": "object",
         "properties": {
             "files": {
-                "oneOf": [
-                    {
-                        "type": "object",
-                        "properties": {
-                            "path": {"type": "string"},
-                            "content": {"oneOf": [{"type": "string"}, {"type": "object"}]},
-                            "binary": {"type": "boolean", "default": False},
-                            "encoding": {"type": "string", "default": "utf-8"}
-                        },
-                        "required": ["path", "content"]
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"oneOf": [{"type": "string"}, {"type": "object"}]},
+                        "binary": {"type": "boolean", "default": False},
+                        "encoding": {"type": "string", "default": "utf-8"}
                     },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "path": {"type": "string"},
-                                "content": {"oneOf": [{"type": "string"}, {"type": "object"}]},
-                                "binary": {"type": "boolean", "default": False},
-                                "encoding": {"type": "string", "default": "utf-8"}
-                            },
-                            "required": ["path", "content"]
-                        }
-                    }
-                ]
+                    "required": ["path", "content"]
+                }
             }
         },
         "required": ["files"]
@@ -104,7 +72,7 @@ class FileCreatorTool(BaseTool):
         Execute the file creation process.
         
         Args:
-            **kwargs: Must contain 'files' key with either a dict or list of dicts
+            **kwargs: Must contain 'files' key with a list of dicts
                      Each dict must have 'path' and 'content' keys
         
         Returns:
