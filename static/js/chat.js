@@ -8,6 +8,40 @@ textarea.addEventListener('input', function() {
     this.style.height = (this.scrollHeight) + 'px';
 });
 
+// Handle pasted images
+document.addEventListener('paste', async (e) => {
+    const items = e.clipboardData?.items;
+    
+    if (!items) return;
+    
+    for (const item of items) {
+        if (item.type.startsWith('image/')) {
+            e.preventDefault();
+            
+            const file = item.getAsFile();
+            if (!file) continue;
+            
+            try {
+                // Convert the file to base64
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const base64Data = e.target.result.split(',')[1];
+                    currentImageData = base64Data;
+                    currentMediaType = file.type;
+                    
+                    // Update preview
+                    document.getElementById('preview-img').src = `data:${file.type};base64,${base64Data}`;
+                    document.getElementById('image-preview').classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            } catch (error) {
+                console.error('Error processing pasted image:', error);
+            }
+            break;
+        }
+    }
+});
+
 function appendMessage(content, isUser = false) {
     const messagesDiv = document.getElementById('chat-messages');
     const messageWrapper = document.createElement('div');
@@ -83,10 +117,15 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
 });
 
 document.getElementById('remove-image').addEventListener('click', () => {
+    removeImage();
+});
+
+function removeImage() {
     currentImageData = null;
+    currentMediaType = null;
     document.getElementById('image-preview').classList.add('hidden');
     document.getElementById('file-input').value = '';
-});
+}
 
 function appendThinkingIndicator() {
     const messagesDiv = document.getElementById('chat-messages');
@@ -194,9 +233,12 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
     if (currentImageData) {
         // Optionally show the image in the chat
         const imagePreview = document.createElement('img');
-        imagePreview.src = `data:image/jpeg;base64,${currentImageData}`;
+        imagePreview.src = `data:${currentMediaType || 'image/jpeg'};base64,${currentImageData}`;
         imagePreview.className = 'max-h-48 rounded-lg mt-2';
         document.querySelector('.message-wrapper:last-child .prose').appendChild(imagePreview);
+
+        // remove image after sending
+        removeImage();
     }
     
     // Clear input and reset height
@@ -214,7 +256,8 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
             },
             body: JSON.stringify({
                 message: message,
-                image: currentImageData  // This will be null if no image is selected
+                image: currentImageData,  // This will be null if no image is selected,
+                media_type: currentMediaType
             })
         });
         
@@ -297,4 +340,4 @@ window.addEventListener('load', async () => {
     } catch (error) {
         console.error('Error resetting conversation:', error);
     }
-}); 
+});

@@ -24,16 +24,18 @@ def chat():
     data = request.json
     message = data.get('message', '')
     image_data = data.get('image')  # Get the base64 image data
+    media_type = data.get('media_type')  # Get the media type of the image
     
     # Prepare the message content
     if image_data:
         # Create a message with both text and image in correct order
+        
         message_content = [
             {
                 "type": "image",
                 "source": {
                     "type": "base64",
-                    "media_type": "image/jpeg",  # We should detect this from the image
+                    "media_type": media_type, 
                     "data": image_data.split(',')[1] if ',' in image_data else image_data  # Remove data URL prefix if present
                 }
             }
