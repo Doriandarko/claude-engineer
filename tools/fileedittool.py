@@ -32,27 +32,29 @@ class FileEditTool(BaseTool):
         new_content = kwargs.get('new_content')
         
         try:
-            if not os.path.exists(file_path):
-                raise FileNotFoundError(f"File not found: {file_path}")
-
-            with open(file_path, 'r', encoding='utf-8') as file:
-                original_content = file.read()
-                lines = original_content.splitlines()
-
+            # ← Removed existence check here
             if edit_type == "full":
                 updated_content = new_content
             else:
-                start_line = kwargs.get('start_line')
-                end_line = kwargs.get('end_line')
-                search_pattern = kwargs.get('search_pattern')
-                replacement_text = kwargs.get('replacement_text')
+                # Only read if file exists and doing partial edits
+                if os.path.exists(file_path):  # ← Moved existence check here
+                    with open(file_path, 'r', encoding='utf-8') as file:
+                        original_content = file.read()
+                        lines = original_content.splitlines()
 
-                if start_line is not None and end_line is not None:
-                    updated_content = self._edit_by_lines(lines, start_line, end_line, new_content)
-                elif search_pattern and replacement_text:
-                    updated_content = self._find_and_replace(original_content, search_pattern, replacement_text)
+                    start_line = kwargs.get('start_line')
+                    end_line = kwargs.get('end_line')
+                    search_pattern = kwargs.get('search_pattern')
+                    replacement_text = kwargs.get('replacement_text')
+
+                    if start_line is not None and end_line is not None:
+                        updated_content = self._edit_by_lines(lines, start_line, end_line, new_content)
+                    elif search_pattern and replacement_text:
+                        updated_content = self._find_and_replace(original_content, search_pattern, replacement_text)
+                    else:
+                        raise ValueError("Invalid partial edit parameters")
                 else:
-                    raise ValueError("Invalid partial edit parameters")
+                    raise ValueError("File must exist for partial edits")  # ← New error message
 
             with open(file_path, 'w', encoding='utf-8') as file:
                 file.write(updated_content)
