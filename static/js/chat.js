@@ -218,6 +218,10 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
             })
         });
         
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
         
         // Remove thinking indicator
@@ -254,9 +258,18 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
         document.getElementById('file-input').value = '';
         
     } catch (error) {
-        console.error('Error sending message:', error);
-        document.querySelector('.thinking-message')?.remove();
-        appendMessage('Error: Failed to send message');
+        console.error('Error:', error);
+        
+        let errorMessage = 'Failed to send message. ';
+        if (error.name === 'TypeError' && error.message.includes('NetworkError')) {
+            errorMessage += 'The connection was interrupted. Please try again.';
+        } else if (error.name === 'AbortError' || error.message.includes('aborted')) {
+            errorMessage += 'The request was aborted. Please try again.';
+        } else {
+            errorMessage += 'Please check if the server is running and try again.';
+        }
+        
+        appendErrorMessage(errorMessage);
     }
 });
 
