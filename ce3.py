@@ -19,6 +19,7 @@ from tools.base import BaseTool
 from prompt_toolkit import prompt
 from prompt_toolkit.styles import Style
 from prompts.system_prompts import SystemPrompts
+from openrouter_client import OpenRouterClient
 
 # Configure logging to only show ERROR level and above
 logging.basicConfig(
@@ -30,18 +31,26 @@ class Assistant:
     """
     The Assistant class manages:
     - Loading of tools from a specified directory.
-    - Interaction with the Anthropics API (message completion).
+    - Interaction with the Anthropics API or OpenRouter API.
     - Handling user commands such as 'refresh' and 'reset'.
     - Token usage tracking and display.
     - Tool execution upon request from model responses.
     """
 
     def __init__(self):
-        if not getattr(Config, 'ANTHROPIC_API_KEY', None):
-            raise ValueError("No ANTHROPIC_API_KEY found in environment variables")
-
-        # Initialize Anthropics client
-        self.client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+        if Config.USE_OPENROUTER:
+            if not getattr(Config, 'OPENROUTER_API_KEY', None):
+                raise ValueError("No OPENROUTER_API_KEY found in environment variables")
+            self.client = OpenRouterClient(
+                api_key=Config.OPENROUTER_API_KEY,
+                base_url=Config.OPENROUTER_BASE_URL,
+                app_name=Config.APP_NAME,
+                app_url=Config.APP_URL
+            )
+        else:
+            if not getattr(Config, 'ANTHROPIC_API_KEY', None):
+                raise ValueError("No ANTHROPIC_API_KEY found in environment variables")
+            self.client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
 
         self.conversation_history: List[Dict[str, Any]] = []
         self.console = Console()
@@ -330,90 +339,25 @@ class Assistant:
         self.console.print("---")
 
     def _get_completion(self):
-        """
-        Get a completion from the Anthropic API.
-        Handles both text-only and multimodal messages.
-        """
+        """Get completion from the model."""
         try:
-            response = self.client.messages.create(
+            tools = self._load_tools()
+            response = self.client.messages().create(
                 model=Config.MODEL,
-                max_tokens=min(
-                    Config.MAX_TOKENS,
-                    Config.MAX_CONVERSATION_TOKENS - self.total_tokens_used
-                ),
-                temperature=self.temperature,
-                tools=self.tools,
                 messages=self.conversation_history,
-                system=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
+                temperature=self.temperature,
+                max_tokens=Config.MAX_TOKENS,
+                stream=True,
+                tools=tools
             )
-
-            # Update token usage based on response usage
-            if hasattr(response, 'usage') and response.usage:
-                message_tokens = response.usage.input_tokens + response.usage.output_tokens
-                self.total_tokens_used += message_tokens
-                self._display_token_usage(response.usage)
-
-            if self.total_tokens_used >= Config.MAX_CONVERSATION_TOKENS:
-                self.console.print("\n[bold red]Token limit reached! Please reset the conversation.[/bold red]")
-                return "Token limit reached! Please type 'reset' to start a new conversation."
-
-            if response.stop_reason == "tool_use":
-                self.console.print("\n[bold yellow]  Handling Tool Use...[/bold yellow]\n")
-
-                tool_results = []
-                if getattr(response, 'content', None) and isinstance(response.content, list):
-                    # Execute each tool in the response content
-                    for content_block in response.content:
-                        if content_block.type == "tool_use":
-                            result = self._execute_tool(content_block)
-                            
-                            # Handle structured data (like image blocks) vs text
-                            if isinstance(result, (list, dict)):
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": content_block.id,
-                                    "content": result  # Keep structured data intact
-                                })
-                            else:
-                                # Convert text results to proper content blocks
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": content_block.id,
-                                    "content": [{"type": "text", "text": str(result)}]
-                                })
-
-                    # Append tool usage to conversation and continue
-                    self.conversation_history.append({
-                        "role": "assistant",
-                        "content": response.content
-                    })
-                    self.conversation_history.append({
-                        "role": "user",
-                        "content": tool_results
-                    })
-                    return self._get_completion()  # Recursive call to continue the conversation
-
-                else:
-                    self.console.print("[red]No tool content received despite 'tool_use' stop reason.[/red]")
-                    return "Error: No tool content received"
-
-            # Final assistant response
-            if (getattr(response, 'content', None) and 
-                isinstance(response.content, list) and 
-                response.content):
-                final_content = response.content[0].text
-                self.conversation_history.append({
-                    "role": "assistant",
-                    "content": response.content
-                })
-                return final_content
-            else:
-                self.console.print("[red]No content in final response.[/red]")
-                return "No response content available."
-
+            return response
         except Exception as e:
-            logging.error(f"Error in _get_completion: {str(e)}")
-            return f"Error: {str(e)}"
+            error_message = str(e)
+            if "Missing dependency" in error_message:
+                package = self._parse_missing_dependency(error_message)
+                if package and self._execute_uv_install(package):
+                    return self._get_completion()
+            raise e
 
     def chat(self, user_input):
         """

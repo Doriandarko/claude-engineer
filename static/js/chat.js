@@ -214,32 +214,80 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
             },
             body: JSON.stringify({
                 message: message,
-                image: currentImageData  // This will be null if no image is selected
+                image: currentImageData
             })
         });
         
-        const data = await response.json();
-        
-        // Update token usage if provided in response
-        if (data.token_usage) {
-            updateTokenUsage(data.token_usage.total_tokens, data.token_usage.max_tokens);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        // Create a text decoder for the stream
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let messageText = '';
+
+        while (true) {
+            const {value, done} = await reader.read();
+            if (done) break;
+            
+            // Decode the chunk and add it to our buffer
+            buffer += decoder.decode(value, {stream: true});
+            
+            // Process any complete JSON objects in the buffer
+            let newlineIndex;
+            while ((newlineIndex = buffer.indexOf('\n')) >= 0) {
+                const line = buffer.slice(0, newlineIndex);
+                buffer = buffer.slice(newlineIndex + 1);
+                
+                if (line.trim()) {
+                    try {
+                        const data = JSON.parse(line);
+                        
+                        // Remove thinking indicator if present
+                        if (thinkingMessage) {
+                            thinkingMessage.remove();
+                        }
+                        
+                        // Handle error responses
+                        if (data.response && typeof data.response === 'string' && data.response.startsWith('Error:')) {
+                            appendErrorMessage(data.response);
+                            return;
+                        }
+                        
+                        // Update token usage if available
+                        if (data.token_usage) {
+                            updateTokenUsage(data.token_usage.total_tokens, data.token_usage.max_tokens);
+                        }
+                        
+                        // Show tool usage if present
+                        if (data.tool_name) {
+                            appendToolUsage(data.tool_name);
+                        }
+                        
+                        // Process the response content
+                        if (data.response) {
+                            if (Array.isArray(data.response)) {
+                                data.response.forEach(item => {
+                                    if (item.type === 'text') {
+                                        messageText += item.text;
+                                    }
+                                });
+                            } else if (typeof data.response === 'string') {
+                                messageText = data.response;
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Error parsing JSON:', e);
+                    }
+                }
+            }
         }
         
-        // Remove thinking indicator
-        if (thinkingMessage) {
-            thinkingMessage.remove();
-        }
-        
-        // Show tool usage if present
-        if (data.tool_name) {
-            appendToolUsage(data.tool_name);
-        }
-        
-        // Show response if we have one
-        if (data && data.response) {
-            appendMessage(data.response);
-        } else {
-            appendMessage('Error: No response received');
+        // Append the final message if we have one
+        if (messageText) {
+            appendMessage(messageText);
         }
         
         // Clear image after sending
@@ -248,9 +296,18 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
         document.getElementById('file-input').value = '';
         
     } catch (error) {
-        console.error('Error sending message:', error);
-        document.querySelector('.thinking-message')?.remove();
-        appendMessage('Error: Failed to send message');
+        console.error('Error:', error);
+        
+        let errorMessage = 'Failed to send message. ';
+        if (error.name === 'TypeError' && error.message.includes('NetworkError')) {
+            errorMessage += 'The connection was interrupted. Please try again.';
+        } else if (error.name === 'AbortError' || error.message.includes('aborted')) {
+            errorMessage += 'The request was aborted. Please try again.';
+        } else {
+            errorMessage += 'Please check if the server is running and try again.';
+        }
+        
+        appendErrorMessage(errorMessage);
     }
 });
 
