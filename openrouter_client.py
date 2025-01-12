@@ -57,9 +57,24 @@ class Messages:
                 })
             else:
                 # Handle regular messages
+                content = msg.get('content', '')
+                if isinstance(content, list):
+                    # Handle structured content (text + images)
+                    formatted_content = []
+                    for item in content:
+                        if item.get('type') == 'text':
+                            formatted_content.append(item.get('text', ''))
+                        elif item.get('type') == 'image':
+                            formatted_content.append({
+                                'type': 'image_url',
+                                'image_url': {
+                                    'url': f"data:{item['source']['media_type']};base64,{item['source']['data']}"
+                                }
+                            })
+                    content = formatted_content
                 openai_messages.append({
                     'role': msg['role'],
-                    'content': msg['content']
+                    'content': content
                 })
 
         payload = {
@@ -74,53 +89,77 @@ class Messages:
             payload['tools'] = tools
             payload['tool_choice'] = 'auto'
 
-        response = requests.post(
-            url,
-            headers=self.client.headers,
-            json=payload,
-            stream=stream
-        )
-        response.raise_for_status()
+        try:
+            response = requests.post(
+                url,
+                headers=self.client.headers,
+                json=payload,
+                stream=stream
+            )
+            response.raise_for_status()
 
-        if stream:
-            for line in response.iter_lines():
-                if line:
-                    if line.startswith(b'data: '):
-                        json_str = line[6:].decode('utf-8')
-                        if json_str.strip() == '[DONE]':
-                            break
-                        try:
-                            chunk = json.loads(json_str)
-                            # Convert OpenAI format to Anthropic format
-                            if 'choices' in chunk and chunk['choices']:
-                                choice = chunk['choices'][0]
-                                if 'delta' in choice:
-                                    delta = choice['delta']
-                                    if 'tool_calls' in delta:
-                                        yield {
-                                            'type': 'message_delta',
-                                            'delta': {
-                                                'tool_calls': delta['tool_calls']
+            if stream:
+                for line in response.iter_lines():
+                    if line:
+                        if line.startswith(b'data: '):
+                            json_str = line[6:].decode('utf-8')
+                            if json_str.strip() == '[DONE]':
+                                break
+                            try:
+                                chunk = json.loads(json_str)
+                                # Convert OpenAI format to Anthropic format
+                                if 'choices' in chunk and chunk['choices']:
+                                    choice = chunk['choices'][0]
+                                    if 'delta' in choice:
+                                        delta = choice['delta']
+                                        if 'tool_calls' in delta:
+                                            yield {
+                                                'type': 'message_delta',
+                                                'delta': {
+                                                    'tool_calls': delta['tool_calls']
+                                                }
                                             }
-                                        }
-                                    elif 'content' in delta and delta['content']:
-                                        yield {
-                                            'type': 'message_delta',
-                                            'delta': {
-                                                'text': delta['content']
+                                        elif 'content' in delta and delta['content']:
+                                            yield {
+                                                'type': 'message_delta',
+                                                'delta': {
+                                                    'text': delta['content']
+                                                }
                                             }
-                                        }
-                        except json.JSONDecodeError:
-                            continue
-        else:
-            response_json = response.json()
-            # Convert OpenAI format to Anthropic format for non-streaming response
-            if 'choices' in response_json and response_json['choices']:
-                choice = response_json['choices'][0]
-                if 'message' in choice:
-                    message = choice['message']
-                    yield {
-                        'type': 'message',
-                        'content': message.get('content', ''),
-                        'tool_calls': message.get('tool_calls', [])
-                    } 
+                            except json.JSONDecodeError:
+                                continue
+            else:
+                response_json = response.json()
+                # Convert OpenAI format to Anthropic format for non-streaming response
+                if 'choices' in response_json and response_json['choices']:
+                    choice = response_json['choices'][0]
+                    if 'message' in choice:
+                        message = choice['message']
+                        content = message.get('content', '')
+                        tool_calls = message.get('tool_calls', [])
+                        
+                        # Format response like Anthropic's API
+                        yield {
+                            'type': 'message',
+                            'content': [{
+                                'type': 'text',
+                                'text': content
+                            }] if content else [],
+                            'tool_calls': tool_calls,
+                            'model': model,
+                            'role': 'assistant'
+                        }
+
+        except requests.exceptions.RequestException as e:
+            error_msg = f"OpenRouter API Error: {str(e)}"
+            if hasattr(e.response, 'json'):
+                try:
+                    error_data = e.response.json()
+                    if 'error' in error_data:
+                        error_msg = f"OpenRouter API Error: {error_data['error'].get('message', str(e))}"
+                except:
+                    pass
+            yield {
+                'type': 'error',
+                'error': error_msg
+            } 

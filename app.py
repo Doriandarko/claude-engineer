@@ -4,6 +4,7 @@ import os
 from werkzeug.utils import secure_filename
 import base64
 from config import Config
+import logging
 
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -53,6 +54,15 @@ def chat():
         # Handle the chat message with the appropriate content
         response = assistant.chat(message_content)
         
+        # Check if the response indicates an error
+        if isinstance(response, dict) and response.get('type') == 'error':
+            return jsonify({
+                'response': f"Error: {response.get('error', 'Unknown error occurred')}",
+                'thinking': False,
+                'tool_name': None,
+                'token_usage': None
+            }), 200
+
         # Get token usage from assistant
         token_usage = {
             'total_tokens': assistant.total_tokens_used,
@@ -81,6 +91,7 @@ def chat():
         })
         
     except Exception as e:
+        logging.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
         return jsonify({
             'response': f"Error: {str(e)}",
             'thinking': False,
