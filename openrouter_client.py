@@ -62,16 +62,19 @@ class Messages:
                     # Handle structured content (text + images)
                     formatted_content = []
                     for item in content:
-                        if item.get('type') == 'text':
-                            formatted_content.append(item.get('text', ''))
-                        elif item.get('type') == 'image':
-                            formatted_content.append({
-                                'type': 'image_url',
-                                'image_url': {
-                                    'url': f"data:{item['source']['media_type']};base64,{item['source']['data']}"
-                                }
-                            })
-                    content = formatted_content
+                        if isinstance(item, dict):
+                            if item.get('type') == 'text':
+                                formatted_content.append(item.get('text', ''))
+                            elif item.get('type') == 'image':
+                                formatted_content.append({
+                                    'type': 'image_url',
+                                    'image_url': {
+                                        'url': f"data:{item['source']['media_type']};base64,{item['source']['data']}"
+                                    }
+                                })
+                        else:
+                            formatted_content.append(str(item))
+                    content = formatted_content if formatted_content else ''
                 openai_messages.append({
                     'role': msg['role'],
                     'content': content
