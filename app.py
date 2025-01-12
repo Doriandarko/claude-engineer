@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 import base64
 from config import Config
 import logging
+import json
 
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -25,85 +26,97 @@ def chat():
     try:
         data = request.json
         message = data.get('message', '')
-        image_data = data.get('image')  # Get the base64 image data
+        image_data = data.get('image')
         
-        # Prepare the message content
-        if image_data:
-            # Create a message with both text and image in correct order
-            message_content = [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/jpeg",  # We should detect this from the image
-                        "data": image_data.split(',')[1] if ',' in image_data else image_data  # Remove data URL prefix if present
-                    }
-                }
-            ]
-            
-            # Only add text message if there is actual text
-            if message.strip():
-                message_content.append({
-                    "type": "text",
-                    "text": message
-                })
-        else:
-            # Text-only message
-            message_content = message
+        def generate_response():
+            try:
+                # Prepare the message content
+                if image_data:
+                    message_content = [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": image_data.split(',')[1] if ',' in image_data else image_data
+                            }
+                        }
+                    ]
+                    if message.strip():
+                        message_content.append({
+                            "type": "text",
+                            "text": message
+                        })
+                else:
+                    message_content = message
+                
+                # Get the response generator
+                response_generator = assistant.chat(message_content)
+                
+                # Process each chunk
+                response_content = []
+                tool_name = None
+                
+                for chunk in response_generator:
+                    if isinstance(chunk, dict):
+                        if chunk.get('type') == 'error':
+                            error_msg = chunk.get('error', 'Unknown error occurred')
+                            logging.error(f"OpenRouter API Error: {error_msg}")
+                            yield json.dumps({
+                                'response': f"Error: {error_msg}",
+                                'thinking': False,
+                                'tool_name': None,
+                                'token_usage': None
+                            }) + '\n'
+                            return
+                            
+                        elif chunk.get('type') == 'message':
+                            response_content = chunk.get('content', [])
+                            if chunk.get('tool_calls'):
+                                tool_name = chunk['tool_calls'][0].get('function', {}).get('name')
+                                
+                            # Get token usage
+                            token_usage = {
+                                'total_tokens': assistant.total_tokens_used,
+                                'max_tokens': Config.MAX_CONVERSATION_TOKENS
+                            }
+                            
+                            # Send the complete message
+                            yield json.dumps({
+                                'response': response_content,
+                                'thinking': False,
+                                'tool_name': tool_name,
+                                'token_usage': token_usage
+                            }) + '\n'
+                            
+                        elif chunk.get('type') == 'message_delta':
+                            if 'tool_calls' in chunk.get('delta', {}):
+                                tool_name = chunk['delta']['tool_calls'][0].get('function', {}).get('name')
+                            elif 'text' in chunk.get('delta', {}):
+                                response_content.append({
+                                    'type': 'text',
+                                    'text': chunk['delta']['text']
+                                })
+                                
+                                # Send the delta
+                                yield json.dumps({
+                                    'response': response_content,
+                                    'thinking': False,
+                                    'tool_name': tool_name,
+                                    'token_usage': None
+                                }) + '\n'
+                
+            except Exception as e:
+                logging.error(f"Error in chat endpoint - assistant.chat(): {str(e)}", exc_info=True)
+                yield json.dumps({
+                    'response': f"Error: {str(e)}",
+                    'thinking': False,
+                    'tool_name': None,
+                    'token_usage': None
+                }) + '\n'
         
-        try:
-            # Handle the chat message with the appropriate content
-            response_generator = assistant.chat(message_content)
-            
-            # Process the generator response
-            response_content = []
-            tool_name = None
-            
-            for chunk in response_generator:
-                if isinstance(chunk, dict):
-                    if chunk.get('type') == 'error':
-                        logging.error(f"OpenRouter API Error: {chunk.get('error')}")
-                        return jsonify({
-                            'response': f"Error: {chunk.get('error', 'Unknown error occurred')}",
-                            'thinking': False,
-                            'tool_name': None,
-                            'token_usage': None
-                        }), 200
-                    elif chunk.get('type') == 'message':
-                        response_content = chunk.get('content', [])
-                        if chunk.get('tool_calls'):
-                            tool_name = chunk['tool_calls'][0].get('function', {}).get('name')
-                    elif chunk.get('type') == 'message_delta':
-                        if 'tool_calls' in chunk.get('delta', {}):
-                            tool_name = chunk['delta']['tool_calls'][0].get('function', {}).get('name')
-                        elif 'text' in chunk.get('delta', {}):
-                            response_content.append({
-                                'type': 'text',
-                                'text': chunk['delta']['text']
-                            })
-
-            # Get token usage from assistant
-            token_usage = {
-                'total_tokens': assistant.total_tokens_used,
-                'max_tokens': Config.MAX_CONVERSATION_TOKENS
-            }
-            
-            return jsonify({
-                'response': response_content,
-                'thinking': False,
-                'tool_name': tool_name,
-                'token_usage': token_usage
-            })
-            
-        except Exception as e:
-            logging.error(f"Error in chat endpoint - assistant.chat(): {str(e)}", exc_info=True)
-            return jsonify({
-                'response': f"Error: {str(e)}",
-                'thinking': False,
-                'tool_name': None,
-                'token_usage': None
-            }), 200  # Return 200 even for errors to handle them gracefully in frontend
-            
+        return app.response_class(generate_response(), mimetype='text/plain')
+        
     except Exception as e:
         logging.error(f"Error in chat endpoint - request processing: {str(e)}", exc_info=True)
         return jsonify({
@@ -111,7 +124,7 @@ def chat():
             'thinking': False,
             'tool_name': None,
             'token_usage': None
-        }), 200
+        })
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
