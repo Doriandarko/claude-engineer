@@ -22,82 +22,93 @@ def home():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    data = request.json
-    message = data.get('message', '')
-    image_data = data.get('image')  # Get the base64 image data
-    
-    # Prepare the message content
-    if image_data:
-        # Create a message with both text and image in correct order
-        message_content = [
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/jpeg",  # We should detect this from the image
-                    "data": image_data.split(',')[1] if ',' in image_data else image_data  # Remove data URL prefix if present
-                }
-            }
-        ]
-        
-        # Only add text message if there is actual text
-        if message.strip():
-            message_content.append({
-                "type": "text",
-                "text": message
-            })
-    else:
-        # Text-only message
-        message_content = message
-    
     try:
-        # Handle the chat message with the appropriate content
-        response = assistant.chat(message_content)
+        data = request.json
+        message = data.get('message', '')
+        image_data = data.get('image')  # Get the base64 image data
         
-        # Check if the response indicates an error
-        if isinstance(response, dict) and response.get('type') == 'error':
+        # Prepare the message content
+        if image_data:
+            # Create a message with both text and image in correct order
+            message_content = [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",  # We should detect this from the image
+                        "data": image_data.split(',')[1] if ',' in image_data else image_data  # Remove data URL prefix if present
+                    }
+                }
+            ]
+            
+            # Only add text message if there is actual text
+            if message.strip():
+                message_content.append({
+                    "type": "text",
+                    "text": message
+                })
+        else:
+            # Text-only message
+            message_content = message
+        
+        try:
+            # Handle the chat message with the appropriate content
+            response = assistant.chat(message_content)
+            
+            # Check if the response indicates an error
+            if isinstance(response, dict) and response.get('type') == 'error':
+                logging.error(f"OpenRouter API Error: {response.get('error')}")
+                return jsonify({
+                    'response': f"Error: {response.get('error', 'Unknown error occurred')}",
+                    'thinking': False,
+                    'tool_name': None,
+                    'token_usage': None
+                }), 200
+
+            # Get token usage from assistant
+            token_usage = {
+                'total_tokens': assistant.total_tokens_used,
+                'max_tokens': Config.MAX_CONVERSATION_TOKENS
+            }
+            
+            # Get the last used tool from the conversation history
+            tool_name = None
+            if assistant.conversation_history:
+                for msg in reversed(assistant.conversation_history):
+                    if msg.get('role') == 'assistant' and msg.get('content'):
+                        content = msg['content']
+                        if isinstance(content, list):
+                            for block in content:
+                                if isinstance(block, dict) and block.get('type') == 'tool_use':
+                                    tool_name = block.get('name')
+                                    break
+                        if tool_name:
+                            break
+            
             return jsonify({
-                'response': f"Error: {response.get('error', 'Unknown error occurred')}",
+                'response': response,
+                'thinking': False,
+                'tool_name': tool_name,
+                'token_usage': token_usage
+            })
+            
+        except Exception as e:
+            logging.error(f"Error in chat endpoint - assistant.chat(): {str(e)}", exc_info=True)
+            return jsonify({
+                'response': f"Error: {str(e)}",
                 'thinking': False,
                 'tool_name': None,
                 'token_usage': None
-            }), 200
-
-        # Get token usage from assistant
-        token_usage = {
-            'total_tokens': assistant.total_tokens_used,
-            'max_tokens': Config.MAX_CONVERSATION_TOKENS
-        }
-        
-        # Get the last used tool from the conversation history
-        tool_name = None
-        if assistant.conversation_history:
-            for msg in reversed(assistant.conversation_history):
-                if msg.get('role') == 'assistant' and msg.get('content'):
-                    content = msg['content']
-                    if isinstance(content, list):
-                        for block in content:
-                            if isinstance(block, dict) and block.get('type') == 'tool_use':
-                                tool_name = block.get('name')
-                                break
-                    if tool_name:
-                        break
-        
-        return jsonify({
-            'response': response,
-            'thinking': False,
-            'tool_name': tool_name,
-            'token_usage': token_usage
-        })
-        
+            }), 200  # Return 200 even for errors to handle them gracefully in frontend
+            
     except Exception as e:
-        logging.error(f"Error in chat endpoint: {str(e)}", exc_info=True)
+        logging.error(f"Error in chat endpoint - request processing: {str(e)}", exc_info=True)
         return jsonify({
-            'response': f"Error: {str(e)}",
+            'response': "Error: Failed to process request",
             'thinking': False,
             'tool_name': None,
             'token_usage': None
-        }), 200  # Return 200 even for errors to handle them gracefully in frontend
+        }), 200
 
 @app.route('/upload', methods=['POST'])
 def upload_file():

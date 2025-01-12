@@ -97,7 +97,8 @@ class Messages:
                 url,
                 headers=self.client.headers,
                 json=payload,
-                stream=stream
+                stream=stream,
+                timeout=30  # Add 30 second timeout
             )
             
             # Check for error status codes
@@ -117,35 +118,42 @@ class Messages:
                 return
 
             if stream:
-                for line in response.iter_lines():
-                    if line:
-                        if line.startswith(b'data: '):
-                            json_str = line[6:].decode('utf-8')
-                            if json_str.strip() == '[DONE]':
-                                break
-                            try:
-                                chunk = json.loads(json_str)
-                                # Convert OpenAI format to Anthropic format
-                                if 'choices' in chunk and chunk['choices']:
-                                    choice = chunk['choices'][0]
-                                    if 'delta' in choice:
-                                        delta = choice['delta']
-                                        if 'tool_calls' in delta:
-                                            yield {
-                                                'type': 'message_delta',
-                                                'delta': {
-                                                    'tool_calls': delta['tool_calls']
+                try:
+                    for line in response.iter_lines():
+                        if line:
+                            if line.startswith(b'data: '):
+                                json_str = line[6:].decode('utf-8')
+                                if json_str.strip() == '[DONE]':
+                                    break
+                                try:
+                                    chunk = json.loads(json_str)
+                                    # Convert OpenAI format to Anthropic format
+                                    if 'choices' in chunk and chunk['choices']:
+                                        choice = chunk['choices'][0]
+                                        if 'delta' in choice:
+                                            delta = choice['delta']
+                                            if 'tool_calls' in delta:
+                                                yield {
+                                                    'type': 'message_delta',
+                                                    'delta': {
+                                                        'tool_calls': delta['tool_calls']
+                                                    }
                                                 }
-                                            }
-                                        elif 'content' in delta and delta['content']:
-                                            yield {
-                                                'type': 'message_delta',
-                                                'delta': {
-                                                    'text': delta['content']
+                                            elif 'content' in delta and delta['content']:
+                                                yield {
+                                                    'type': 'message_delta',
+                                                    'delta': {
+                                                        'text': delta['content']
+                                                    }
                                                 }
-                                            }
-                            except json.JSONDecodeError:
-                                continue
+                                except json.JSONDecodeError:
+                                    continue
+                except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError) as e:
+                    yield {
+                        'type': 'error',
+                        'error': f"Network error while streaming response: {str(e)}"
+                    }
+                    return
             else:
                 response_json = response.json()
                 # Convert OpenAI format to Anthropic format for non-streaming response
