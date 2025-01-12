@@ -53,17 +53,34 @@ def chat():
         
         try:
             # Handle the chat message with the appropriate content
-            response = assistant.chat(message_content)
+            response_generator = assistant.chat(message_content)
             
-            # Check if the response indicates an error
-            if isinstance(response, dict) and response.get('type') == 'error':
-                logging.error(f"OpenRouter API Error: {response.get('error')}")
-                return jsonify({
-                    'response': f"Error: {response.get('error', 'Unknown error occurred')}",
-                    'thinking': False,
-                    'tool_name': None,
-                    'token_usage': None
-                }), 200
+            # Process the generator response
+            response_content = []
+            tool_name = None
+            
+            for chunk in response_generator:
+                if isinstance(chunk, dict):
+                    if chunk.get('type') == 'error':
+                        logging.error(f"OpenRouter API Error: {chunk.get('error')}")
+                        return jsonify({
+                            'response': f"Error: {chunk.get('error', 'Unknown error occurred')}",
+                            'thinking': False,
+                            'tool_name': None,
+                            'token_usage': None
+                        }), 200
+                    elif chunk.get('type') == 'message':
+                        response_content = chunk.get('content', [])
+                        if chunk.get('tool_calls'):
+                            tool_name = chunk['tool_calls'][0].get('function', {}).get('name')
+                    elif chunk.get('type') == 'message_delta':
+                        if 'tool_calls' in chunk.get('delta', {}):
+                            tool_name = chunk['delta']['tool_calls'][0].get('function', {}).get('name')
+                        elif 'text' in chunk.get('delta', {}):
+                            response_content.append({
+                                'type': 'text',
+                                'text': chunk['delta']['text']
+                            })
 
             # Get token usage from assistant
             token_usage = {
@@ -71,22 +88,8 @@ def chat():
                 'max_tokens': Config.MAX_CONVERSATION_TOKENS
             }
             
-            # Get the last used tool from the conversation history
-            tool_name = None
-            if assistant.conversation_history:
-                for msg in reversed(assistant.conversation_history):
-                    if msg.get('role') == 'assistant' and msg.get('content'):
-                        content = msg['content']
-                        if isinstance(content, list):
-                            for block in content:
-                                if isinstance(block, dict) and block.get('type') == 'tool_use':
-                                    tool_name = block.get('name')
-                                    break
-                        if tool_name:
-                            break
-            
             return jsonify({
-                'response': response,
+                'response': response_content,
                 'thinking': False,
                 'tool_name': tool_name,
                 'token_usage': token_usage

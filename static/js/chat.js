@@ -247,7 +247,20 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
         
         // Show response if we have one
         if (data && data.response) {
-            appendMessage(data.response);
+            if (Array.isArray(data.response)) {
+                // Handle structured content
+                let messageText = '';
+                data.response.forEach(item => {
+                    if (item.type === 'text') {
+                        messageText += item.text;
+                    }
+                    // Handle other content types as needed
+                });
+                appendMessage(messageText);
+            } else if (typeof data.response === 'string') {
+                // Handle error messages or simple string responses
+                appendMessage(data.response);
+            }
         } else {
             appendMessage('Error: No response received from the server');
         }
