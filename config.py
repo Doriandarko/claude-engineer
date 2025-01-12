@@ -11,7 +11,7 @@ class Config:
     
     # Model Configuration
     USE_OPENROUTER = os.getenv('USE_OPENROUTER', 'false').lower() == 'true'
-    MODEL = "anthropic/claude-3-sonnet" if USE_OPENROUTER else "claude-3-5-sonnet-20241022"
+    MODEL = "anthropic/claude-3.5-sonnet:beta" if USE_OPENROUTER else "claude-3-5-sonnet-20241022"
     MAX_TOKENS = 8000
     MAX_CONVERSATION_TOKENS = 200000  # Maximum tokens per conversation
 
