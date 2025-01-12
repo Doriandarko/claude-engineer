@@ -96,7 +96,22 @@ class Messages:
                 json=payload,
                 stream=stream
             )
-            response.raise_for_status()
+            
+            # Check for error status codes
+            if not response.ok:
+                error_msg = "OpenRouter API Error"
+                try:
+                    error_data = response.json()
+                    if 'error' in error_data:
+                        error_msg = f"OpenRouter API Error: {error_data['error'].get('message', str(response.status_code))}"
+                except:
+                    error_msg = f"OpenRouter API Error: HTTP {response.status_code}"
+                
+                yield {
+                    'type': 'error',
+                    'error': error_msg
+                }
+                return
 
             if stream:
                 for line in response.iter_lines():

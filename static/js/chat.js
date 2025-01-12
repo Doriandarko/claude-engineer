@@ -220,14 +220,20 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
         
         const data = await response.json();
         
-        // Update token usage if provided in response
-        if (data.token_usage) {
-            updateTokenUsage(data.token_usage.total_tokens, data.token_usage.max_tokens);
-        }
-        
         // Remove thinking indicator
         if (thinkingMessage) {
             thinkingMessage.remove();
+        }
+
+        // Check for error response
+        if (data && data.response && data.response.startsWith('Error:')) {
+            appendMessage(data.response);
+            return;
+        }
+        
+        // Update token usage if provided in response
+        if (data.token_usage) {
+            updateTokenUsage(data.token_usage.total_tokens, data.token_usage.max_tokens);
         }
         
         // Show tool usage if present
@@ -239,7 +245,7 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
         if (data && data.response) {
             appendMessage(data.response);
         } else {
-            appendMessage('Error: No response received');
+            appendMessage('Error: No response received from the server');
         }
         
         // Clear image after sending
