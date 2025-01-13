@@ -19,3 +19,11 @@ class Config:
     ENABLE_THINKING = True
     SHOW_TOOL_USAGE = True
     DEFAULT_TEMPERATURE = 0.7
+
+    @staticmethod
+    def enforce_token_limit(conversation_history, max_tokens):
+        total_tokens = sum(len(message['content']) for message in conversation_history)
+        while total_tokens > max_tokens:
+            conversation_history.pop(0)
+            total_tokens = sum(len(message['content']) for message in conversation_history)
+        return conversation_history
