@@ -111,6 +111,11 @@ class FileCreatorTool(BaseTool):
             str: JSON string containing results of file creation operations
         """
         files = kwargs.get('files', [])
+        
+        # Handle double nesting issue
+        if isinstance(files, dict) and 'files' in files:
+            files = files['files']
+        
         if isinstance(files, dict):
             files = [files]
 
