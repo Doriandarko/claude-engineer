@@ -19,3 +19,7 @@ class Config:
     ENABLE_THINKING = True
     SHOW_TOOL_USAGE = True
     DEFAULT_TEMPERATURE = 0.7
+
+    # Openrouter API Configuration
+    OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
+    OPENROUTER_API_URL = os.getenv('OPENROUTER_API_URL', 'https://api.openrouter.ai')

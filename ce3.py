@@ -1,5 +1,6 @@
 # ce3.py
 import anthropic
+import openrouter
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.live import Live
@@ -42,6 +43,9 @@ class Assistant:
 
         # Initialize Anthropics client
         self.client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+
+        # Initialize Openrouter client
+        self.openrouter_client = openrouter.Client(api_key=Config.OPENROUTER_API_KEY, api_url=Config.OPENROUTER_API_URL)
 
         self.conversation_history: List[Dict[str, Any]] = []
         self.console = Console()
