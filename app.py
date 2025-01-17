@@ -4,6 +4,7 @@ import os
 from werkzeug.utils import secure_filename
 import base64
 from config import Config
+import openrouter  # Import Openrouter client
 
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -14,6 +15,9 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Initialize the assistant
 assistant = Assistant()
+
+# Initialize Openrouter client
+openrouter_client = openrouter.Client(api_key=Config.OPENROUTER_API_KEY, api_url=Config.OPENROUTER_API_URL)
 
 @app.route('/')
 def home():
