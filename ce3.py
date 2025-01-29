@@ -334,6 +334,9 @@ class Assistant:
         Get a completion from the Anthropic API.
         Handles both text-only and multimodal messages.
         """
+        system = "\n\n".join((SystemPrompts.DEFAULT, SystemPrompts.TOOL_USAGE)).strip()
+        if not system:
+            system = anthropic.NOT_GIVEN
         try:
             response = self.client.messages.create(
                 model=Config.MODEL,
@@ -344,7 +347,7 @@ class Assistant:
                 temperature=self.temperature,
                 tools=self.tools,
                 messages=self.conversation_history,
-                system=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
+                system=system,
             )
 
             # Update token usage based on response usage
