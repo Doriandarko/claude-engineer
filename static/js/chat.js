@@ -35,7 +35,7 @@ function appendMessage(content, isUser = false) {
     
     if (!isUser && content) {
         try {
-            innerDiv.innerHTML = marked.parse(content);
+            innerDiv.innerHTML = DOMPurify.sanitize(marked.parse(content));
         } catch (e) {
             console.error('Error parsing markdown:', e);
             innerDiv.textContent = content;
