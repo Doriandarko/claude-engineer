@@ -265,7 +265,7 @@ def setup_virtual_environment() -> Tuple[str, str]:
 anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
 if not anthropic_api_key:
     raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
-client = Anthropic(api_key=anthropic_api_key)
+client = Anthropic(api_key=anthropic_api_key, timeout=60.0, max_retries=3)
 
 # Initialize the Tavily client
 tavily_api_key = os.getenv("TAVILY_API_KEY")

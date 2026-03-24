@@ -41,7 +41,7 @@ class Assistant:
             raise ValueError("No ANTHROPIC_API_KEY found in environment variables")
 
         # Initialize Anthropics client
-        self.client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+        self.client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY, timeout=60.0, max_retries=3)
 
         self.conversation_history: List[Dict[str, Any]] = []
         self.console = Console()

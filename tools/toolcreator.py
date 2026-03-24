@@ -29,7 +29,7 @@ class ToolCreatorTool(BaseTool):
     }
 
     def __init__(self):
-        self.client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+        self.client = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'), timeout=60.0, max_retries=3)
         self.console = Console()
         self.tools_dir = Path(__file__).parent.parent / "tools"  # Fixed path
 
