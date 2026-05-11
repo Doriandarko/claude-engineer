@@ -1,0 +1,33 @@
+{
+  "name": "Claude Engineer",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "postCreateCommand": "python -m pip install --upgrade pip && pip install -r requirements.txt && if [ ! -f .env ]; then cp .env.example .env; fi",
+  "forwardPorts": [
+    5000
+  ],
+  "portsAttributes": {
+    "5000": {
+      "label": "Claude Engineer web UI",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      }
+    }
+  },
+  "remoteEnv": {
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}",
+    "E2B_API_KEY": "${localEnv:E2B_API_KEY}",
+    "PYTHONUNBUFFERED": "1"
+  }
+}
