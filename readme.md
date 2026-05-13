@@ -20,6 +20,21 @@ Claude Engineer v3 is a sophisticated framework that allows Claude to expand its
 
 For the best possible experience install uv
 
+## Daytona / Dev Container
+
+This repository includes a `.devcontainer/devcontainer.json` for Daytona and
+other Dev Container-compatible tools. The container uses Python 3.11, installs
+`requirements.txt`, creates `.env` from `.env.example` on first creation, and
+forwards port `5000` for the web interface.
+
+To use it with Daytona:
+
+1. Create a Daytona workspace from this repository.
+2. Open a terminal in the workspace.
+3. Add your `ANTHROPIC_API_KEY` to `.env` and optionally add `E2B_API_KEY`.
+4. Start the web interface with `python app.py` or the CLI with `python ce3.py`.
+5. Open the forwarded `5000` port if you use the web interface.
+
 ### macOS and Linux
 ```bash
 # Install uv
