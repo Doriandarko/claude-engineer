@@ -1,0 +1,23 @@
+{
+  "name": "Claude Engineer",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "postCreateCommand": "bash -lc 'sudo apt-get update && sudo apt-get install -y python3-tk scrot xclip && python -m venv .venv && . .venv/bin/activate && pip install --upgrade pip uv && uv pip install -r requirements.txt && { cp -n .env.example .env || true; }'",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+        "python.terminal.activateEnvironment": true
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  },
+  "remoteEnv": {
+    "PYTHONUNBUFFERED": "1"
+  }
+}
