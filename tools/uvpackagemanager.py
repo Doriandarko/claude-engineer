@@ -87,7 +87,7 @@ class UVPackageManager(BaseTool):
             )
             return result.stdout
         except subprocess.CalledProcessError as e:
-            raise Exception(f"UV command failed: {e.stderr}")
+            raise RuntimeError(f"UV command failed: {e.stderr}")
 
     def _install_packages(self, packages: List[str], requirements_file: Optional[str], global_install: bool) -> str:
         args = ["pip", "install"]
