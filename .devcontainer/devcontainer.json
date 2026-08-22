@@ -1,0 +1,35 @@
+{
+  "name": "Claude Engineer",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true
+    }
+  },
+  "postCreateCommand": "pip install -r requirements.txt",
+  "containerEnv": {
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}",
+    "E2B_API_KEY": "${localEnv:E2B_API_KEY}"
+  },
+  "forwardPorts": [5000],
+  "portsAttributes": {
+    "5000": {
+      "label": "Flask app",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      }
+    }
+  },
+  "remoteUser": "vscode"
+}
