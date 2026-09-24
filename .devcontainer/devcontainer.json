@@ -1,0 +1,22 @@
+{
+	"name": "Claude Engineer",
+	"image": "mcr.microsoft.com/devcontainers/python:3.11",
+	"forwardPorts": [5000],
+	"portsAttributes": {
+		"5000": {
+			"label": "Claude Engineer web UI",
+			"onAutoForward": "notify"
+		}
+	},
+	"postCreateCommand": "python -m pip install --user --disable-pip-version-check --no-cache-dir uv==0.11.21 && uv sync --frozen --extra dev && uv run python -c \"from tools.e2bcodetool import E2bCodeTool; assert E2bCodeTool.name == 'e2bcodetool'; print('e2bcodetool import ok')\"",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"ms-python.vscode-pylance",
+				"charliermarsh.ruff"
+			]
+		}
+	},
+	"remoteUser": "vscode"
+}
