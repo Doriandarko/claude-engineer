@@ -99,6 +99,26 @@ class FileCreatorTool(BaseTool):
         "required": ["files"]
     }
 
+    def _normalize_files_input(self, files):
+        """Accept the documented shape and tolerate redundant files wrappers."""
+        while (
+            isinstance(files, dict)
+            and "files" in files
+            and "path" not in files
+            and "content" not in files
+        ):
+            files = files["files"]
+
+        if isinstance(files, dict):
+            return [files]
+        if isinstance(files, list):
+            return files
+
+        raise ValueError(
+            "'files' must be a file object, a list of file objects, "
+            "or a redundant {'files': ...} wrapper"
+        )
+
     def execute(self, **kwargs) -> str:
         """
         Execute the file creation process.
@@ -110,13 +130,25 @@ class FileCreatorTool(BaseTool):
         Returns:
             str: JSON string containing results of file creation operations
         """
-        files = kwargs.get('files', [])
-        if isinstance(files, dict):
-            files = [files]
+        try:
+            files = self._normalize_files_input(kwargs.get('files', []))
+        except ValueError as e:
+            return json.dumps({
+                'created_files': 0,
+                'failed_files': 1,
+                'results': [{
+                    'path': None,
+                    'success': False,
+                    'error': str(e)
+                }]
+            }, indent=2)
 
         results = []
         for file_spec in files:
+            path = None
             try:
+                if not isinstance(file_spec, dict):
+                    raise ValueError("Each file specification must be an object")
                 path = Path(file_spec['path'])
                 content = file_spec['content']
                 binary = file_spec.get('binary', False)
@@ -148,7 +180,7 @@ class FileCreatorTool(BaseTool):
 
             except Exception as e:
                 results.append({
-                    'path': str(path) if 'path' in locals() else None,
+                    'path': str(path) if path is not None else None,
                     'success': False,
                     'error': str(e)
                 })
