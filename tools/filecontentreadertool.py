@@ -5,6 +5,8 @@ import mimetypes
 
 class FileContentReaderTool(BaseTool):
     name = "filecontentreadertool"
+    DEFAULT_MAX_FILES = 30
+    DEFAULT_MAX_FILE_SIZE_BYTES = 256 * 1024
     description = '''
     Reads content from multiple files and returns their contents.
     Accepts a list of file paths and returns a dictionary with file paths as keys
@@ -48,6 +50,18 @@ class FileContentReaderTool(BaseTool):
                     "type": "string"
                 },
                 "description": "List of file paths to read"
+            },
+            "max_files": {
+                "type": "integer",
+                "minimum": 1,
+                "default": 30,
+                "description": "Maximum number of files to read from each directory"
+            },
+            "max_file_size_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "default": 262144,
+                "description": "Maximum size of an individual file to read"
             }
         },
         "required": ["file_paths"]
@@ -74,14 +88,21 @@ class FileContentReaderTool(BaseTool):
 
         return False
 
-    def _read_file(self, file_path: str) -> str:
-        """Safely read a file and handle errors."""
+    def _read_file(self, file_path: str, max_file_size_bytes: int) -> str:
+        """Safely read a bounded-size file and handle errors."""
         try:
             if not os.path.exists(file_path):
                 return "Error: File not found"
 
             if self._should_skip(file_path):
                 return "Skipped: Binary or ignored file type"
+
+            file_size = os.path.getsize(file_path)
+            if file_size > max_file_size_bytes:
+                return (
+                    "Skipped: File exceeds size limit "
+                    f"({file_size} > {max_file_size_bytes} bytes)"
+                )
 
             with open(file_path, 'r', encoding='utf-8') as file:
                 return file.read()
@@ -95,21 +116,41 @@ class FileContentReaderTool(BaseTool):
         except Exception as e:
             return f"Error: {str(e)}"
 
-    def _read_directory(self, dir_path: str) -> dict:
-        """Recursively read all files in a directory."""
+    def _read_directory(
+        self,
+        dir_path: str,
+        max_files: int,
+        max_file_size_bytes: int,
+    ) -> dict:
+        """Recursively read files while bounding context and memory usage."""
         results = {}
+        files_added = 0
 
         try:
             for root, dirs, files in os.walk(dir_path):
-                # Filter out directories to skip
-                dirs[:] = [d for d in dirs if not self._should_skip(os.path.join(root, d))]
+                dirs[:] = sorted(
+                    d
+                    for d in dirs
+                    if not self._should_skip(os.path.join(root, d))
+                )
 
-                # Process files
-                for file in files:
+                for file in sorted(files):
                     file_path = os.path.join(root, file)
-                    if not self._should_skip(file_path):
-                        content = self._read_file(file_path)
-                        results[file_path] = content
+                    if self._should_skip(file_path):
+                        continue
+
+                    if files_added >= max_files:
+                        results[f"__truncated__:{dir_path}"] = (
+                            f"Stopped after {max_files} files. "
+                            "Increase max_files to read more."
+                        )
+                        return results
+
+                    results[file_path] = self._read_file(
+                        file_path,
+                        max_file_size_bytes,
+                    )
+                    files_added += 1
 
         except Exception as e:
             results[dir_path] = f"Error reading directory: {str(e)}"
@@ -118,17 +159,24 @@ class FileContentReaderTool(BaseTool):
 
     def execute(self, **kwargs) -> str:
         file_paths = kwargs.get('file_paths', [])
+        max_files = kwargs.get('max_files', self.DEFAULT_MAX_FILES)
+        max_file_size_bytes = kwargs.get(
+            'max_file_size_bytes',
+            self.DEFAULT_MAX_FILE_SIZE_BYTES,
+        )
         results = {}
 
         try:
             for path in file_paths:
                 if os.path.isdir(path):
-                    # If it's a directory, read it recursively
-                    dir_results = self._read_directory(path)
+                    dir_results = self._read_directory(
+                        path,
+                        max_files,
+                        max_file_size_bytes,
+                    )
                     results.update(dir_results)
                 else:
-                    # If it's a file, read it directly
-                    content = self._read_file(path)
+                    content = self._read_file(path, max_file_size_bytes)
                     results[path] = content
 
             return json.dumps(results, indent=2)
