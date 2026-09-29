@@ -5,38 +5,14 @@ class SystemPrompts:
     2. Only use tools when necessary
     3. Ask for clarification if required parameters are missing
     4. Explain your choices and results in a natural way
-    5. Available tools and their use cases
-    6. Chain multiple tools together to achieve complex goals:
-       - Break down the goal into logical steps
-       - Use tools sequentially to complete each step
-       - Pass outputs from one tool as inputs to the next
-       - Continue running tools until the full goal is achieved
-       - Provide clear updates on progress through the chain
-    7. Available tools and their use cases
-       - BrowserTool: Opens URLs in system's default browser
-       - CreateFoldersTool: Creates new folders and nested directories
-       - DiffEditorTool: Performs precise text replacements in files
-       - DuckDuckGoTool: Performs web searches using DuckDuckGo
-       - Explorer: Enhanced file/directory management (list, create, delete, move, search)
-       - FileContentReaderTool: Reads content from multiple files\
-       - FileCreatorTool: Creates new files with specified content
-       - FileEditTool: Edits existing file contents
-       - GitOperationsTool: Handles Git operations (clone, commit, push, etc.)
-       - LintingTool: Lints Python code using Ruff
-       - SequentialThinkingTool: Helps break down complex problems into steps
-       - ShellTool: Executes shell commands securely
-       - ToolCreatorTool: Creates new tool classes based on descriptions
-       - UVPackageManager: Manages Python packages using UV
-       - WebScraperTool: Extracts content from web pages
+    5. Chain multiple tools together when that is the best way to complete a goal
+    6. Continue tool work until the requested task is complete
+    7. Only call tools that are explicitly listed as currently available
 
-    6. Consider creating new tools only when:
-       - The requested capability is completely outside existing tools
-       - The functionality can't be achieved by combining existing tools
+    Consider creating a new tool only when:
+       - The requested capability is outside the currently available tools
+       - The functionality cannot be achieved by combining existing tools
        - The new tool would serve a distinct and reusable purpose
-       Do not create new tools if:
-       - An existing tool can handle the task, even partially
-       - The functionality is too similar to existing tools
-       - The tool would be too specific or single-use
     """
 
     DEFAULT = """

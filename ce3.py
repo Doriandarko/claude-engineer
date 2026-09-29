@@ -189,6 +189,31 @@ class Assistant:
         self.console.print(formatted_tools)
         self.console.print("\n---")
 
+    def _build_system_prompt(self) -> str:
+        """Build tool guidance from the tools that are actually loaded."""
+        if not self.tools:
+            available_tools = (
+                "Currently available tools: none. Do not attempt tool calls."
+            )
+        else:
+            tool_lines = []
+            for tool in self.tools:
+                description = " ".join(
+                    line.strip()
+                    for line in tool.get("description", "").splitlines()
+                    if line.strip()
+                )
+                tool_lines.append(f"- {tool['name']}: {description}")
+            available_tools = (
+                "Currently available tools:\n" + "\n".join(tool_lines)
+            )
+
+        return (
+            f"{SystemPrompts.DEFAULT}\n\n"
+            f"{SystemPrompts.TOOL_USAGE}\n\n"
+            f"{available_tools}"
+        )
+
     def _display_tool_usage(self, tool_name: str, input_data: Dict, result: str):
         """
         If SHOW_TOOL_USAGE is enabled, display the input and result of a tool execution.
@@ -344,7 +369,7 @@ class Assistant:
                 temperature=self.temperature,
                 tools=self.tools,
                 messages=self.conversation_history,
-                system=f"{SystemPrompts.DEFAULT}\n\n{SystemPrompts.TOOL_USAGE}"
+                system=self._build_system_prompt()
             )
 
             # Update token usage based on response usage
