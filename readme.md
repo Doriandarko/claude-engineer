@@ -252,6 +252,12 @@ ANTHROPIC_API_KEY=your_anthropic_key
 E2B_API_KEY=your_e2b_key
 ```
 
+## Related Agent Tooling
+
+Tools from the community that pair well with Claude Engineer's agent workflow:
+
+- [plan-auditor](https://github.com/Furox-Art/plan-auditor) — independent verification supervisor for AI coding agents. Turns plans into machine-checkable requirements and audits the agent's "done" claims against real command evidence. Useful if you want Claude Engineer's work audited by a separate process instead of trusting self-reports.
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Doriandarko/claude-engineer&type=Date)](https://star-history.com/#Doriandarko/claude-engineer&Date)
