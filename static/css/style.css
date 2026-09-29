@@ -195,6 +195,34 @@ code {
     line-height: 1.5;
 }
 
+/* Restore Markdown list markers removed by Tailwind preflight */
+.message-wrapper .prose ul,
+.message-wrapper .prose ol {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.message-wrapper .prose ul {
+    list-style-type: disc;
+}
+
+.message-wrapper .prose ol {
+    list-style-type: decimal;
+}
+
+.message-wrapper .prose li + li {
+    margin-top: 0.25rem;
+}
+
+.message-wrapper .prose ul ul {
+    list-style-type: circle;
+}
+
+.message-wrapper .prose ul ul ul {
+    list-style-type: square;
+}
+
+
 .command-code {
     background-color: #e7f3ed;
     color: #0a3622;
