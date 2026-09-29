@@ -5,6 +5,7 @@ from rich.markdown import Markdown
 from rich.live import Live
 from rich.spinner import Spinner
 from rich.panel import Panel
+from rich.markup import escape
 from typing import List, Dict, Any
 import importlib
 import inspect
@@ -203,8 +204,14 @@ class Assistant:
         # Clean up result data
         cleaned_result = self._clean_data_for_display(result)
 
-        tool_info = f"""[cyan]📥 Input:[/cyan] {json.dumps(cleaned_input, indent=2)}
-[cyan]📤 Result:[/cyan] {cleaned_result}"""
+        input_text = escape(json.dumps(cleaned_input, indent=2))
+        result_text = escape(
+            cleaned_result
+            if isinstance(cleaned_result, str)
+            else json.dumps(cleaned_result, indent=2)
+        )
+        tool_info = f"""[cyan]📥 Input:[/cyan] {input_text}
+[cyan]📤 Result:[/cyan] {result_text}"""
         
         panel = Panel(
             tool_info,
