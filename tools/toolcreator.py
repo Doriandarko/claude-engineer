@@ -2,6 +2,7 @@ from tools.base import BaseTool
 from rich.console import Console
 from rich.panel import Panel
 from pathlib import Path
+import ast
 import os
 from dotenv import load_dotenv
 import re
@@ -40,6 +41,20 @@ class ToolCreatorTool(BaseTool):
     def _validate_tool_name(self, name: str) -> bool:
         """Validate tool name matches required pattern"""
         return bool(re.match(r'^[a-zA-Z0-9_-]{1,64}$', name))
+
+    def _clean_generated_code(self, tool_code: str) -> str:
+        """Strip a single outer Markdown code fence from generated Python."""
+        cleaned = tool_code.strip()
+        fenced_match = re.fullmatch(
+            r"```(?:python|py)?\s*\n?(.*?)\n?```",
+            cleaned,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        if fenced_match:
+            cleaned = fenced_match.group(1).strip()
+
+        ast.parse(cleaned)
+        return cleaned
 
     def execute(self, **kwargs) -> str:
         description = kwargs.get("description")
@@ -96,7 +111,14 @@ Return ONLY the Python code without any explanation or markdown formatting.
                 ]
             )
 
-            tool_code = response.content[0].text.strip()
+            try:
+                tool_code = self._clean_generated_code(response.content[0].text)
+            except SyntaxError as e:
+                return (
+                    "[bold red]Error creating tool:[/bold red] "
+                    f"Generated Python is invalid: {e.msg} "
+                    f"(line {e.lineno})"
+                )
 
             # Extract tool name from the generated code
             name_match = re.search(r'name\s*=\s*["\']([a-zA-Z0-9_-]+)["\']', tool_code)
