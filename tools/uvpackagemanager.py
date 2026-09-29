@@ -83,9 +83,12 @@ class UVPackageManager(BaseTool):
                 ["uv"] + args,
                 capture_output=True,
                 text=True,
-                check=True
+                check=True,
+                timeout=600,
             )
             return result.stdout
+        except subprocess.TimeoutExpired:
+            raise Exception(f"UV command timed out after 600 seconds: {' '.join(args)}")
         except subprocess.CalledProcessError as e:
             raise Exception(f"UV command failed: {e.stderr}")
 

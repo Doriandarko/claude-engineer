@@ -111,7 +111,7 @@ Return ONLY the Python code without any explanation or markdown formatting.
 
             # Save tool to file
             file_path = self.tools_dir / filename
-            with open(file_path, 'w') as f:
+            with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(tool_code)
 
             # Format the response using Panel like the original

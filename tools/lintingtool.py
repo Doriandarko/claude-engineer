@@ -103,8 +103,11 @@ class LintingTool(BaseTool):
                 cmd,
                 text=True,
                 capture_output=True,
-                check=False
+                check=False,
+                timeout=120,
             )
             return result.stdout + result.stderr
+        except subprocess.TimeoutExpired:
+            return "Error running ruff check: command timed out after 120 seconds"
         except Exception as e:
             return f"Error running ruff check: {str(e)}"
