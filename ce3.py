@@ -336,7 +336,9 @@ class Assistant:
         """
         try:
             remaining_budget = Config.MAX_CONVERSATION_TOKENS - self.total_tokens_used
-            if remaining_budget <= 0:
+            # A budget below what one useful completion needs can only come back
+            # truncated (stop_reason == "max_tokens"), so treat it as exhausted.
+            if remaining_budget < 1024:
                 self.console.print("\n[bold red]Token limit reached! Please type 'reset' to start a new conversation.[/bold red]")
                 return "Token limit reached! Please type 'reset' to start a new conversation."
 
@@ -396,8 +398,8 @@ class Assistant:
                         "role": "user",
                         "content": tool_results
                     })
-                    # Continue the tool-use loop iteratively (recursion would hit
-                    # Python's stack limit on long agent chains)
+                    # Recurse to continue the tool-use loop; the token-budget
+                    # guard at the top of _get_completion re-applies on re-entry.
                     return self._get_completion()
 
                 else:
