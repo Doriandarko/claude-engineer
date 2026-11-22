@@ -1,0 +1,35 @@
+{
+  "name": "Claude Engineer v3 Daytona Workspace",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-tk python3-dev scrot xvfb && pip install --no-cache-dir -r requirements.txt e2b-code-interpreter ruff uv",
+  "forwardPorts": [5000],
+  "portsAttributes": {
+    "5000": {
+      "label": "Claude Engineer Web UI",
+      "onAutoForward": "notify"
+    }
+  },
+  "remoteEnv": {
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}",
+    "E2B_API_KEY": "${localEnv:E2B_API_KEY}",
+    "TAVILY_API_KEY": "${localEnv:TAVILY_API_KEY}",
+    "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}",
+    "DISPLAY": ":99"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      }
+    }
+  },
+  "remoteUser": "vscode"
+}
